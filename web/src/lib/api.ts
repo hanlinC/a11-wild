@@ -1,4 +1,4 @@
-import type { BatchSummary, Board, BrandPage, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -23,6 +23,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const post = <T>(path: string) => request<T>(path, { method: "POST" });
+const send = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 export const api = {
   me: () => request<Me>("/api/me"),
@@ -36,13 +37,12 @@ export const api = {
   brand: (brandId: string) => request<BrandPage>(`/api/brands/${encodeURIComponent(brandId)}`),
   spend: () => request<SpendSummary>("/api/spend"),
   taste: () => request<TastePage>("/api/taste"),
-  canonVersion: (version: number) => request<CanonVersion>(`/api/taste/canon/${version}`),
-  saveCanon: (text: string, reason: string) =>
-    request<CanonVersion>("/api/taste/canon", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, reason }),
-    }),
+  canonVersion: (version: number, scope?: CanonScope) =>
+    request<CanonVersion>(`/api/taste/canon/${version}${scope ? `?${new URLSearchParams({ kind: scope.kind, ...(scope.brandId ? { brandId: scope.brandId } : {}) }).toString()}` : ""}`),
+  saveCanon: (text: string, reason: string, scope?: CanonScope) => send<CanonVersion>("/api/taste/canon", { text, reason, ...(scope ? { scope } : {}) }),
+  restoreCanon: (version: number, reason: string, scope?: CanonScope) => send<CanonVersion>("/api/taste/canon/restore", { version, reason, ...(scope ? { scope } : {}) }),
+  decideProposal: (id: string, approve: boolean, ownerSaid: string) => send<{ proposal: CanonProposal }>(`/api/taste/proposals/${encodeURIComponent(id)}`, { approve, ownerSaid }),
+  brandNote: (brandId: string, note: string) => send<BrandNote>(`/api/brands/${encodeURIComponent(brandId)}/notes`, { note }),
   batches: async () => (await request<{ batches: BatchSummary[] }>("/api/batches")).batches,
   board: (batchId: string) => request<Board>(`/api/batches/${encodeURIComponent(batchId)}/board`),
   pick: (batchId: string, pick: { ideaId: string; imageId: string | null; ownerSaid: string }) =>

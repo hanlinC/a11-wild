@@ -685,6 +685,10 @@ export interface BrandPage {
   logoUrl: string | null;
   products: { product: Omit<Product, "photos"> & { photos: Viewable<ProductPhoto>[] }; facts: Fact[]; truthSheet: TruthSheet | null }[];
   batches: Batch[];
+  /** The rules of this brand alone. Version 0 with no text when there are none. */
+  canon: CanonVersion;
+  /** What the owner chose for this brand before, newest first. */
+  notes: BrandNote[];
 }
 
 /** One batch in the dashboard's list, with the names of its brand and product. */
@@ -700,6 +704,28 @@ export interface TastePage {
   versions: Omit<CanonVersion, "text">[];
   log: TasteEntry[];
   swipe: SwipeItem[];
+  /** The other canons: creative craft, performance, and each brand that has one. */
+  canons: ScopedCanon[];
+  /** The proposed changes, newest first. One with the status proposed waits for the owner. */
+  proposals: ProposalView[];
+  /** What the studio saw, newest first. A record is not a rule. */
+  learning: (LearningRecord & { scopeName: string })[];
+}
+
+/** A canon other than the owner's taste, as the dashboard shows it. */
+export interface ScopedCanon {
+  scope: CanonScope;
+  /** "Creative craft", "Performance", or the brand's name. */
+  name: string;
+  canon: CanonVersion;
+  versions: Omit<CanonVersion, "text">[];
+}
+
+/** A proposed change with what it would replace. */
+export interface ProposalView extends CanonProposal {
+  scopeName: string;
+  /** The canon of its scope as it reads now. */
+  current: CanonVersion;
 }
 
 /** What a picture of a batch is: the skeleton a draft is built round, a draft, a final, or what a pixel tool made from one. */
