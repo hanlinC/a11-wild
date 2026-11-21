@@ -2,6 +2,7 @@ import { BatchReads } from "../../batch/reads.js";
 import { BrandStore } from "../../brand/store.js";
 import type { Config } from "../../config.js";
 import { FactStore } from "../../facts/store.js";
+import { Importer } from "../../import/ingest.js";
 import { ParallelClient } from "../../parallel/client.js";
 import type { Pictures } from "../../pictures/store.js";
 import type { ProviderKeys } from "../../secrets.js";
@@ -16,6 +17,7 @@ import type { ToolDefinition } from "../registry.js";
 import { brandTools } from "./brand.js";
 import { coreTools } from "./core.js";
 import { factTools } from "./facts.js";
+import { importTools } from "./import.js";
 import { spendTools } from "./spend.js";
 import { tasteTools } from "./taste.js";
 
@@ -43,13 +45,15 @@ export function studioTools(parts: StudioParts) {
   const tasteLog = new TasteLog(table, now);
   const swipe = new SwipeFile(table, now);
   const reads = new BatchReads(table, now);
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads };
+  const importer = new Importer({ table, canon, tasteLog, swipe, brands, pictures, net, now });
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
     ...brandTools({ brands, parallel, pictures, net }),
     ...factTools({ brands, facts, parallel }),
     ...tasteTools({ canon, tasteLog, swipe, reads }),
+    ...importTools({ importer }),
   ];
   return { tools, services };
 }

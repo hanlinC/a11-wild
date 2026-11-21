@@ -65,8 +65,14 @@ export interface BrandKit {
   /** The brand's home page. */
   url: string;
   logo: PictureRef | null;
-  palette: { role: PaletteRole; hex: string }[];
+  palette: { role: PaletteRole; hex: string; note?: string }[];
   fonts: string[];
+  /** How the brand speaks, in the owner's words. */
+  voice?: string;
+  /** Words and claims the brand never uses. */
+  neverSay?: string[];
+  /** What else the owner settled about this brand. */
+  notes?: string;
   createdAt: string;
   savedBy: string;
   /** The record's id in a11-adgen, when it was copied from there. */
