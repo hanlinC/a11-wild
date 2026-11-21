@@ -56,6 +56,15 @@ export interface PictureRef {
   sourceUrl: string;
 }
 
+/** One font file of a brand, in the private store. */
+export interface FontFile {
+  family: string;
+  weight: number;
+  key: string;
+  /** Where the file was copied from. */
+  sourceUrl: string;
+}
+
 export const PALETTE_ROLES = ["primary", "secondary", "accent", "background", "text"] as const;
 export type PaletteRole = (typeof PALETTE_ROLES)[number];
 
@@ -67,6 +76,8 @@ export interface BrandKit {
   logo: PictureRef | null;
   palette: { role: PaletteRole; hex: string; note?: string }[];
   fonts: string[];
+  /** The font files the studio holds for this brand: the words of an ad are set in them. */
+  fontFiles?: FontFile[];
   /** How the brand speaks, in the owner's words. */
   voice?: string;
   /** Words and claims the brand never uses. */
@@ -320,7 +331,23 @@ export interface TastePage {
 }
 
 /** What a picture of a batch is: the skeleton a draft is built round, a draft, a final, or what a pixel tool made from one. */
-export type ImageKind = "skeleton" | "draft" | "final" | "reprint" | "swap" | "finish" | "food_crop";
+export type ImageKind =
+  | "skeleton"
+  | "draft"
+  | "final"
+  | "reprint"
+  | "swap"
+  | "finish"
+  | "food_crop"
+  /** A picture with the approved words and the real logo set on it. */
+  | "typeset"
+  /** A repair of a draft or a final: food colour, the pack's light, a box's print. */
+  | "grade"
+  | "relight"
+  | "box_print"
+  /** The pack photo padded to 4:5, and the open pack built from the model's edit of it. */
+  | "pack_pad"
+  | "pack_open";
 
 /** A picture that a batch owns. It lives in the private picture store. */
 export interface BatchImage {
@@ -404,9 +431,24 @@ export interface BoardDraft {
   checks: ImageChecks | null;
   /** A final after the real-camera finish: the picture that is delivered. */
   finish?: { image: BatchImage; viewUrl: string };
+  /** The picture with the approved words and the real logo set on it (an ad with words): what the owner judges, and what is delivered. */
+  words?: { image: BatchImage; viewUrl: string };
 }
 
-export type PixelTool = "skeleton" | "reprint" | "swap" | "pack_check" | "cap_check" | "photo_finish" | "food_crop";
+export type PixelTool =
+  | "skeleton"
+  | "reprint"
+  | "swap"
+  | "pack_check"
+  | "cap_check"
+  | "photo_finish"
+  | "food_crop"
+  | "headline"
+  | "food_grade"
+  | "relight"
+  | "box_print"
+  | "pack_pad"
+  | "pack_open";
 
 /** One run of a pixel tool, from the moment it is sent. */
 export interface PixelJob {
@@ -437,6 +479,8 @@ export interface Board {
   truthSheet: TruthSheet | null;
   ideas: {
     idea: Idea;
+    /** The words the owner approved for this idea (an ad with words). */
+    copy?: ApprovedCopy;
     drafts: BoardDraft[];
     pick: Pick | null;
     /** The blind critic's rank of this idea's drafts. Null until the owner has picked or passed, so that it cannot lead him. */

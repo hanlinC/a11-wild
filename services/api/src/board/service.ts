@@ -1,7 +1,9 @@
-import type { Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, Pick, Role } from "@a11-wild/shared";
+import type { ApprovedCopy, Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, ImageKind, Pick, Role } from "@a11-wild/shared";
+import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { type CheckStore, defectOf, rejected } from "../checks/store.js";
+import type { CopyStore } from "../copy/store.js";
 import type { CriticStore } from "../critic/store.js";
 import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
@@ -29,13 +31,22 @@ interface Deps {
   critic: CriticStore;
   tasteLog: TasteLog;
   pictures: Pictures;
+  copy: CopyStore;
 }
 
-/** The picture that counts for a draft or a final: its newest repair (a reprint or a swap), or the picture itself. */
+/** The kinds of picture that repair a draft or a final and then stand for it. */
+export const REPAIR_KINDS: readonly ImageKind[] = ["reprint", "swap", "grade", "relight", "box_print"];
+/** The picture that counts for a draft or a final: its newest repair, or the picture itself. */
 export const countedOf = (image: BatchImage, all: BatchImage[]): BatchImage =>
-  all.filter((other) => (other.kind === "reprint" || other.kind === "swap") && other.rootId === image.id).at(-1) ?? image;
+  all.filter((other) => REPAIR_KINDS.includes(other.kind) && other.rootId === image.id).at(-1) ?? image;
+/**
+ * The picture with the approved words on it: the newest one set on this very picture after the owner approved the words as they are now.
+ * Words that changed since, or a repair made since, need the words set again.
+ */
+export const typesetOf = (on: BatchImage, all: BatchImage[], words: ApprovedCopy | undefined): BatchImage | undefined =>
+  words ? all.filter((other) => other.kind === "typeset" && other.fromId === on.id && other.createdAt >= words.at).at(-1) : undefined;
 /** The real-camera finish that was made from this very picture, the newest one. */
-const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
+export const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
 
 /** Where one idea stands on its way to a final. */
 export interface IdeaFinal {
@@ -75,11 +86,14 @@ export class BoardService implements FinalRule {
       critic.ranks(batchId),
     ]);
     const all = await this.deps.images.list(batchId);
+    const approved = hasWords(batch.kind) ? await this.deps.copy.list(batchId) : [];
     const shown = (list: BatchImage[] = []): Promise<BoardDraft[]> =>
       Promise.all(
         list.map(async (image, index) => {
           const counted = countedOf(image, all);
           const finish = finishOf(counted, all);
+          // The words go on a draft as it counts now, and on a final after its real-camera finish.
+          const words = typesetOf(image.kind === "final" ? (finish ?? counted) : counted, all, approved.find((copy) => copy.ideaId === image.ideaId));
           return {
             number: index + 1,
             image,
@@ -87,6 +101,7 @@ export class BoardService implements FinalRule {
             viewUrl: await pictures.viewUrl(counted.key),
             checks: found.get(counted.id) ?? null,
             ...(finish ? { finish: { image: finish, viewUrl: await pictures.viewUrl(finish.key) } } : {}),
+            ...(words ? { words: { image: words, viewUrl: await pictures.viewUrl(words.key) } } : {}),
           };
         }),
       );
@@ -100,7 +115,8 @@ export class BoardService implements FinalRule {
         ideas.map(async (idea) => {
           const pick = picked.find((entry) => entry.ideaId === idea.id) ?? null;
           // The critic's rank is shown only after the owner's own choice, so that it cannot lead him.
-          return { idea, drafts: await shown(drafts.get(idea.id)), pick, rank: pick ? (ranks.get(idea.id) ?? null) : null, finals: await shown(finals.get(idea.id)) };
+          const copy = approved.find((entry) => entry.ideaId === idea.id);
+          return { idea, ...(copy ? { copy } : {}), drafts: await shown(drafts.get(idea.id)), pick, rank: pick ? (ranks.get(idea.id) ?? null) : null, finals: await shown(finals.get(idea.id)) };
         }),
       ),
     };
@@ -119,6 +135,7 @@ export class BoardService implements FinalRule {
     const { batches, brands, checks, picks } = this.deps;
     const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
     const [found, all, finals, made] = await Promise.all([checks.all(batch.id), this.deps.images.list(batch.id), this.sent(batch.id, "final"), picks.all(batch.id)]);
+    const approved = hasWords(batch.kind) ? await this.deps.copy.list(batch.id) : [];
     const entries: IdeaFinal[] = [];
     for (const idea of await batches.ideas(batch.id)) {
       const pick = made.find((entry) => entry.ideaId === idea.id);
@@ -139,6 +156,9 @@ export class BoardService implements FinalRule {
       if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
       else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
       else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
+      else if (hasWords(batch.kind) && !typesetOf(finishOf(final, all) as BatchImage, all, approved.find((copy) => copy.ideaId === idea.id))) {
+        missing.push(`type_set for picture ${final.id}: the approved words and the real logo on the finished final`);
+      }
     }
     return entries;
   }
@@ -150,10 +170,16 @@ export class BoardService implements FinalRule {
     if (batch.state === "drafting") {
       const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
       const [found, all, drafts, ranks] = await Promise.all([checks.all(batch.id), this.deps.images.list(batch.id), this.sent(batch.id, "draft"), critic.ranks(batch.id)]);
+      const approved = hasWords(batch.kind) ? await this.deps.copy.list(batch.id) : [];
       for (const idea of await batches.ideas(batch.id)) {
         const mine = drafts.get(idea.id) ?? [];
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);
-        for (const image of mine) missing.push(...(await this.needs(batch.id, countedOf(image, all), hasPack, found)));
+        for (const image of mine) {
+          const counted = countedOf(image, all);
+          missing.push(...(await this.needs(batch.id, counted, hasPack, found)));
+          // The owner judges an ad, not a bare photo: each draft carries the approved words and the real logo before he sees it.
+          if (hasWords(batch.kind) && !typesetOf(counted, all, approved.find((copy) => copy.ideaId === idea.id))) missing.push(`type_set for picture ${counted.id}: the approved words and the real logo on the draft`);
+        }
         // A rank counts while it is of the pictures that count now: a repair made after it needs a new rank.
         const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
         if (!mine.every((image) => judged.get(image.id) === countedOf(image, all).id)) {
@@ -175,8 +201,8 @@ export class BoardService implements FinalRule {
     const { batches, images, checks } = this.deps;
     const batch = await batches.get(batchId);
     const image = await images.get(batchId, imageId);
-    if (!["draft", "final", "reprint", "swap"].includes(image.kind)) {
-      throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft, a final, or a reprint or swap of one.`);
+    if (!["draft", "final", ...REPAIR_KINDS].includes(image.kind)) {
+      throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft, a final, or a repair of one.`);
     }
     const saved = await checks.save(batchId, imageId, items);
     const { batch: after, missing } = await this.progress(batch);

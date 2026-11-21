@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PALETTE_ROLES, type ProductPhoto } from "@a11-wild/shared";
 import { brandExtract, fetchText } from "../../brand/extract.js";
+import { copyFont } from "../../brand/fonts.js";
 import type { BrandStore } from "../../brand/store.js";
 import type { ParallelClient } from "../../parallel/client.js";
 import { copyPicture, type Pictures } from "../../pictures/store.js";
@@ -27,6 +28,27 @@ function pictureLinks(text: string): string[] {
 
 export function brandTools({ brands, parallel, pictures, net }: BrandToolDeps): ToolDefinition[] {
   return [
+    defineTool({
+      name: "font_save",
+      description:
+        "Saves one font file of a brand, so the studio can set an ad's words in the brand's own font (type_set). Free. Without url, the family comes from Google Fonts at that weight. For a brand font that is not there, give url: the file the brand's own site serves (its @font-face address, a .woff2, .woff, .ttf or .otf). Save the headline weight (the heaviest) and the subline weight (one lighter, never Light). Never save another family in place of the brand's own without the owner's yes.",
+      input: {
+        brandId: id,
+        family: z.string().min(1).max(60).describe("The family name, as the brand kit has it."),
+        weight: z.number().int().min(100).max(1000).describe("The weight: 400 is regular, 700 is bold, 900 is the heaviest."),
+        url: httpsUrl.optional().describe("The font file on the brand's own site. Leave it out for a Google Fonts family."),
+      },
+      writes: true,
+      handler: async ({ brandId, family, weight, url }, context) => {
+        const brand = await brands.brand(brandId);
+        const file = await copyFont({ brandId, family, weight, ...(url ? { url } : {}) }, net, pictures);
+        const others = (brand.fontFiles ?? []).filter((other) => !(other.family.toLowerCase() === file.family.toLowerCase() && other.weight === weight));
+        if (others.length >= 8) throw new Refusal("A brand keeps 8 font files or fewer.");
+        const { createdAt: _createdAt, ...kit } = brand;
+        const saved = await brands.saveBrand({ ...kit, fontFiles: [...others, file], savedBy: context.user.email });
+        return { brandId, saved: { family: file.family, weight: file.weight, sourceUrl: file.sourceUrl }, fontFiles: (saved.fontFiles ?? []).map(({ family: name, weight: at }) => ({ family: name, weight: at })) };
+      },
+    }),
     defineTool({
       name: "brand_list",
       description:

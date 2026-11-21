@@ -25,7 +25,8 @@ export class CopyStore {
   async approve(batchId: string, words: Omit<ApprovedCopy, "version" | "at">): Promise<ApprovedCopy> {
     const before = await this.get(batchId, words.ideaId);
     const same = before && before.headline === words.headline && before.subline === words.subline && before.footnote === words.footnote;
-    const saved: ApprovedCopy = { ...words, version: before ? before.version + (same ? 0 : 1) : 1, at: this.now().toISOString() };
+    // The same words keep their time too: a picture that carries them still carries the approved words.
+    const saved: ApprovedCopy = { ...words, version: before ? before.version + (same ? 0 : 1) : 1, at: before && same ? before.at : this.now().toISOString() };
     await this.table.put({ pk: pk(batchId), sk: sk(words.ideaId), ...saved });
     return saved;
   }

@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { BatchImage, ImageKind, PixelJob, PixelTool } from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
-import type { BoardService } from "../board/service.js";
+import { hasWords } from "../batch/state.js";
+import { type BoardService, countedOf, finishOf, REPAIR_KINDS } from "../board/service.js";
+import { fontOf } from "../brand/fonts.js";
+import type { CopyStore } from "../copy/store.js";
+import { photoNamed } from "../render/service.js";
 import type { BrandStore } from "../brand/store.js";
 import type { CheckStore } from "../checks/store.js";
 import type { ImageStore } from "../images/store.js";
@@ -13,7 +17,7 @@ import { type JobStore, jobView, type StoredJob } from "./store.js";
 /** A job with no result after this long did not run to its end. */
 const JOB_MINUTES = 10;
 const RESULT_BYTES = 20_000;
-const RENDERED: ImageKind[] = ["draft", "final", "reprint", "swap"];
+const RENDERED: ImageKind[] = ["draft", "final", ...REPAIR_KINDS];
 const SKELETON_STATES = ["ideas", "judged", "worded", "priced", "waiting_spend", "drafting"];
 
 interface Deps {
@@ -24,6 +28,7 @@ interface Deps {
   board: BoardService;
   jobs: JobStore;
   pictures: Pictures;
+  copy: CopyStore;
   /** Missing where the pixel function is not deployed. */
   runner: PixelRunner | undefined;
   now: () => Date;
@@ -69,7 +74,7 @@ export class PixelService {
   /** A draft, a final or a repair of one: a picture a check or a repair can work on. */
   private async rendered(batchId: string, imageId: string): Promise<BatchImage> {
     const image = await this.deps.images.get(batchId, imageId);
-    if (!RENDERED.includes(image.kind)) throw new Refusal(`Picture ${imageId} is a ${image.kind}. This tool works on a draft, a final, or a reprint or swap of one.`);
+    if (!RENDERED.includes(image.kind)) throw new Refusal(`Picture ${imageId} is a ${image.kind}. This tool works on a draft, a final, or a repair of one.`);
     return image;
   }
 
@@ -104,8 +109,24 @@ export class PixelService {
     if (!SKELETON_STATES.includes(batch.state)) throw new Refusal(`A skeleton is made before a draft. This batch is at "${batch.state}".`);
     if (!(await batches.ideas(batch.id)).some((idea) => idea.id === input.ideaId)) throw new Refusal(`This batch has no idea ${input.ideaId}.`);
     if (!input.placement.plan && !input.placement.bg) throw new Refusal("A skeleton needs the canvas colour (bg), or a plan that has one.");
-    const placement = input.placement.plan ? { ...input.placement, plan: planColours(input.placement.plan) } : input.placement;
+    const placement = input.placement.plan ? { ...input.placement, plan: await this.planPhotos(batch.productId, planColours(input.placement.plan)) } : input.placement;
     return this.start("skeleton", batch.id, { ...placement, packKey: await this.packKey(batch.id) }, { out: { kind: "skeleton", ideaId: input.ideaId } });
+  }
+
+  /** A plan product that names another real photo of the product ("food-2", "prop-1") gets that photo's key. An agent never types a key. */
+  private async planPhotos(productId: string, plan: unknown): Promise<unknown> {
+    const { products, ...rest } = plan as { products: ({ photo?: string } & Record<string, unknown>)[] };
+    if (!products.some((entry) => entry.photo)) return plan;
+    const product = await this.deps.brands.product(productId);
+    return {
+      ...rest,
+      products: products.map(({ photo, ...entry }) => {
+        if (!photo) return entry;
+        const found = photoNamed(product, photo);
+        if (!found) throw new Refusal(`Real photos first: this product has no photo ${photo}. Find a real one (image_search or the brand's own pages) and save it with product_save.`);
+        return { ...entry, photoKey: found.key };
+      }),
+    };
   }
 
   async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[] }): Promise<PixelView> {
@@ -186,6 +207,74 @@ export class PixelService {
       input.batchId,
       { box: input.box, renderKey: image.key, foodKey: chosen.key },
       { imageId: image.id, out: { kind: "food_crop", fromId: image.id, rootId: this.root(image), ...(image.ideaId ? { ideaId: image.ideaId } : {}) } },
+    );
+  }
+
+  /** A repair that makes a new picture, which then stands for the draft or the final. */
+  private repair(tool: PixelTool, kind: ImageKind, batchId: string, image: BatchImage, input: Record<string, unknown>): Promise<PixelView> {
+    return this.start(tool, batchId, { ...input, renderKey: image.key }, { imageId: image.id, out: { kind, fromId: image.id, rootId: this.root(image), ...(image.ideaId ? { ideaId: image.ideaId } : {}) } });
+  }
+
+  async foodGrade(input: { batchId: string; imageId: string; photo: number; refBox: number[]; regions: number[][]; strength: number; refBg?: number[]; satMin?: number; dist?: number }): Promise<PixelView> {
+    const { batches, brands } = this.deps;
+    const image = await this.rendered(input.batchId, input.imageId);
+    const food = (await brands.product((await batches.get(input.batchId)).productId)).photos.filter((photo) => photo.kind === "food");
+    const chosen = food[input.photo - 1];
+    if (!chosen) throw new Refusal(`This product has ${food.length} food photo(s) of the brand's own. The colour is matched to a real close-up: save one with product_save.`);
+    const { batchId: _batchId, imageId: _imageId, photo: _photo, ...rest } = input;
+    return this.repair("food_grade", "grade", input.batchId, image, { ...rest, foodKey: chosen.key });
+  }
+
+  async relight(input: { batchId: string; imageId: string; box: number[]; light: "left" | "right"; floor: number[] } & Record<string, unknown>): Promise<PixelView> {
+    const image = await this.rendered(input.batchId, input.imageId);
+    const { batchId: _batchId, imageId: _imageId, ...rest } = input;
+    return this.repair("relight", "relight", input.batchId, image, rest);
+  }
+
+  async boxPrint(input: { batchId: string; imageId: string; face: number[]; blocks: Record<string, unknown>[] }): Promise<PixelView> {
+    const image = await this.rendered(input.batchId, input.imageId);
+    return this.repair("box_print", "box_print", input.batchId, image, { face: input.face, blocks: input.blocks, packKey: await this.packKey(input.batchId) });
+  }
+
+  /**
+   * Sets the approved words and the real logo on a draft or a final, in the brand's own font. The words come from the owner's
+   * approval and never from the caller, so a picture cannot carry words he did not approve.
+   */
+  async typeSet(input: { batchId: string; imageId: string; family?: string; weight: number; subWeight?: number; logo: boolean; layout: Record<string, unknown> }): Promise<PixelView> {
+    const { batches, brands, images, copy } = this.deps;
+    const batch = await batches.get(input.batchId);
+    if (!hasWords(batch.kind)) throw new Refusal("R16: a v1 picture carries the brand logo and no words. Only a batch with words (v2) has its words set.");
+    const given = await this.rendered(input.batchId, input.imageId);
+    const all = await images.list(input.batchId);
+    const root = given.rootId ? await images.get(input.batchId, given.rootId) : given;
+    const counted = countedOf(root, all);
+    // A final takes its words after the real-camera finish, so the grain and the softness never touch the type.
+    const on = root.kind === "final" ? finishOf(counted, all) : counted;
+    if (!on) throw new Refusal(`The words go on a final after its real-camera finish. Run photo_finish on picture ${counted.id} first.`);
+    const words = root.ideaId ? await copy.get(input.batchId, root.ideaId) : undefined;
+    if (!words) throw new Refusal("The owner has not approved the words of this idea yet. Show him the headline and the subline as text, and save his yes with copy_approve.");
+    const brand = await brands.brand(batch.brandId);
+    const family = input.family ?? brand.fonts[0];
+    const font = fontOf(brand.fontFiles, family, input.weight);
+    if (!font) {
+      throw new Refusal(`The studio holds no font file ${family ? `of "${family}" ` : ""}for this brand. Save the brand's own font with font_save (the headline weight and the subline weight). The words are never set in another family without the owner's yes.`);
+    }
+    const sub = input.subWeight ? fontOf(brand.fontFiles, font.family, input.subWeight) : undefined;
+    if (input.logo && !brand.logo) throw new Refusal("This brand has no saved logo. Save one with brand_save, or send logo false and tell the owner the ad has no logo yet.");
+    return this.start(
+      "headline",
+      input.batchId,
+      {
+        ...input.layout,
+        headline: words.headline,
+        subline: words.subline,
+        ...(words.footnote ? { footnote: words.footnote } : {}),
+        fontKey: font.key,
+        ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
+        ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
+        renderKey: on.key,
+      },
+      { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
     );
   }
 

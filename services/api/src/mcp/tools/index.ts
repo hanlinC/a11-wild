@@ -82,13 +82,13 @@ export function studioTools(parts: StudioParts) {
   const picks = new PickStore(table, now);
   const criticStore = new CriticStore(table, now);
   const copy = new CopyStore(table, now);
-  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures });
+  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
   const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore });
   const done = new DoneGate({ batches, brands, facts, truth, board });
   const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
-  const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, runner: parts.pixelRunner, now });
+  const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, copy, runner: parts.pixelRunner, now });
   const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done, copy };
   const tools: ToolDefinition[] = [
     ...coreTools(config),

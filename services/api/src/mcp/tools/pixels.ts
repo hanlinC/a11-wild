@@ -27,9 +27,22 @@ const plan = z
     bg: colour,
     shapes: z.array(z.object({ rect: z.tuple([fraction, fraction, fraction, fraction]), fill: colour }).strict()).max(12).default([]),
     products: z
-      .array(z.object({ cx: fraction, base: fraction, height: z.number().min(0.05).max(1), side: z.enum(["up", "L", "R"]).default("up"), rot: z.number().min(-15).max(15).default(0) }).strict())
+      .array(
+        z
+          .object({
+            cx: fraction,
+            base: fraction,
+            height: z.number().min(0.05).max(1),
+            side: z.enum(["up", "L", "R"]).default("up"),
+            rot: z.number().min(-15).max(15).default(0),
+            photo: z.string().regex(/^(pack|food|prop)-\d{1,2}$/).optional(),
+            cutout: cutout.optional(),
+            blur: z.number().min(0).max(12).optional(),
+          })
+          .strict(),
+      )
       .min(1)
-      .max(8),
+      .max(12),
   })
   .strict();
 
@@ -48,17 +61,26 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         base: fraction.default(0.9).describe("Where the pack's base is, as a share of the height."),
         count: z.number().int().min(1).max(6).default(1),
         gap: z.number().min(0).max(2).default(0.18).describe("The gap between packs, as a share of one pack's width."),
-        plan: plan.optional().describe("Each pack at its own place. cx, base and height are shares of the canvas; side is up, L or R (lying); rot is a small turn in degrees."),
+        plan: plan
+          .optional()
+          .describe(
+            'Each pack at its own place. cx, base and height are shares of the canvas; side is up, L or R (lying); rot is a small turn in degrees. A product may be another real photo of this product in place of the pack: photo "food-2" or "prop-1" (a real slice of each flavour, a real prop), cut from its plain backdrop.',
+          ),
+        vary: z
+          .object({ regions: z.array(box).min(1).max(6), seed: z.number().int().min(0).max(100000).default(7) })
+          .strict()
+          .optional()
+          .describe("With a plan of two or more packs that show food through a window: the food areas in the pack photo (x0,y0,x1,y1 in pixels). Each pack then gets its own arrangement of the real food, so a row is not the same pack copied."),
         box: box.optional().describe("x0,y0,x1,y1 of the pack in the pack photo, in pixels. Leave it out and the studio finds it."),
         cutout: cutout.optional().describe("Tuning for a pack photo whose backdrop is not found with the defaults."),
       },
       writes: true,
       needsRules: true,
-      handler: ({ batchId, ideaId, plan: layout, bg, box: packBox, cutout: tuning, ...one }) =>
+      handler: ({ batchId, ideaId, plan: layout, vary, bg, box: packBox, cutout: tuning, ...one }) =>
         pixels.skeleton({
           batchId,
           ideaId,
-          placement: { ...(layout ? { plan: layout } : { ...one, bg }), ...(packBox ? { box: packBox } : {}), ...(tuning ? { cutout: tuning } : {}) },
+          placement: { ...(layout ? { plan: layout, ...(vary ? { vary } : {}) } : { ...one, bg }), ...(packBox ? { box: packBox } : {}), ...(tuning ? { cutout: tuning } : {}) },
         }),
     }),
     defineTool({
@@ -147,6 +169,118 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
       },
       writes: true,
       handler: (input) => pixels.foodCrop(input),
+    }),
+    defineTool({
+      name: "type_set",
+      description:
+        "Sets the words the owner approved, and the brand's real logo, on a draft or a final of a batch with words (v2), in the brand's own font. Free. The words come from copy_approve: you cannot type them here. Run it on every draft before the owner sees it, and on every final after photo_finish; a draft or a final without it does not count. Set it again after a repair, or after the owner changes the words. The tool stops when the words do not fit, sit too close to an edge, the logo or the product, or run over a sharp colour or shadow edge: move the area, or render the backdrop under the words as one plain tone. Use ' | ' in the approved headline to break lines; keep one logo size and place, and one headline top, on every ad of the batch. It makes a new picture; read it with pixel_status and look at it at phone size.",
+      input: {
+        batchId: id,
+        imageId: id.describe("A draft or a final of this batch, or a repair of one."),
+        area: z.tuple([fraction, fraction, fraction, fraction]).describe("x0,y0,x1,y1 of the text block, as shares of the picture. Keep 4% or more to each edge."),
+        family: z.string().min(1).max(60).optional().describe("The font family, one saved with font_save. Default: the brand kit's first font."),
+        weight: z.number().int().min(100).max(1000).default(800).describe("The headline weight. The studio uses the nearest saved file."),
+        subWeight: z.number().int().min(300).max(1000).optional().describe("The subline weight: one lighter than the headline, never Light."),
+        colour: colour.default("000000").describe("The colour of the words as RRGGBB, from the brand palette."),
+        align: z.enum(["left", "right", "center"]).default("left"),
+        case: z.enum(["asis", "upper"]).default("upper").describe("upper: the headline in capitals (the poster style). asis for a soft display serif."),
+        subCase: z.enum(["asis", "upper"]).default("asis"),
+        leading: z.number().min(0.8).max(2).default(1.0),
+        subRatio: z.number().min(0.2).max(1).default(0.45).describe("The subline size as a share of the headline size: 0.4 to 0.5."),
+        gap: z.number().min(0).max(2).default(0.25),
+        minHead: z.number().min(0).max(0.5).default(0.05).describe("The tool stops when the headline is smaller than this share of the picture height."),
+        productTop: z.number().min(0.01).max(1).optional().describe("The product's top edge as a share of the height: the words end 4% or more above it."),
+        accent: z.string().max(120).optional().describe("Headline words set in the accent colour: one key phrase, on one ad of a batch at most."),
+        accentColour: colour.optional(),
+        logo: z.boolean().default(true).describe("Draw the brand's saved logo above the words."),
+        logoWidth: z.number().min(0.02).max(1).default(0.25),
+        logoTop: z.number().min(0).max(0.9).default(0.045),
+        logoX: fraction.optional().describe("The logo's left edge as a share of the width. Default: centred. Give the text column's left edge so the logo heads the words."),
+        logoColour: colour.optional().describe("A one-colour version of the logo: a light one for a dark picture."),
+        footnoteAlign: z.enum(["left", "right"]).optional(),
+        footnoteY: z.number().min(0.5).max(0.99).optional(),
+      },
+      writes: true,
+      needsRules: true,
+      handler: ({ batchId, imageId, family, weight, subWeight, logo, accent, accentColour, logoX, logoColour, productTop, footnoteAlign, footnoteY, logoWidth, logoTop, ...layout }) =>
+        pixels.typeSet({
+          batchId,
+          imageId,
+          ...(family ? { family } : {}),
+          weight,
+          ...(subWeight ? { subWeight } : {}),
+          logo,
+          layout: {
+            ...layout,
+            ...(logo ? { logoWidth, logoTop, ...(logoX !== undefined ? { logoX } : {}), ...(logoColour ? { logoColour } : {}) } : {}),
+            ...(accent ? { accent, accentColour } : {}),
+            ...(productTop !== undefined ? { productTop } : {}),
+            ...(footnoteAlign ? { footnoteAlign } : {}),
+            ...(footnoteY !== undefined ? { footnoteY } : {}),
+          },
+        }),
+    }),
+    defineTool({
+      name: "food_grade",
+      description:
+        "Moves the colour of the food in a picture toward a real close-up photo of the same food. Free. Use it when real food looks pale or flat beside the brand's own close-up. Only colour moves: texture and shape stay, and the colour never goes past the real photo. It makes a new picture that stands for the old one: check it again.",
+      input: {
+        batchId: id,
+        imageId,
+        regions: z.array(box).min(1).max(8).describe("Where the food shows in the picture: x0,y0,x1,y1 in pixels, one for each food area."),
+        photo: z.number().int().min(1).max(20).default(1).describe("Which of the product's food photos is the close-up: 1 is the first."),
+        refBox: box.describe("x0,y0,x1,y1 of a patch of the close-up that is all food, in pixels."),
+        strength: fraction.default(0.8),
+        refBg: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]).optional().describe("R,G,B of the close-up's plain backdrop, which is not counted as food."),
+        satMin: fraction.optional().describe("Lower it for pale food."),
+        dist: z.number().min(0).max(255).optional().describe("Lower it for pale food."),
+      },
+      writes: true,
+      needsRules: true,
+      handler: ({ refBg, satMin, dist, ...input }) => pixels.foodGrade({ ...input, ...(refBg ? { refBg } : {}), ...(satMin !== undefined ? { satMin } : {}), ...(dist !== undefined ? { dist } : {}) }),
+    }),
+    defineTool({
+      name: "product_relight",
+      description:
+        "Makes a pasted pack take the scene's light, so it does not look pasted: shade on the side away from the light, bounce light from the floor colour, and a contact shadow where the pack meets the floor. Free. Use it after product_swap or on a picture where the pack looks cut out. It makes a new picture that stands for the old one: check it again.",
+      input: {
+        batchId: id,
+        imageId,
+        box: box.describe("x0,x1,top,base of the pack in the picture, in pixels."),
+        light: z.enum(["left", "right"]).describe("The side the light comes from. A shadow that falls left means light from the right."),
+        floor: z.tuple([z.number().int().min(0).max(255), z.number().int().min(0).max(255), z.number().int().min(0).max(255)]).describe("R,G,B of the surface the pack stands on."),
+        shade: z.number().min(0).max(0.6).default(0.3),
+        contact: fraction.default(0.55),
+      },
+      writes: true,
+      needsRules: true,
+      handler: (input) => pixels.relight(input),
+    }),
+    defineTool({
+      name: "box_print",
+      description:
+        "Puts the printed words of a boxed product (a cake box, a carton) back from the real pack photo, crisp and at the box's own angle. Free. Use it on a final whose small print the model smeared (D9); the picture must show the printed face at an angle near the pack photo's. Product, light and shadow are not touched. It makes a new picture that stands for the old one: check it again at full size beside the pack photo.",
+      input: {
+        batchId: id,
+        imageId,
+        face: box.describe("x0,y0,x1,y1 of the printed face in the pack photo, in pixels."),
+        blocks: z
+          .array(
+            z
+              .object({
+                box: box.describe("x0,y0,x1,y1 of one block of print in the pack photo."),
+                thr: z.tuple([fraction, fraction, z.number().min(0).max(5)]).optional().describe("The ink threshold [low, high, blur]. Default [0.40, 0.60, 0.6]; condensed capitals need a tighter cut."),
+                ink_rel: z.number().gt(0).max(1).optional(),
+                xmin: px.optional(),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(12),
+      },
+      writes: true,
+      needsRules: true,
+      handler: (input) => pixels.boxPrint(input),
     }),
     defineTool({
       name: "pixel_status",
