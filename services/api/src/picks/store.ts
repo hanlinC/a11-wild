@@ -12,10 +12,17 @@ export class PickStore {
   ) {}
 
   async save(batchId: string, input: Omit<Pick, "at" | "first">): Promise<Pick> {
-    const earlier = await this.table.get<Item & Pick>(pk(batchId), sk(input.ideaId));
+    const key = { pk: pk(batchId), sk: sk(input.ideaId) };
+    let earlier = await this.table.get<Item & Pick>(key.pk, key.sk);
+    if (!earlier) {
+      const pick: Pick = { ...input, at: this.now().toISOString() };
+      if (await this.table.put({ ...key, ...pick }, { ifNotExists: true })) return pick;
+      // Another choice for this idea was saved in between: that one is his first.
+      earlier = await this.table.get<Item & Pick>(key.pk, key.sk);
+    }
     const first = earlier && (earlier.first ?? { imageId: earlier.imageId, ...(earlier.shownId ? { shownId: earlier.shownId } : {}), at: earlier.at });
     const pick: Pick = { ...input, at: this.now().toISOString(), ...(first ? { first } : {}) };
-    await this.table.put({ pk: pk(batchId), sk: sk(pick.ideaId), ...pick });
+    await this.table.put({ ...key, ...pick });
     return pick;
   }
 
