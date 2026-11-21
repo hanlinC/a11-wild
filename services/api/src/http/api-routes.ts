@@ -3,6 +3,7 @@ import type { Me } from "@a11-wild/shared";
 import type { Deps } from "../app.js";
 import { log } from "../log.js";
 import { requireOwner, requireSameOrigin, requireSession, type SessionEnv } from "./guards.js";
+import { packRoutes } from "./pack-routes.js";
 import { studioRoutes } from "./studio-routes.js";
 
 export function apiRoutes(deps: Deps): Hono<SessionEnv> {
@@ -32,6 +33,7 @@ export function apiRoutes(deps: Deps): Hono<SessionEnv> {
   });
 
   studioRoutes(routes, deps, session, ownerWrite);
+  packRoutes(routes, deps, session);
 
   return routes;
 }

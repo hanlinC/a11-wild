@@ -305,6 +305,63 @@ export interface MetaText {
   approved?: { ownerSaid: string; at: string; by: string };
 }
 
+/** One ad of a client pack, as it was when the pack version was made. */
+export interface PackAd {
+  ideaId: string;
+  /** The studio makes the name. A client's result is matched to its ad by it. */
+  adName: string;
+  stage?: FunnelStage;
+  /** The delivered picture: the finished final, and in an ad with words that picture with its words. */
+  imageId: string;
+  key: string;
+  /** The words on the picture (an ad with words). */
+  words?: { headline: string; subline: string; footnote?: string };
+  /** The Meta text the owner approved, copied by the studio. */
+  meta: { version: number; variants: [MetaVariant, MetaVariant] };
+  /** One line for the client: the buyer truth, what the ad does, the source. */
+  why: string;
+  /** The fact check: each claim of the ad with the page and the quote that prove it. */
+  claims: { claim: string; quote: string; url: string }[];
+}
+
+/** One version of what a pack link shows. A version is never changed: a change is a new version, and an old one can be put back. */
+export interface PackVersion {
+  version: number;
+  ads: PackAd[];
+  /** One step in each line. */
+  launchPlan: string[];
+  at: string;
+  by: string;
+}
+
+/** The private link of a batch's ads for the client. Only the SHA-256 of its token is kept. */
+export interface Pack {
+  batchId: string;
+  tokenHash: string;
+  /** The version the link shows now. */
+  current: number;
+  createdAt: string;
+  by: string;
+}
+
+/** What the client sees behind a pack link: one pack, and nothing else of the studio. */
+export interface PackView {
+  brand: string;
+  product: string;
+  version: number;
+  at: string;
+  ads: (Omit<PackAd, "key" | "imageId" | "ideaId"> & { viewUrl: string })[];
+  launchPlan: string[];
+}
+
+/** A pack as the dashboard lists it. The link itself is shown once, when it is made. */
+export interface PackSummary {
+  pack: Omit<Pack, "tokenHash">;
+  brand: { id: string; name: string };
+  product: { id: string; name: string };
+  versions: (PackVersion & { ads: (PackAd & { viewUrl: string })[] })[];
+}
+
 /** The words the owner approved for one idea. They are set on its pictures and reused word for word. */
 export interface ApprovedCopy {
   ideaId: string;

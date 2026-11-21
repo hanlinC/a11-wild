@@ -60,6 +60,8 @@ export interface IdeaFinal {
   pick: OwnerPick | undefined;
   /** What the idea still needs. Empty when it has a clean, finished final, or the owner's pass. */
   missing: string[];
+  /** The picture that is delivered, once the final lacks nothing: the finished final, and in an ad with words that picture with its words. */
+  delivered?: BatchImage;
 }
 
 /** The drafts of a batch as the owner sees them, the checks that every picture needs, and the owner's picks. */
@@ -157,7 +159,8 @@ export class BoardService implements FinalRule {
     for (const idea of await batches.ideas(batch.id)) {
       const pick = made.find((entry) => entry.ideaId === idea.id);
       const missing: string[] = [];
-      entries.push({ ideaId: idea.id, pick, missing });
+      const entry: IdeaFinal = { ideaId: idea.id, pick, missing };
+      entries.push(entry);
       if (!pick) missing.push(`the owner's pick, or his pass, for ${idea.id}`);
       if (!pick?.imageId) continue;
       // The newest final of the picked draft is the one that counts: an earlier one was made again because it failed, and a final of a draft he no longer picks does not count.
@@ -173,9 +176,11 @@ export class BoardService implements FinalRule {
       if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
       else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
       else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
-      else if (hasWords(batch.kind)) {
+      else {
         const finish = finishOf(final, all) as BatchImage;
-        missing.push(...this.wordNeeds(final, typesetOf(finish, all, approved.find((copy) => copy.ideaId === idea.id)), found, "finished final"));
+        const set = hasWords(batch.kind) ? typesetOf(finish, all, approved.find((copy) => copy.ideaId === idea.id)) : undefined;
+        if (hasWords(batch.kind)) missing.push(...this.wordNeeds(final, set, found, "finished final"));
+        if (missing.length === 0) entry.delivered = set ?? finish;
       }
     }
     return entries;

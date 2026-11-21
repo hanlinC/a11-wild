@@ -125,6 +125,20 @@ describe("a v2 batch: finals", () => {
     expect(report.conditions[2]).toMatchObject({ passed: true, evidence: expect.stringMatching(/THE ONE THAT \| STARTED IT ALL\./) });
     const board = (await callTool(studio, "board_show", { batchId })).value;
     expect(board.ideas[0].finals[0].words.image.kind).toBe("typeset");
+
+    // The done batch becomes a client pack: the pictures with their words, under names the studio made.
+    const text = { primary: "The one that started it all. We still make it the first way. Order yours today.", headline: "Still the original", description: "Order the seaweed crisps", cta: "Order Now" };
+    const why = ideas.map(({ id }) => ({ ideaId: id, why: "Buyers ask for the first flavour by name; the ad says it is still here." }));
+    const publish = { ...rules, batchId, why, launchPlan: ["Put all three ads in one ad set.", "Run them for 72 hours."] };
+    expect(await callTool(studio, "pack_publish", publish)).toMatchObject({ ok: false, error: expect.stringMatching(/has not approved the Meta text/) });
+    await callTool(studio, "meta_save", { ...rules, batchId, ads: ideas.map(({ id }) => ({ ideaId: id, variants: [text, { ...text, headline: "The first one" }] })) });
+    await callTool(studio, "meta_approve", { ...rules, batchId, ads: ideas.map(({ id }) => ({ ideaId: id, version: 1, ownerSaid: "yes" })) });
+    const pack = (await callTool(studio, "pack_publish", publish)).value;
+    expect(pack.version.ads.map((ad: { adName: string }) => ad.adName).sort()).toEqual(["a11_W47_wongi_b01_bof_c", "a11_W47_wongi_b01_mof_c", "a11_W47_wongi_b01_tof_c"].map((name) => expect.stringMatching(new RegExp(`^${name}[123]_v1$`))));
+    expect(pack.version.ads.map((ad: { imageId: string }) => ad.imageId).sort()).toEqual(board.ideas.map((entry: { finals: { words: { image: { id: string } } }[] }) => entry.finals[0]!.words.image.id).sort());
+    const page = await studio.app.request(new URL(pack.link).pathname.replace("/c/", "/api/pack/"));
+    expect(page.status).toBe(200);
+    expect((await page.json()).ads).toHaveLength(3);
   });
 });
 
