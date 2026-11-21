@@ -3,11 +3,13 @@ import { GateError, SpendGate } from "../../src/spend/gate.js";
 import { MemoryTable } from "../helpers/memory-table.js";
 
 let gate: SpendGate;
+let table: MemoryTable;
 const owner = { sub: "sub-owner", email: "owner@example.com", role: "owner" as const };
 const member = { sub: "sub-member", email: "member@example.com", role: "member" as const };
 
 beforeEach(() => {
-  gate = new SpendGate(new MemoryTable(), () => new Date("2026-11-22T03:00:00Z"));
+  table = new MemoryTable();
+  gate = new SpendGate(table, () => new Date("2026-11-22T03:00:00Z"));
 });
 
 describe("spend gate", () => {
@@ -73,6 +75,18 @@ describe("spend gate", () => {
     await expect(gate.check("batch-1", "finals", next(3, 113_000))).rejects.toThrow(/US\$1\.036/);
     await gate.approve("batch-1", "finals", owner);
     expect((await gate.check("batch-1", "finals", next(3, 113_000))).approvedBy).toBe("owner@example.com");
+  });
+
+  it("keeps the price of each item of an estimate that was saved without one", async () => {
+    await gate.price("batch-1", "finals", { firstUsd: 0.113, count: 3 });
+    const [pk, sk] = ["BATCH#batch-1", "GATE#finals"];
+    const saved = await table.get<{ pk: string; sk: string; eachMicro?: number }>(pk, sk);
+    expect(saved?.eachMicro).toBe(113_000);
+    const { eachMicro: _each, ...older } = saved!;
+    await table.put(older);
+    // A cheaper final lowers the estimate, and the two after it still count at the first one's price.
+    expect((await gate.check("batch-1", "finals", { sent: 0, usedMicro: 0, micro: 73_000 })).estimateUsd).toBeCloseTo(0.073 + 2 * 0.113);
+    expect((await gate.check("batch-1", "finals", { sent: 1, usedMicro: 73_000, micro: 73_000 })).estimateUsd).toBeCloseTo(2 * 0.073 + 0.113);
   });
 
   it("counts a failed item that was charged", async () => {

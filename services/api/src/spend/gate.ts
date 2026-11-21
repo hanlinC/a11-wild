@@ -52,11 +52,11 @@ export class SpendGate {
     };
   }
 
-  /** Saves the estimate for a stage from the real price of its first item. */
-  async price(batchId: string, stage: GateStage, first: { firstUsd: number; count: number }): Promise<GateState> {
+  /** Saves the estimate for a stage from the real price of its first item. `billedMicro` is what failed items before it were charged. */
+  async price(batchId: string, stage: GateStage, first: { firstUsd: number; count: number; billedMicro?: number }): Promise<GateState> {
     const [pk, sk] = key(batchId, stage);
     const earlier = await this.table.get<GateItem>(pk, sk);
-    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * first.count), eachMicro: toMicro(first.firstUsd) };
+    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * first.count) + (first.billedMicro ?? 0), eachMicro: toMicro(first.firstUsd) };
     await this.table.put(item);
     return this.view(item);
   }
@@ -123,12 +123,14 @@ export class SpendGate {
     }
     if (next && item.count > 0) {
       const count = Math.max(item.count, next.sent + 1);
-      const rest = (count - next.sent - 1) * (item.eachMicro ?? item.estimateMicro / item.count);
+      // An estimate saved before each item's price was kept: its price is the estimate over its count, kept from now on.
+      const eachMicro = item.eachMicro ?? Math.round(item.estimateMicro / item.count);
+      const rest = (count - next.sent - 1) * eachMicro;
       const projected = Math.round(next.usedMicro + next.micro + rest);
       // A micro-dollar of rounding for each item is not another estimate.
       const moved = Math.abs(projected - item.estimateMicro) > count;
       if (count > item.count || moved) {
-        item = { ...item, count, estimateMicro: moved ? projected : item.estimateMicro };
+        item = { ...item, count, eachMicro, estimateMicro: moved ? projected : item.estimateMicro };
         await this.table.put(item);
       }
     }
