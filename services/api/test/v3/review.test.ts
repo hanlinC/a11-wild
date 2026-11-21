@@ -85,6 +85,17 @@ describe("the critic's review of the concepts", () => {
     expect(await state()).toBe("ideas");
   });
 
+  it("waits for a rough that is still being made", async () => {
+    const packet = await open();
+    const sent = await callTool(studio, "render_submit", { ...rules, batchId, ideaId: "idea-1", kind: "rough", prompt: "One empty pouch lies flat on a yellow seamless, one hard shadow to its right, camera from above.", references: ["pack-1"] });
+    expect(sent.value.status).toBe("queued");
+    expect(await open()).toMatchObject({ ok: false, error: expect.stringMatching(/A rough is still being made \(idea-1\)/) });
+    const early = await callTool(studio, "concept_review_save", { ...rules, batchId, ticket: packet.value.ticket, reviews: all(packet) });
+    expect(early).toMatchObject({ ok: false, error: expect.stringMatching(/A rough is still being made/) });
+    await callTool(studio, "render_status", { batchId, renderId: sent.value.id });
+    expect((await open()).value.concepts.find((entry: { id: string }) => entry.id === "idea-1").roughs).toHaveLength(1);
+  });
+
   it("goes back to the concepts when a rough or a concept is added after it", async () => {
     await reviewConcepts(studio, batchId);
     expect(await state()).toBe("reviewed");

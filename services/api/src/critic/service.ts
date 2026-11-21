@@ -7,6 +7,7 @@ import type { BrandStore } from "../brand/store.js";
 import type { FactStore } from "../facts/store.js";
 import type { ImageStore } from "../images/store.js";
 import type { Pictures } from "../pictures/store.js";
+import type { RenderStore } from "../render/store.js";
 import { Refusal } from "../mcp/registry.js";
 import { DRAFTS_PER_IDEA } from "../render/service.js";
 import type { TruthStore } from "../truth/store.js";
@@ -22,6 +23,7 @@ interface Deps {
   critic: CriticStore;
   images: ImageStore;
   pictures: Pictures;
+  renders: RenderStore;
 }
 
 /** The lowest score for the picture of a concept that the critic recommends. */
@@ -61,6 +63,7 @@ export class CriticService {
     if (step === "concepts") {
       if (batch.kind !== "v3") throw new Refusal('Only a batch of concept ads (v3) has concepts to review. Use step "ideas" for a v1 or v2 batch.');
       if (batch.state !== "ideas") requireMove(batch, "reviewed", "critic_open");
+      await this.noRoughInTheMaking(batchId);
       const { concepts, roughs, stamp } = await this.conceptsNow(batchId);
       if (concepts.length === 0) throw new Refusal("This batch has no concepts yet. The main agent saves them first (concepts_save).");
       const { pictures } = this.deps;
@@ -93,6 +96,14 @@ export class CriticService {
     return { ...draftsPacket(common, open), ...(await critic.issue(batchId, { step, ideaIds: open.map(({ idea }) => idea.id), stamp, shown })) };
   }
 
+  /** A rough that is still being made is not in the packet yet: the critic waits for it, so that its review is of the whole set. */
+  private async noRoughInTheMaking(batchId: string) {
+    const waiting = (await this.deps.renders.list(batchId)).filter((render) => render.kind === "rough" && render.status === "queued");
+    if (waiting.length > 0) {
+      throw new Refusal(`A rough is still being made (${waiting.map((render) => render.ideaId).join(", ")}). The main agent reads it first (render_status), and then a fresh critic looks at the whole set.`);
+    }
+  }
+
   /** The concepts of a batch and the roughs of each, with a stamp that changes when a concept or a rough is added. */
   private async conceptsNow(batchId: string) {
     const concepts = await this.deps.batches.burst(batchId);
@@ -123,6 +134,7 @@ export class CriticService {
     if (batch.state !== "ideas") requireMove(batch, "reviewed", "concept_review_save");
     const found = await critic.read(batchId, ticket);
     if (!found || found.step !== "concepts") throw new Refusal(BAD_TICKET);
+    await this.noRoughInTheMaking(batchId);
     const { roughs, stamp } = await this.conceptsNow(batchId);
     if (found.stamp !== stamp) throw new Refusal("A concept or a rough was added after this ticket was made. Start a fresh helper and call critic_open again.");
     if (!same(reviews.map((review) => review.ideaId), found.ideaIds)) throw new Refusal(`Review each concept of the packet once, and no other: ${found.ideaIds.join(", ")}.`);
