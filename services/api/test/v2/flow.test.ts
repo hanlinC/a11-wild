@@ -294,6 +294,23 @@ describe("a v2 batch: the type", () => {
     expect(missing).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: this product has no photo prop-1/) });
   });
 
+  it("does not count words that were sent before the owner changed them, though the picture came after", async () => {
+    const ideas = await wordedBatch();
+    const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
+    // The job is sent with the first words, and read only after the owner changed them.
+    const job = await callTool(studio, "type_set", { ...rules, batchId, imageId: draft, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF" });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await approve([ideas[0]!], { headline: "THE ONE THAT STARTED IT ALL." });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const old = await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+    expect(old.value.image).toMatchObject({ kind: "typeset", wordsVersion: 1 });
+    const shown = async () => (await studio.services.board.board(batchId)).ideas.find((entry) => entry.idea.id === ideas[0]!.id)!.drafts[0]!.words;
+    expect(await shown()).toBeUndefined();
+
+    expect((await typeSet(draft)).value.image).toMatchObject({ wordsVersion: 2 });
+    expect((await shown())?.image.wordsVersion).toBe(2);
+  });
+
   it("does not show the owner a draft without its words, and asks for them again after a change", async () => {
     const ideas = await wordedBatch();
     const drafts: Record<string, string[]> = {};

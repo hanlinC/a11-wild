@@ -40,11 +40,13 @@ export const REPAIR_KINDS: readonly ImageKind[] = ["reprint", "swap", "grade", "
 export const countedOf = (image: BatchImage, all: BatchImage[]): BatchImage =>
   all.filter((other) => REPAIR_KINDS.includes(other.kind) && other.rootId === image.id).at(-1) ?? image;
 /**
- * The picture with the approved words on it: the newest one set on this very picture after the owner approved the words as they are now.
- * Words that changed since, or a repair made since, need the words set again.
+ * The picture with the approved words on it: the newest one set on this very picture with the words as they are now.
+ * Words that changed since, or a repair made since, need the words set again. A picture set before the studio kept the version is told by its time.
  */
 export const typesetOf = (on: BatchImage, all: BatchImage[], words: ApprovedCopy | undefined): BatchImage | undefined =>
-  words ? all.filter((other) => other.kind === "typeset" && other.fromId === on.id && other.createdAt >= words.at).at(-1) : undefined;
+  words
+    ? all.filter((other) => other.kind === "typeset" && other.fromId === on.id && (other.wordsVersion === undefined ? other.createdAt >= words.at : other.wordsVersion === words.version)).at(-1)
+    : undefined;
 /** The real-camera finish that was made from this very picture, the newest one. */
 export const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
 
