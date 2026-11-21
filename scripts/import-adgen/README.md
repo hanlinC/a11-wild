@@ -36,4 +36,4 @@ a11-adgen gives its stored pictures as private links that stop working after a s
 
 ## What is not copied here
 
-The gold set. It is copied with the blind critic, in a later change.
+The gold set. The owner dropped it on 22-11-2026: his old marks are mixed, so the critic is measured against his real picks instead (`docs/decisions.md`).

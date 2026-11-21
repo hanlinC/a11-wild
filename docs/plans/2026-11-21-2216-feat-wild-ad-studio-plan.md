@@ -77,8 +77,8 @@ a11-wild keeps those lessons and drops what the three ads do not need.
 **Judging and learning**
 
 - R17. The blind critic picks three ideas and ranks drafts with a reason for each, from the batch id alone.
-- R18. Before a batch is judged, the critic scores the gold set blind. The server records balanced accuracy and shows the change from the last run.
-- R19. A fall in balanced accuracy of 0.04 or more blocks the batch from "done" until the owner sees it.
+- R18. Before a batch is judged, the critic scores the gold set blind. The server records balanced accuracy and shows the change from the last run. **Dropped by the owner on 22-11-2026: no gold set (`docs/decisions.md`).**
+- R19. A fall in balanced accuracy of 0.04 or more blocks the batch from "done" until the owner sees it. **Dropped by the owner on 22-11-2026: no gold set (`docs/decisions.md`).**
 - R20. Each owner pick, pass and note is saved to the taste log, and the agent reads the log, the taste canon and the swipe file before it writes ideas.
 - R21. The taste canon is plain words with versions. A change to it records who made it and why.
 - R22. The owner's taste data in a11-adgen (canon, taste log, swipe file, gold set, brand kits) is copied into a11-wild once. a11-adgen is not changed.
@@ -698,6 +698,8 @@ Waits on: PR2, merged and deployed, before this group is verified. Its verificat
 Waits on: PR3, merged and deployed, before this group is verified. Its verification scores the critic against the owner's real picks, which exist only after a live batch. It is a separate pull request because it cannot merge until PR3 is deployed and the owner has picked.
 
 ### U15. Blind critic and gold set
+
+> Changed on 22-11-2026. The owner dropped the gold set: his old marks are mixed. Steps 3 to 5 and the gold scenarios below were not built. The blind critic, its one-use ticket and the hidden rank were built, and `calibration_report` counts how often the owner picked the critic's first place. The done gate of U17 has no calibration condition.
 
 - **Goal:** A fresh critic judges without history, and the studio knows whether the critic still agrees with the owner.
 - **Requirements:** R17, R18, R19, R22; AE5, AE6.
