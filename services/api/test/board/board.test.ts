@@ -188,6 +188,16 @@ describe("finals", () => {
     // The failed final is made again; the newest one is the one that counts.
     studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
     const again = await render("idea-1", "final", drafts["idea-1"]![0]);
-    expect((await check(again.value.image.id)).value.state).toBe("finished");
+    // Checked, but not yet finished: each final still needs its real-camera finish.
+    expect((await check(again.value.image.id)).value).toMatchObject({
+      state: "finals",
+      stillMissing: [`photo_finish for picture ${again.value.image.id}`, `photo_finish for picture ${third.value.image.id}`],
+    });
+    const finish = async (imageId: string) => {
+      const job = await callTool(studio, "photo_finish", { batchId, imageId });
+      return (await callTool(studio, "pixel_status", { batchId, jobId: job.value.id })).value;
+    };
+    expect((await finish(again.value.image.id)).state).toBe("finals");
+    expect((await finish(third.value.image.id)).state).toBe("finished");
   });
 });

@@ -173,14 +173,18 @@ function IdeaSection({ batchId, entry, number, onSaved }: { batchId: string; ent
 }
 
 function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string; alt: string; picked: boolean }) {
+  // A final is shown as it is delivered: after the real-camera finish.
+  const url = draft.finish?.viewUrl ?? draft.viewUrl;
   return (
     <figure>
-      <a href={draft.viewUrl} target="_blank" rel="noopener noreferrer">
-        <img src={draft.viewUrl} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
+      <a href={url} target="_blank" rel="noopener noreferrer">
+        <img src={url} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
       </a>
       <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-caption">
         <span className="font-medium">{label}</span>
         {picked ? <Badge color="green">Your pick</Badge> : null}
+        {draft.shown.id !== draft.image.id ? <Badge color="gray">Repaired</Badge> : null}
+        {draft.finish ? <Badge color="green">Finished</Badge> : null}
         {draft.checks === null ? <span className="text-muted-foreground">Not checked yet</span> : null}
       </figcaption>
       {draft.checks && draft.checks.items.length > 0 ? (

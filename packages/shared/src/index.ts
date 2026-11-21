@@ -276,6 +276,8 @@ export interface BatchImage {
   ideaId?: string;
   /** The picture this one was made from: a draft's skeleton, a final's draft. */
   fromId?: string;
+  /** The draft or the final that a repair, a finish or a food crop stands for. */
+  rootId?: string;
   createdAt: string;
 }
 
@@ -333,10 +335,37 @@ export interface Pick {
 export interface BoardDraft {
   /** 1 to 3, in the order the drafts were sent. It is a name, not a rank. */
   number: number;
+  /** The picture as the model made it. A pick names this one. */
   image: BatchImage;
+  /** The picture that counts: the newest repair of it (a reprint or a swap), or the picture itself. */
+  shown: BatchImage;
+  /** Opens `shown`. */
   viewUrl: string;
-  /** The D and F items found in it, or null when it has not been checked yet. */
+  /** The D and F items found in `shown`, or null when it has not been checked yet. */
   checks: ImageChecks | null;
+  /** A final after the real-camera finish: the picture that is delivered. */
+  finish?: { image: BatchImage; viewUrl: string };
+}
+
+export type PixelTool = "skeleton" | "reprint" | "swap" | "pack_check" | "cap_check" | "photo_finish" | "food_crop";
+
+/** One run of a pixel tool, from the moment it is sent. */
+export interface PixelJob {
+  id: string;
+  batchId: string;
+  tool: PixelTool;
+  status: "queued" | "done" | "failed";
+  /** The picture the tool worked on. */
+  imageId?: string;
+  /** What the tool said: a measure, or what it made. */
+  line?: string;
+  /** For a check: whether the picture passed. */
+  passed?: boolean;
+  /** The picture the tool made. */
+  madeId?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** What the owner sees to pick: each idea's drafts beside the product's truth sheet, with no rank. */

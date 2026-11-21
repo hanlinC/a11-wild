@@ -26,6 +26,12 @@ interface Deps {
   pictures: Pictures;
 }
 
+/** The picture that counts for a draft or a final: its newest repair (a reprint or a swap), or the picture itself. */
+export const countedOf = (image: BatchImage, all: BatchImage[]): BatchImage =>
+  all.filter((other) => (other.kind === "reprint" || other.kind === "swap") && other.rootId === image.id).at(-1) ?? image;
+/** The real-camera finish that was made from this very picture, the newest one. */
+const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
+
 /** The drafts of a batch as the owner sees them, the checks that every picture needs, and the owner's picks. */
 export class BoardService implements FinalRule {
   constructor(private readonly deps: Deps) {}
@@ -54,8 +60,22 @@ export class BoardService implements FinalRule {
       checks.all(batchId),
       picks.all(batchId),
     ]);
+    const all = await this.deps.images.list(batchId);
     const shown = (list: BatchImage[] = []): Promise<BoardDraft[]> =>
-      Promise.all(list.map(async (image, index) => ({ number: index + 1, image, viewUrl: await pictures.viewUrl(image.key), checks: found.get(image.id) ?? null })));
+      Promise.all(
+        list.map(async (image, index) => {
+          const counted = countedOf(image, all);
+          const finish = finishOf(counted, all);
+          return {
+            number: index + 1,
+            image,
+            shown: counted,
+            viewUrl: await pictures.viewUrl(counted.key),
+            checks: found.get(counted.id) ?? null,
+            ...(finish ? { finish: { image: finish, viewUrl: await pictures.viewUrl(finish.key) } } : {}),
+          };
+        }),
+      );
     return {
       batch,
       brand: { id: brand.id, name: brand.name },
@@ -85,27 +105,31 @@ export class BoardService implements FinalRule {
     const { batches, brands, checks, picks } = this.deps;
     const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
     const found = await checks.all(batch.id);
+    const all = await this.deps.images.list(batch.id);
     const missing: string[] = [];
     if (batch.state === "drafting") {
       const drafts = await this.sent(batch.id, "draft");
       for (const idea of await batches.ideas(batch.id)) {
         const mine = drafts.get(idea.id) ?? [];
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);
-        for (const image of mine) missing.push(...(await this.needs(batch.id, image, hasPack, found)));
+        for (const image of mine) missing.push(...(await this.needs(batch.id, countedOf(image, all), hasPack, found)));
       }
       if (missing.length === 0) batch = await batches.move(batch, "checked", "checks_save");
     } else if (batch.state === "finals") {
       const finals = await this.sent(batch.id, "final");
       for (const pick of (await picks.all(batch.id)).filter((made) => made.imageId)) {
         // The newest final of an idea is the one that counts: an earlier one was made again because it failed.
-        const final = finals.get(pick.ideaId)?.at(-1);
-        if (!final) {
+        const made = finals.get(pick.ideaId)?.at(-1);
+        if (!made) {
           missing.push(`a finished final of ${pick.ideaId}`);
           continue;
         }
+        // A repair of a final stands for it, and is checked again as a new picture.
+        const final = countedOf(made, all);
         missing.push(...(await this.needs(batch.id, final, hasPack, found)));
         const defect = defectOf(found.get(final.id));
         if (defect) missing.push(`a final of ${pick.ideaId} with no D item (the newest has ${defect.code})`);
+        else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
       }
       if (missing.length === 0) batch = await batches.move(batch, "finished", "checks_save");
     }
@@ -117,14 +141,16 @@ export class BoardService implements FinalRule {
     const { batches, images, checks } = this.deps;
     const batch = await batches.get(batchId);
     const image = await images.get(batchId, imageId);
-    if (image.kind !== "draft" && image.kind !== "final") throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft or a final.`);
+    if (!["draft", "final", "reprint", "swap"].includes(image.kind)) {
+      throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft, a final, or a reprint or swap of one.`);
+    }
     const saved = await checks.save(batchId, imageId, items);
     const { batch: after, missing } = await this.progress(batch);
     const defect = defectOf(saved);
     return {
       checks: saved,
       state: after.state,
-      ...(defect ? { note: `This ${image.kind} has ${defect.code}, so it cannot become a final. It stays on the board, named with its item.` } : {}),
+      ...(defect ? { note: `This picture has ${defect.code}, so it cannot become a final. It stays on the board, named with its item.` } : {}),
       ...(missing.length > 0 ? { stillMissing: missing } : {}),
     };
   }
@@ -174,7 +200,7 @@ export class BoardService implements FinalRule {
   }
 
   /** A final is made only from the draft the owner picked, and never from a draft with a D item. */
-  async allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<number> {
+  async allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<{ finals: number; source: BatchImage }> {
     const made: Pick[] = await this.deps.picks.all(batch.id);
     const pick = made.find((entry) => entry.ideaId === ideaId);
     if (pick?.imageId !== draft.id) {
@@ -186,8 +212,10 @@ export class BoardService implements FinalRule {
             : `R24: a final is made only from a draft the owner picked. He has not picked a draft of ${ideaId} yet.`,
       );
     }
-    const defect = defectOf(await this.deps.checks.get(batch.id, draft.id));
-    if (defect) throw new Refusal(`R35: this draft has ${defect.code} (${defect.note}), so it cannot become a final.`);
-    return made.filter((entry) => entry.imageId).length;
+    // A repaired draft stands for the picked one, with its own checks.
+    const source = countedOf(draft, await this.deps.images.list(batch.id));
+    const defect = defectOf(await this.deps.checks.get(batch.id, source.id));
+    if (defect) throw new Refusal(`R35: this draft has ${defect.code} (${defect.note}), so it cannot become a final. Repair it with product_swap or product_reprint and check the repair, or tell the owner.`);
+    return { finals: made.filter((entry) => entry.imageId).length, source };
   }
 }

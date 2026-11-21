@@ -7,6 +7,10 @@ export class MemoryPictures implements Pictures {
     this.files.set(key, { body, type });
   }
 
+  async read(key: string): Promise<Uint8Array | undefined> {
+    return this.files.get(key)?.body;
+  }
+
   async viewUrl(key: string): Promise<string> {
     return `https://pictures.example/${key}?signed=1`;
   }

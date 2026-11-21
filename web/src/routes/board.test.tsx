@@ -7,12 +7,10 @@ import { MEMBER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Board } from "./board";
 
 const at = "2026-11-22T03:00:00.000Z";
-const draft = (ideaId: string, number: number, items: BoardDraft["checks"] = { imageId: "", items: [], looked: true, savedAt: at }): BoardDraft => ({
-  number,
-  image: { id: `${ideaId}-d${number}`, batchId: "b1", kind: "draft", key: `batches/b1/drafts/${ideaId}-d${number}.jpg`, ideaId, createdAt: at },
-  viewUrl: `https://pictures.example/${ideaId}-d${number}.jpg`,
-  checks: items,
-});
+const draft = (ideaId: string, number: number, items: BoardDraft["checks"] = { imageId: "", items: [], looked: true, savedAt: at }): BoardDraft => {
+  const image = { id: `${ideaId}-d${number}`, batchId: "b1", kind: "draft" as const, key: `batches/b1/drafts/${ideaId}-d${number}.jpg`, ideaId, createdAt: at };
+  return { number, image, shown: image, viewUrl: `https://pictures.example/${ideaId}-d${number}.jpg`, checks: items };
+};
 const idea = (n: number) => ({
   id: `idea-${n}`,
   title: `Rock ${n}`,
@@ -97,6 +95,29 @@ describe("Pick board", () => {
     await userEvent.type(screen.getByLabelText("Why none of them, in your own words"), "too busy");
     await userEvent.click(screen.getByRole("button", { name: "Save the pass" }));
     await waitFor(() => expect(sent).toEqual([{ ideaId: "idea-1", imageId: null, ownerSaid: "too busy" }]));
+  });
+
+  it("shows a final after its real-camera finish, and says when a draft was repaired", async () => {
+    const made = draft("idea-1", 1);
+    const repair = { ...made.image, id: "swap-1", kind: "swap" as const, rootId: made.image.id };
+    const final = { ...made.image, id: "final-1", kind: "final" as const };
+    const finish = { ...made.image, id: "finish-1", kind: "finish" as const, rootId: "final-1" };
+    show(
+      board({
+        ideas: [
+          {
+            idea: idea(1),
+            drafts: [{ ...made, shown: repair, viewUrl: "https://pictures.example/swap-1.jpg" }],
+            pick: null,
+            finals: [{ number: 1, image: final, shown: final, viewUrl: "https://pictures.example/final-1.jpg", checks: null, finish: { image: finish, viewUrl: "https://pictures.example/finish-1.jpg" } }],
+          },
+        ],
+      }),
+    );
+    expect(await screen.findByAltText("Rock 1, draft 1")).toHaveAttribute("src", "https://pictures.example/swap-1.jpg");
+    expect(screen.getByText("Repaired")).toBeInTheDocument();
+    expect(screen.getByAltText("Rock 1, final 1")).toHaveAttribute("src", "https://pictures.example/finish-1.jpg");
+    expect(screen.getByText("Finished")).toBeInTheDocument();
   });
 
   it("gives a member no way to pick", async () => {

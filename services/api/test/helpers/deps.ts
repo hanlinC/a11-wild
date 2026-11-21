@@ -17,6 +17,7 @@ import { fakeNet } from "./net.js";
 import { fakeFal } from "./fal.js";
 import { fakeParallel, type ParallelCall, testKeys } from "./parallel.js";
 import { MemoryPictures } from "./pictures.js";
+import { fakePixels } from "./pixels.js";
 import { FakeCognito } from "./fake-cognito.js";
 import { MemoryTable } from "./memory-table.js";
 import { createSigner } from "./tokens.js";
@@ -61,6 +62,8 @@ export interface StudioOptions {
   parallel?: Parameters<typeof fakeParallel>[0];
   /** What fal answers. With none, every render is taken and is done at its first read. */
   fal?: Parameters<typeof fakeFal>[0];
+  /** What the pixel function answers. With none, every picture tool makes a picture and every check passes. */
+  pixels?: Parameters<typeof fakePixels>[1];
 }
 
 export async function createStudio(options: StudioOptions = {}) {
@@ -93,6 +96,7 @@ export async function createStudio(options: StudioOptions = {}) {
   const pictures = new MemoryPictures();
   const parallel = fakeParallel(options.parallel ?? ((_call: ParallelCall) => ({ status: 500 })));
   const fal = fakeFal(options.fal);
+  const pixels = fakePixels(pictures, options.pixels);
   const { tools, services } = studioTools({
     config,
     table,
@@ -102,6 +106,7 @@ export async function createStudio(options: StudioOptions = {}) {
     net: options.net ?? fakeNet({}),
     parallelFetch: parallel.fetchFn,
     falFetch: fal.fetchFn,
+    pixelRunner: pixels.runner,
   });
   const spend = { ledger: services.ledger, gate: services.gate };
   const deps: Deps = {
@@ -136,6 +141,7 @@ export async function createStudio(options: StudioOptions = {}) {
     pictures,
     parallelCalls: parallel.calls,
     fal,
+    pixels,
     tokenRequests,
     tokenEndpoint,
   };

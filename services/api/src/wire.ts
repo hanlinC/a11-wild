@@ -1,5 +1,6 @@
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
+import { LambdaClient } from "@aws-sdk/client-lambda";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SNSClient } from "@aws-sdk/client-sns";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
@@ -15,6 +16,7 @@ import { McpServer } from "./mcp/server.js";
 import { studioTools } from "./mcp/tools/index.js";
 import { SnsNotifier } from "./notify.js";
 import { type Pictures, S3Pictures } from "./pictures/store.js";
+import { LambdaPixelRunner, type PixelRunner } from "./pixels/runner.js";
 import { ParameterKeys, type ProviderKeys } from "./secrets.js";
 import { DynamoTable } from "./store/table.js";
 import { realNet } from "./urlsafety.js";
@@ -40,6 +42,7 @@ export interface WiredClients {
 export interface Wired extends WiredClients {
   keys: ProviderKeys;
   pictures: Pictures;
+  pixelRunner?: PixelRunner;
 }
 
 /** The clients and their approvals. The daily clean-up needs these only, and it has no key and no picture to read. */
@@ -59,12 +62,13 @@ export async function wire(): Promise<Wired> {
   const clients = await wireClients();
   const keys = new ParameterKeys(new SSMClient({}), env("KEYS_PREFIX"));
   const pictures = new S3Pictures(new S3Client({}), env("PICTURES_BUCKET"));
-  return { ...clients, keys, pictures };
+  const pixelFunction = process.env.PIXELS_FUNCTION;
+  return { ...clients, keys, pictures, ...(pixelFunction ? { pixelRunner: new LambdaPixelRunner(new LambdaClient({}), pixelFunction) } : {}) };
 }
 
-export function appDeps({ config, table, approvals, keys, pictures }: Wired): Deps {
+export function appDeps({ config, table, approvals, keys, pictures, pixelRunner }: Wired): Deps {
   const now = () => new Date();
-  const { tools, services } = studioTools({ config, table, now, keys, pictures, net: realNet });
+  const { tools, services } = studioTools({ config, table, now, keys, pictures, net: realNet, ...(pixelRunner ? { pixelRunner } : {}) });
   return {
     config,
     table,

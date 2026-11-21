@@ -21,8 +21,8 @@ const REFERENCE_LINK_SECONDS = 3600;
 
 /** What decides whether a draft may become a final. The picks and the checks answer it. */
 export interface FinalRule {
-  /** Refuses unless the owner picked this draft and it has no D item. Returns how many finals the batch will make. */
-  allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<number>;
+  /** Refuses unless the owner picked this draft and it has no D item. Returns how many finals the batch will make, and the picture the final is made from: the draft, or its repair. */
+  allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<{ finals: number; source: BatchImage }>;
 }
 
 export interface RenderRequest {
@@ -116,6 +116,8 @@ export class RenderService {
     const sent = all.filter((render) => render.kind === input.kind && live(render));
     const mine = sent.filter((render) => render.ideaId === idea.id);
     let from: BatchImage | undefined;
+    /** The picture the model sees in place of `from`: a picked draft's repair. */
+    let source: BatchImage | undefined;
     let count: number;
 
     if (input.kind === "draft") {
@@ -139,14 +141,16 @@ export class RenderService {
       if (!input.fromId) throw new Refusal("A final is made from the draft the owner picked. Give that draft's picture id as fromId.");
       from = await images.get(batch.id, input.fromId);
       if (from.kind !== "draft" || from.ideaId !== idea.id) throw new Refusal(`Picture ${from.id} is not a draft of idea ${idea.id}.`);
-      count = await finals.allow(batch, idea.id, from);
+      const allowed = await finals.allow(batch, idea.id, from);
+      count = allowed.finals;
+      source = allowed.source;
       if (mine.length >= FINALS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has had ${FINALS_PER_IDEA} finals. Tell the owner before more are made.`);
     }
 
     const allowed = new Set([...product.photos.map((photo) => photo.key), ...(brand.logo ? [brand.logo.key] : [])]);
     const stray = input.referenceKeys.find((key) => !allowed.has(key));
     if (stray) throw new Refusal(`${stray} is not a photo of this product or the brand's logo. A reference picture is one of those.`);
-    const keys = [...new Set([...(from ? [from.key] : []), ...input.referenceKeys])];
+    const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...input.referenceKeys])];
     if (keys.length > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
 
     batch = await this.passGate(batch, input.kind, sent);
