@@ -2,7 +2,8 @@ import type { Item, Table } from "../../src/store/table.js";
 
 /** The table contract, held in a Map. */
 export class MemoryTable implements Table {
-  private readonly items = new Map<string, Item>();
+  /** Every stored item. A test reads it to prove what was never stored. */
+  readonly items = new Map<string, Item>();
 
   private key(pk: string, sk: string): string {
     return `${pk}\u0000${sk}`;

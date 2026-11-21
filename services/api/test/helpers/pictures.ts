@@ -14,6 +14,14 @@ export class MemoryPictures implements Pictures {
   async viewUrl(key: string): Promise<string> {
     return `https://pictures.example/${key}?signed=1`;
   }
+
+  async putUrl(key: string, type: string, bytes: number): Promise<string> {
+    return `https://pictures.example/${key}?put=1&type=${encodeURIComponent(type)}&bytes=${bytes}`;
+  }
+
+  async downloadUrl(key: string, name: string): Promise<string> {
+    return `https://pictures.example/${key}?download=${encodeURIComponent(name)}`;
+  }
 }
 
 export const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);

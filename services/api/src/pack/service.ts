@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { Batch, Pack, PackAd, PackSummary, PackVersion, PackView } from "@a11-wild/shared";
+import { type Batch, type Pack, type PackAd, type PackSummary, type PackUpload, type PackVersion, type PackView, UPLOAD_MAX_BYTES, UPLOAD_MAX_FILES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
 import type { BoardService } from "../board/service.js";
 import type { BrandStore } from "../brand/store.js";
@@ -10,6 +10,7 @@ import { metaFaults } from "../meta/checks.js";
 import { adName } from "../meta/names.js";
 import type { MetaStore } from "../meta/store.js";
 import type { Pictures } from "../pictures/store.js";
+import type { ResultStore } from "../results/store.js";
 import type { PackStore } from "./store.js";
 
 /** How long a picture link of a pack page works. The page asks again when it is opened again. */
@@ -26,6 +27,7 @@ interface Deps {
   copy: CopyStore;
   meta: MetaStore;
   packs: PackStore;
+  results: ResultStore;
   pictures: Pictures;
   publicOrigin: string;
   now: () => Date;
@@ -158,18 +160,39 @@ export class PackService {
     };
   }
 
+  /**
+   * Takes the word of a client that a results file is coming, and returns the one link that file can be sent to.
+   * Undefined when no pack has this token. The file goes to a folder apart from the studio's pictures.
+   */
+  async upload(token: string, file: { name: string; type: string; bytes: number }): Promise<{ upload: Pick<PackUpload, "id" | "name">; putUrl: string } | undefined> {
+    const { packs, results, pictures } = this.deps;
+    if (!TOKEN.test(token)) return undefined;
+    const pack = await packs.byHash(hashToken(token));
+    if (!pack) return undefined;
+    if (!Object.hasOwn(UPLOAD_TYPES, file.type)) throw new Refusal("Send a JPEG or PNG screenshot, or a CSV or XLSX export.");
+    if (!Number.isInteger(file.bytes) || file.bytes < 1 || file.bytes > UPLOAD_MAX_BYTES) throw new Refusal("A file can be up to 10 MB.");
+    const type = file.type as UploadType;
+    // The name is shown to the owner: letters, digits and a few marks only, so it cannot carry a path or a script.
+    const name = (file.name.split(/[\\/]/).at(-1) ?? "").replace(/[^\p{L}\p{N} ._()-]+/gu, "_").replace(/^\.+/, "").slice(0, 120) || "file";
+    const upload = await results.addUpload(pack.batchId, { name, type, bytes: file.bytes, packVersion: pack.current }, (id) => `quarantine/packs/${pack.batchId}/${id}.${UPLOAD_TYPES[type]}`);
+    if (!upload) throw new Refusal(`This link has taken ${UPLOAD_MAX_FILES} files, which is the most it takes. Send the rest to your contact at the studio.`);
+    return { upload: { id: upload.id, name: upload.name }, putUrl: await pictures.putUrl(upload.key, type, file.bytes) };
+  }
+
   /** Every pack as the dashboard lists it, newest first. No link: the studio does not keep it. */
   async summaries(): Promise<PackSummary[]> {
-    const { packs, batches, brands, pictures } = this.deps;
+    const { packs, batches, brands, pictures, results } = this.deps;
     const list = await Promise.all(
       (await packs.all()).map(async ({ tokenHash: _tokenHash, ...pack }): Promise<PackSummary> => {
         const batch = await batches.get(pack.batchId);
-        const [brand, product, versions] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId), packs.versions(pack.batchId)]);
+        const [brand, product, versions, uploads, typed] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId), packs.versions(pack.batchId), results.uploads(pack.batchId), results.results(pack.batchId)]);
         return {
           pack,
           brand: { id: brand.id, name: brand.name },
           product: { id: product.id, name: product.name },
           versions: await Promise.all(versions.map(async (version) => ({ ...version, ads: await Promise.all(version.ads.map(async (ad) => ({ ...ad, viewUrl: await pictures.viewUrl(ad.key) }))) }))),
+          uploads: await Promise.all(uploads.map(async (upload) => ({ ...upload, downloadUrl: await pictures.downloadUrl(upload.key, upload.name) }))),
+          results: typed,
         };
       }),
     );

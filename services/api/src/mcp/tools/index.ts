@@ -22,6 +22,7 @@ import type { Pictures } from "../../pictures/store.js";
 import type { PixelRunner } from "../../pixels/runner.js";
 import { PixelService } from "../../pixels/service.js";
 import { JobStore } from "../../pixels/store.js";
+import { ResultStore } from "../../results/store.js";
 import { RenderService } from "../../render/service.js";
 import { RenderStore } from "../../render/store.js";
 import type { ProviderKeys } from "../../secrets.js";
@@ -47,6 +48,7 @@ import { metaTools } from "./meta.js";
 import { packTools } from "./pack.js";
 import { pixelTools } from "./pixels.js";
 import { renderTools } from "./render.js";
+import { resultTools } from "./results.js";
 import { spendTools } from "./spend.js";
 import { tasteTools } from "./taste.js";
 
@@ -98,8 +100,9 @@ export function studioTools(parts: StudioParts) {
   const jobs = new JobStore(table, now);
   const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, copy, runner: parts.pixelRunner, now });
   const packs = new PackStore(table);
-  const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, pictures, publicOrigin: config.publicOrigin, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done, copy, meta, packs, pack };
+  const results = new ResultStore(table, now);
+  const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done, copy, meta, packs, pack, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -111,6 +114,7 @@ export function studioTools(parts: StudioParts) {
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),
+    ...resultTools({ batches, packs, results, pictures }),
     ...criticTools({ critic, calibration }),
     ...renderTools({ render }),
     ...pixelTools({ pixels }),

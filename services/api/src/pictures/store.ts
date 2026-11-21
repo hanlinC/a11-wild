@@ -6,6 +6,7 @@ import { type Net, publicFetch, readCapped } from "../urlsafety.js";
 
 export const MAX_PICTURE_BYTES = 8_000_000;
 const VIEW_SECONDS = 600;
+const UPLOAD_SECONDS = 300;
 
 /** The picture types the studio keeps, told by the file's first bytes and not by what the sender says. */
 const TYPES: { type: string; ext: string; is: (b: Uint8Array) => boolean }[] = [
@@ -36,6 +37,10 @@ export interface Pictures {
   read(key: string, maxBytes: number): Promise<Uint8Array | undefined>;
   /** A link that opens the picture for a few minutes, or for `seconds`. */
   viewUrl(key: string, seconds?: number): Promise<string>;
+  /** A link that takes one file of exactly this type and size into `key`, for a few minutes. */
+  putUrl(key: string, type: string, bytes: number): Promise<string>;
+  /** A link that downloads a file under `name` and never shows it in the page. */
+  downloadUrl(key: string, name: string): Promise<string>;
 }
 
 export class S3Pictures implements Pictures {
@@ -61,6 +66,16 @@ export class S3Pictures implements Pictures {
 
   viewUrl(key: string, seconds = VIEW_SECONDS): Promise<string> {
     return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: seconds });
+  }
+
+  putUrl(key: string, type: string, bytes: number): Promise<string> {
+    // The type and the length are signed: S3 refuses a file of another type or size.
+    return getSignedUrl(this.s3, new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: type, ContentLength: bytes }), { expiresIn: UPLOAD_SECONDS, signableHeaders: new Set(["content-type", "content-length"]) });
+  }
+
+  downloadUrl(key: string, name: string): Promise<string> {
+    const safe = name.replace(/[^A-Za-z0-9._-]+/g, "_");
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key, ResponseContentDisposition: `attachment; filename="${safe}"`, ResponseContentType: "application/octet-stream" }), { expiresIn: VIEW_SECONDS });
   }
 }
 

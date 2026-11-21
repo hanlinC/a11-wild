@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RULES_VERSION } from "../../src/houserules.js";
 import { idea, rankDrafts, readTaste, sheet } from "../helpers/batch.js";
-import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
+import { approvedClient, callTool, createStudio, json, type Studio } from "../helpers/deps.js";
 import { fakeNet } from "../helpers/net.js";
 import { PNG } from "../helpers/pictures.js";
 
@@ -138,7 +138,7 @@ describe("a v2 batch: finals", () => {
     expect(pack.version.ads.map((ad: { imageId: string }) => ad.imageId).sort()).toEqual(board.ideas.map((entry: { finals: { words: { image: { id: string } } }[] }) => entry.finals[0]!.words.image.id).sort());
     const page = await studio.app.request(new URL(pack.link).pathname.replace("/c/", "/api/pack/"));
     expect(page.status).toBe(200);
-    expect((await page.json()).ads).toHaveLength(3);
+    expect((await json(page)).ads).toHaveLength(3);
   });
 });
 

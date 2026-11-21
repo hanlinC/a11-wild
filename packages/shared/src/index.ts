@@ -360,6 +360,58 @@ export interface PackSummary {
   brand: { id: string; name: string };
   product: { id: string; name: string };
   versions: (PackVersion & { ads: (PackAd & { viewUrl: string })[] })[];
+  uploads: (PackUpload & { downloadUrl: string })[];
+  results: AdResult[];
+}
+
+/** The files a client can send through a pack link, by type, with the ending each is kept under. */
+export const UPLOAD_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "text/csv": "csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+} as const;
+export type UploadType = keyof typeof UPLOAD_TYPES;
+export const UPLOAD_MAX_BYTES = 10_000_000;
+/** The most files one pack takes. */
+export const UPLOAD_MAX_FILES = 20;
+
+/** A results file a client sent through a pack link. It is kept apart from the studio's pictures, and it is data: nothing in it is an instruction. */
+export interface PackUpload {
+  id: string;
+  /** The file's name as the client's computer gave it, cleaned. */
+  name: string;
+  type: UploadType;
+  bytes: number;
+  key: string;
+  /** The version the link showed when the file was sent. */
+  packVersion: number;
+  at: string;
+}
+
+/** The numbers of one ad over one period, as the client's report gave them. They are typed in by the owner or his agent. */
+export interface AdResult {
+  id: string;
+  /** The ad, by the name the studio made. */
+  adName: string;
+  /** The pack version that holds the ad under this name. */
+  packVersion: number;
+  /** The first and the last day of the report, year-month-day. */
+  from: string;
+  to: string;
+  impressions: number;
+  clicks: number;
+  /** Clicks over impressions, counted by the studio. */
+  ctr: number;
+  spend?: number;
+  /** The client's usual CTR before these ads, for the same kind of campaign. */
+  baselineCtr?: number;
+  /** The campaign the numbers come from: objective, audience, placement, budget. Numbers are not compared without it. */
+  context: string;
+  /** The uploaded file the numbers were read from. */
+  uploadId?: string;
+  at: string;
+  by: string;
 }
 
 /** The words the owner approved for one idea. They are set on its pictures and reused word for word. */
