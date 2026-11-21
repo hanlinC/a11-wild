@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
-import { concept, reviewConcepts, roughOf, rules, v3AtConcepts } from "../helpers/v3.js";
+import { concept, review, reviewConcepts, roughOf, rules, v3AtConcepts } from "../helpers/v3.js";
 
 let studio: Studio;
 let batchId: string;
@@ -87,6 +87,28 @@ describe("the owner's pick of three concepts", () => {
     expect(await callTool(studio, "copy_approve", { ...rules, batchId, ideas: words })).toMatchObject({ ok: true, value: { state: "worded" } });
     expect(await pick()).toMatchObject({ ok: false });
     expect((await batch()).ideas.map((idea: { id: string }) => idea.id)).toEqual(["idea-2", "idea-4", "idea-6"]);
+  });
+
+  it("warns of a recommended concept with a low score", async () => {
+    await roughOf(studio, batchId, "idea-2");
+    const packet = await callTool(studio, "critic_open", { batchId, step: "concepts", freshHelper: true });
+    const reviews = packet.value.concepts.map((entry: { id: string }) =>
+      review(entry.id, entry.id === "idea-2" ? { recommend: true, scores: { ...review("x").scores, headline: 2, commercial: 3 } } : {}),
+    );
+    expect(await callTool(studio, "concept_review_save", { ...rules, batchId, ticket: packet.value.ticket, reviews })).toMatchObject({ ok: true });
+    const saved = await pick();
+    expect(saved.ok).toBe(true);
+    expect(saved.value.warnings).toEqual(expect.arrayContaining([expect.stringMatching(/The critic scored idea-2 under 4 of 5 for headline, commercial\./)]));
+  });
+
+  it("makes no draft of a concept before its direction", async () => {
+    await reviewed();
+    await pick();
+    const words = (await batch()).ideas.map((idea: { id: string; headline: string; subline: string }) => ({ ideaId: idea.id, headline: idea.headline, subline: idea.subline, ownerSaid: "yes" }));
+    expect(await callTool(studio, "copy_approve", { ...rules, batchId, ideas: words })).toMatchObject({ ok: true, value: { state: "worded" } });
+    const draft = await callTool(studio, "render_submit", { ...rules, batchId, ideaId: "idea-2", kind: "draft", prompt: "One empty pouch lies flat on a yellow seamless, one hard shadow to its right.", references: ["pack-1"] });
+    expect(draft).toMatchObject({ ok: false, error: expect.stringMatching(/the batch is at "worded".*direction/) });
+    expect((await batch()).batch.state).toBe("worded");
   });
 
   it("teaches the studio nothing in a test batch", async () => {

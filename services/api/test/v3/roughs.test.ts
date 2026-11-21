@@ -74,6 +74,13 @@ describe("a rough of a concept", () => {
     expect(counts).toMatchObject({ count: 0 });
   });
 
+  it("is refused when a real photo the concept shows is not sent to the model", async () => {
+    const none = await send("idea-1", { references: [] });
+    expect(none).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: concept idea-1 shows pack-1\. Give the real photo/) });
+    const logo = await send("idea-1", { references: ["logo"] });
+    expect(logo).toMatchObject({ ok: false, error: expect.stringMatching(/shows pack-1/) });
+  });
+
   it("is refused for a concept that shows an item with no real photo, and takes no skeleton", async () => {
     const { batchId: other } = await (async () => {
       const made = await v3AtTruth(studio);

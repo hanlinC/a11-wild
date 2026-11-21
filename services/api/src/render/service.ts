@@ -20,8 +20,8 @@ export const REFERENCES_MAX = 4;
 export const ROUGHS_PER_CONCEPT = 2;
 export const ROUGHS_PER_BATCH = 8;
 
-/** The state from which a batch's drafts can be made: its ideas are judged, and its words are approved when it has words. */
-const draftsFrom = (batch: Batch) => (hasWords(batch.kind) ? "worded" : "judged");
+/** The state from which a batch's drafts can be made: its ideas are judged, its words are approved when it has words, and a concept has its direction. */
+const draftsFrom = (batch: Batch) => (batch.kind === "v3" ? "directed" : hasWords(batch.kind) ? "worded" : "judged");
 
 /** The real photo that a name stands for: "pack-1" is the product's first pack photo. */
 export function photoNamed(product: { photos: { kind: string; key: string }[] }, name: string) {
@@ -147,11 +147,16 @@ export class RenderService {
       if (!["ideas", "reviewed"].includes(batch.state)) requireMove(batch, "ideas", "render_submit");
       if (input.fromId) throw new Refusal("A rough has no skeleton: the model draws it from the product's real photos. Give them in references.");
       realPhotos();
+      // The model draws from what it is given: a real photo that is saved and not sent does nothing.
+      const unsent = (idea.shows ?? []).filter((name) => !input.references.includes(name));
+      if (unsent.length > 0) {
+        throw new Refusal(`Real photos first: concept ${idea.id} shows ${unsent.join(", ")}. Give the real photo of each one in references, so that the model draws from it and not from its own guess.`);
+      }
       count = ROUGHS_PER_BATCH;
     } else if (input.kind === "draft") {
       if (![draftsFrom(batch), "priced", "waiting_spend", "drafting"].includes(batch.state)) {
         // An ad with words waits for the owner's yes to them: no draft is paid for before it.
-        if (batch.state === "judged") throw new StateError(`render_submit cannot run yet: the batch is at "judged". The step that is missing: ${stepAfter(batch)}.`);
+        if (batch.state === "judged" || (batch.kind === "v3" && batch.state === "worded")) throw new StateError(`render_submit cannot run yet: the batch is at "${batch.state}". The step that is missing: ${stepAfter(batch)}.`);
         requireMove(batch, "drafting", "render_submit");
       }
       realPhotos();
