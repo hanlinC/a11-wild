@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.4";
+export const RULES_VERSION = "2026-11-22.5";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -144,6 +144,11 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     roles: THINKERS,
     kinds: WORDS,
     text: "Only facts from the saved facts, each named in the idea's claims. No health claim. A claim from a study keeps a small footnote with its source on the picture. Price math is true and useful.",
+  },
+  {
+    id: "meta-text",
+    roles: THINKERS,
+    text: "Each picked ad gets Meta text in two variants (meta_save): primary text, headline, description and a button from the fixed list. The primary text opens with the picture's own line, so picture and text read as one ad, in full warm sentences, and ends with an order line (\"Order yours today.\"): no fragment list. One idea in each ad, never a spec sheet. A number is a word in the buyer's voice (\"ten flavours\"); a digit only where the number is the idea, and only when a saved fact holds it. The headline is short and plain, not a second slogan. The description supports the button and carries no proof. Only the owner approves the text (meta_approve). Text he approved is reused word for word in every later pack; write new text only when he asks, and show it next to the approved text.",
   },
   {
     id: "type",
