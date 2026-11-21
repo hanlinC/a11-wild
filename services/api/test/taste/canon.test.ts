@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { CanonStore } from "../../src/taste/canon.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
+import { MemoryTable } from "../helpers/memory-table.js";
+
+/** A table whose second raise of the canon's count fails, as when a save stops between its two writes. */
+class StopsAfterVersion extends MemoryTable {
+  private raises = 0;
+  override async add(...args: Parameters<MemoryTable["add"]>) {
+    if (args[1] === "COUNT" && ++this.raises === 2) throw new Error("stopped");
+    return super.add(...args);
+  }
+}
 
 let studio: Studio;
 beforeEach(async () => {
@@ -37,6 +48,15 @@ describe("taste canon", () => {
     expect(saved.map((version) => version.version).sort()).toEqual([1, 2, 3]);
     expect((await canon.get()).version).toBe(3);
     expect((await canon.versions()).map((version) => version.reason).sort()).toEqual(["Save a.", "Save b.", "Save c."]);
+  });
+
+  it("reads the newest version when a save stopped before the count was raised", async () => {
+    const canon = new CanonStore(new StopsAfterVersion(), () => new Date("2026-11-22T03:00:00Z"));
+    await canon.save({ text: "First.", reason: "Start.", by: "o" });
+    await expect(canon.save({ text: "Second.", reason: "Change.", by: "o" })).rejects.toThrow("stopped");
+    expect(await canon.get()).toMatchObject({ version: 2, text: "Second." });
+    expect(await canon.save({ text: "Third.", reason: "Change again.", by: "o" })).toMatchObject({ version: 3 });
+    expect(await canon.get()).toMatchObject({ version: 3, text: "Third." });
   });
 
   it("lets only the owner change the canon", async () => {

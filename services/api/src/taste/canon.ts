@@ -18,7 +18,10 @@ export class CanonStore {
 
   private async latest(): Promise<number> {
     const counter = await this.table.get(PK, "COUNT");
-    return typeof counter?.count === "number" ? counter.count : 0;
+    let version = typeof counter?.count === "number" ? counter.count : 0;
+    // The count is raised after the version is written. A save that stopped between the two left it behind, so read past it.
+    while (await this.table.get(PK, versionKey(version + 1))) version += 1;
+    return version;
   }
 
   /** The current canon. Version 0 with no text means the owner has not written one yet. */
