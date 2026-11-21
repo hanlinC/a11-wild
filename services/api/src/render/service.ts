@@ -9,7 +9,7 @@ import { Refusal } from "../mcp/registry.js";
 import type { Pictures } from "../pictures/store.js";
 import { GateError, type GateStage, type SpendGate } from "../spend/gate.js";
 import { NotBilledError, type SpendLedger } from "../spend/ledger.js";
-import { toUsd } from "../spend/money.js";
+import { toMicro, toUsd } from "../spend/money.js";
 import { RENDER_RULES, wordsAsked } from "./prompt-guard.js";
 import { publicRender, type RenderStore, type StoredRender } from "./store.js";
 
@@ -98,7 +98,7 @@ export class RenderService {
    * The owner's rule R26 for one stage. The first render of a stage goes alone and gives the price;
    * the rest wait for that price, and for the owner's yes when the stage comes to US$1 or more.
    */
-  private async passGate(batch: Batch, kind: RenderKind, sent: StoredRender[]): Promise<Batch> {
+  private async passGate(batch: Batch, kind: RenderKind, sent: StoredRender[], usd: number): Promise<Batch> {
     const { gate, batches } = this.deps;
     const stage = STAGE[kind];
     if (!(await gate.peek(batch.id, stage))) {
@@ -112,7 +112,7 @@ export class RenderService {
     }
     if (kind === "draft" && batch.state === draftsFrom(batch)) batch = await batches.move(batch, "priced", "render_submit");
     try {
-      await gate.check(batch.id, stage, sent.length);
+      await gate.check(batch.id, stage, { sent: sent.length, usedMicro: sent.reduce((sum, render) => sum + render.reservation.micro, 0), micro: toMicro(usd) });
     } catch (error) {
       if (error instanceof GateError && batch.state === "priced") await batches.move(batch, "waiting_spend", "render_submit");
       throw error;
@@ -242,12 +242,11 @@ export class RenderService {
       if (full === "concept") throw new Refusal(`Concept ${idea.id} has its ${ROUGHS_PER_CONCEPT} roughs. A rough is a first look, not a draft: show what there is.`);
       if (full === "batch") throw new Refusal(`This batch has its ${ROUGHS_PER_BATCH} roughs. A rough is a first look: the critic and the owner judge the concepts from what there is.`);
     }
-    let usd: number;
+    const usd = estimateUsd(input.kind, keys.length);
     let reservation;
     let job;
     try {
-      batch = await this.passGate(batch, input.kind, sent);
-      usd = estimateUsd(input.kind, keys.length);
+      batch = await this.passGate(batch, input.kind, sent, usd);
       reservation = await ledger.reserve({ service: "fal", kind: input.kind, ref: `${idea.id}: ${idea.title}`, batchId: batch.id, usd });
     } catch (error) {
       if (input.kind === "rough") await renders.releaseRough(batch.id, idea.id);

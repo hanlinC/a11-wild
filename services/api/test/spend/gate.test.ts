@@ -51,12 +51,24 @@ describe("spend gate", () => {
   it("counts a render past the estimate, and asks when that takes the stage to US$1", async () => {
     await gate.price("batch-1", "drafts", { firstUsd: 0.1, count: 9 });
     // The ninth is inside the estimate; a redo after nine is one more, and ten make US$1.
-    expect((await gate.check("batch-1", "drafts", 8)).count).toBe(9);
-    await expect(gate.check("batch-1", "drafts", 9)).rejects.toThrow(/10 drafts at about US\$1\.00/);
+    const after = (sent: number, micro = 100_000) => ({ sent, usedMicro: sent * 100_000, micro });
+    expect((await gate.check("batch-1", "drafts", after(8))).count).toBe(9);
+    await expect(gate.check("batch-1", "drafts", after(9))).rejects.toThrow(/10 drafts at about US\$1\.00/);
     await gate.approve("batch-1", "drafts", owner);
-    expect((await gate.check("batch-1", "drafts", 9)).approvedBy).toBe("owner@example.com");
+    expect((await gate.check("batch-1", "drafts", after(9))).approvedBy).toBe("owner@example.com");
     // The yes covers ten. The three drafts of a lowered direction are a new question.
-    await expect(gate.check("batch-1", "drafts", 10)).rejects.toThrow(/11 drafts/);
+    await expect(gate.check("batch-1", "drafts", after(10))).rejects.toThrow(/11 drafts/);
+  });
+
+  it("counts a dearer item than the first, and asks when that takes the stage to US$1", async () => {
+    // Nine finals priced from a first one with one reference picture.
+    await gate.price("batch-1", "finals", { firstUsd: 0.1, count: 9 });
+    expect((await gate.check("batch-1", "finals", { sent: 1, usedMicro: 100_000, micro: 100_000 })).estimateUsd).toBeCloseTo(0.9);
+    // The third takes four pictures: 0.2 + 0.13 + six more at 0.1 is US$0.93, and the fourth takes it over.
+    expect((await gate.check("batch-1", "finals", { sent: 2, usedMicro: 200_000, micro: 130_000 })).estimateUsd).toBeCloseTo(0.93);
+    await expect(gate.check("batch-1", "finals", { sent: 3, usedMicro: 330_000, micro: 190_000 })).rejects.toThrow(/9 finals at about US\$1\.0[0-9]/);
+    await gate.approve("batch-1", "finals", owner);
+    expect((await gate.check("batch-1", "finals", { sent: 3, usedMicro: 330_000, micro: 190_000 })).approvedBy).toBe("owner@example.com");
   });
 
   it("holds the gate for finals apart from the gate for drafts", async () => {

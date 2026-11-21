@@ -14,6 +14,8 @@ export class GateError extends Refusal {}
 interface GateItem extends Item {
   count: number;
   estimateMicro: number;
+  /** The price of the first item, which the estimate counts for each one not yet sent. */
+  eachMicro?: number;
   approvedMicro?: number;
   approvedBy?: string;
   approvedAt?: string;
@@ -54,7 +56,7 @@ export class SpendGate {
   async price(batchId: string, stage: GateStage, first: { firstUsd: number; count: number }): Promise<GateState> {
     const [pk, sk] = key(batchId, stage);
     const earlier = await this.table.get<GateItem>(pk, sk);
-    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * first.count) };
+    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * first.count), eachMicro: toMicro(first.firstUsd) };
     await this.table.put(item);
     return this.view(item);
   }
@@ -108,17 +110,26 @@ export class SpendGate {
 
   /**
    * Passes when the next item of the stage may be sent. Throws a GateError that says what is missing.
-   * `sent` is how many the stage has sent: one more than the estimate counted (a redo, the drafts of a
-   * lowered direction) makes the estimate larger, and a larger estimate is a new question for the owner.
+   * `next` is the item about to be sent, with how many the stage has sent and what they came to. The
+   * estimate was the first one's price for each. One more item than it counted (a redo, the drafts of a
+   * lowered direction) or a dearer item (more reference pictures) makes the stage come to more, and a
+   * larger estimate is a new question for the owner.
    */
-  async check(batchId: string, stage: GateStage, sent = 0): Promise<GateState> {
+  async check(batchId: string, stage: GateStage, next?: { sent: number; usedMicro: number; micro: number }): Promise<GateState> {
     let item = await this.table.get<GateItem>(...key(batchId, stage));
     if (!item) {
       throw new GateError(`Send the first of the ${stage} alone, to read the real price. The rest wait for that price.`);
     }
-    if (item.count > 0 && sent >= item.count) {
-      item = { ...item, count: sent + 1, estimateMicro: Math.round((item.estimateMicro / item.count) * (sent + 1)) };
-      await this.table.put(item);
+    if (next && item.count > 0) {
+      const count = Math.max(item.count, next.sent + 1);
+      const rest = (count - next.sent - 1) * (item.eachMicro ?? item.estimateMicro / item.count);
+      const projected = Math.round(next.usedMicro + next.micro + rest);
+      // A micro-dollar of rounding for each item is not a larger estimate.
+      const larger = projected - item.estimateMicro > count;
+      if (count > item.count || larger) {
+        item = { ...item, count, estimateMicro: larger ? projected : item.estimateMicro };
+        await this.table.put(item);
+      }
     }
     const state = this.view(item);
     if (state.needsYes && !state.approvedBy) {
