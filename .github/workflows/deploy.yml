@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   deploy:
-    # Skipped until the owner sets the two repository variables (docs/deploy.md).
-    if: vars.AWS_DEPLOY_ROLE_ARN != '' && vars.AWS_REGION != ''
+    # Skipped until the owner sets the Region variable and the role secret (docs/deploy.md).
+    if: vars.AWS_REGION != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -34,11 +34,20 @@ jobs:
       - run: npm run check
       - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
         with:
-          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          # A secret, so the account number in it is masked: this log is public.
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: a11-wild-deploy
+          mask-aws-account-id: true
       - name: Deploy the studio
         working-directory: infra
-        run: npx cdk deploy A11WildStudio --require-approval never --outputs-file ../cdk-outputs.json
+        # The live address and the pool id stay out of the public log.
+        run: |
+          set -o pipefail
+          npx cdk deploy A11WildStudio --require-approval never --outputs-file ../cdk-outputs.json 2>&1 \
+            | sed -E 's#[a-z0-9]+\.cloudfront\.net#<address>#g; s#[a-z]{2}-[a-z]+-[0-9]_[A-Za-z0-9]+#<pool>#g'
       - name: Probe the live studio
-        run: npm run probe -- "$(node -p "require('./cdk-outputs.json').A11WildStudio.PublicOrigin")"
+        run: |
+          origin="$(node -p "require('./cdk-outputs.json').A11WildStudio.PublicOrigin")"
+          echo "::add-mask::${origin#https://}"
+          node scripts/probe.mjs "$origin"

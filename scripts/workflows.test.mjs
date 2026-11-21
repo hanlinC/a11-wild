@@ -30,6 +30,16 @@ describe("GitHub workflows", () => {
   it("deploy only from main, with no stored AWS key", () => {
     const text = readFileSync(path.join(DIR, "deploy.yml"), "utf8");
     expect(text).toMatch(/on:\n {2}push:\n {4}branches: \[main\]\n/);
-    expect(text).not.toMatch(/aws-access-key-id|aws-secret-access-key|secrets\./);
+    expect(text).not.toMatch(/aws-access-key-id|aws-secret-access-key/);
+    // The only secret is the role's name, kept secret for the account number in it.
+    expect([...text.matchAll(/secrets\.(\w+)/g)].map((match) => match[1])).toEqual(["AWS_DEPLOY_ROLE_ARN"]);
+  });
+
+  it("keep the account number, the live address and the pool id out of the public deploy log", () => {
+    const text = readFileSync(path.join(DIR, "deploy.yml"), "utf8");
+    expect(text).toMatch(/mask-aws-account-id: true/);
+    expect(text).not.toMatch(/vars\.AWS_DEPLOY_ROLE_ARN/);
+    expect(text).toMatch(/cdk deploy[^\n]*2>&1 \\\n\s+\| sed -E/);
+    expect(text).toMatch(/::add-mask::/);
   });
 });

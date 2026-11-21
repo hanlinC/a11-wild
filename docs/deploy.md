@@ -20,11 +20,11 @@ Run these once, signed in to AWS with the owner's browser sign-in (`aws login`),
    `aws ssm put-parameter --name /a11-wild/alert-email --type String --value <address>`
 3. **First deploy.** `npm run build && cd infra && npx cdk deploy A11WildStudio A11WildGithubDeploy`.
 4. **Invite the owner.** `npm run user:invite -- <address> owner`. The user pool emails a temporary password. The owner sets their own at first sign-in.
-5. **Let GitHub deploy.** In the repository settings, under Secrets and variables, Actions, Variables, add:
-   - `AWS_DEPLOY_ROLE_ARN`: the `DeployRoleArn` output of `A11WildGithubDeploy`.
-   - `AWS_REGION`: the Region.
+5. **Let GitHub deploy.** In the repository settings, under Secrets and variables, Actions, add:
+   - Secret `AWS_DEPLOY_ROLE_ARN`: the `DeployRoleArn` output of `A11WildGithubDeploy`.
+   - Variable `AWS_REGION`: the Region.
 
-   They are variables, not secrets: neither one grants access. The role trusts only the `main` branch of this repository. Until both are set, the deploy job is skipped.
+   The role grants nothing by itself: it trusts only the `main` branch of this repository. It is a secret because it holds the account number, and the workflow log of a public repository is public. The workflow also masks the account number, the live address and the pool id in its log. Until the variable is set, the deploy job is skipped.
 
 ## Each deploy
 
