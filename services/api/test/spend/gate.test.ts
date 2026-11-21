@@ -61,14 +61,24 @@ describe("spend gate", () => {
   });
 
   it("counts a dearer item than the first, and asks when that takes the stage to US$1", async () => {
-    // Nine finals priced from a first one with one reference picture.
-    await gate.price("batch-1", "finals", { firstUsd: 0.1, count: 9 });
-    expect((await gate.check("batch-1", "finals", { sent: 1, usedMicro: 100_000, micro: 100_000 })).estimateUsd).toBeCloseTo(0.9);
-    // The third takes four pictures: 0.2 + 0.13 + six more at 0.1 is US$0.93, and the fourth takes it over.
-    expect((await gate.check("batch-1", "finals", { sent: 2, usedMicro: 200_000, micro: 130_000 })).estimateUsd).toBeCloseTo(0.93);
-    await expect(gate.check("batch-1", "finals", { sent: 3, usedMicro: 330_000, micro: 190_000 })).rejects.toThrow(/9 finals at about US\$1\.0[0-9]/);
+    // Twelve finals priced from a first one with one reference picture (US$0.073). One with five costs US$0.113.
+    await gate.price("batch-1", "finals", { firstUsd: 0.073, count: 12 });
+    const next = (dear: number, micro: number) => ({ sent: 1 + dear, usedMicro: 73_000 + dear * 113_000, micro });
+    expect((await gate.check("batch-1", "finals", next(0, 73_000))).estimateUsd).toBeCloseTo(0.876);
+    for (const dear of [0, 1, 2]) expect((await gate.check("batch-1", "finals", next(dear, 113_000))).needsYes).toBe(false);
+    // The fourth dear one takes the twelve to US$1.036.
+    await expect(gate.check("batch-1", "finals", next(3, 113_000))).rejects.toThrow(/12 finals at about US\$1\.036/);
+    // It was not sent. A final with one picture in its place keeps the stage under US$1, and needs no yes.
+    expect(await gate.check("batch-1", "finals", next(3, 73_000))).toMatchObject({ needsYes: false, count: 12 });
+    await expect(gate.check("batch-1", "finals", next(3, 113_000))).rejects.toThrow(/US\$1\.036/);
     await gate.approve("batch-1", "finals", owner);
-    expect((await gate.check("batch-1", "finals", { sent: 3, usedMicro: 330_000, micro: 190_000 })).approvedBy).toBe("owner@example.com");
+    expect((await gate.check("batch-1", "finals", next(3, 113_000))).approvedBy).toBe("owner@example.com");
+  });
+
+  it("counts a failed item that was charged", async () => {
+    await gate.price("batch-1", "drafts", { firstUsd: 0.1, count: 9 });
+    // Eight stand, and one more failed after fal charged for it: the ninth takes the stage to US$1.
+    await expect(gate.check("batch-1", "drafts", { sent: 8, usedMicro: 900_000, micro: 100_000 })).rejects.toThrow(/9 drafts at about US\$1\.00/);
   });
 
   it("holds the gate for finals apart from the gate for drafts", async () => {

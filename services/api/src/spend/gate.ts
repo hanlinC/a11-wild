@@ -110,10 +110,11 @@ export class SpendGate {
 
   /**
    * Passes when the next item of the stage may be sent. Throws a GateError that says what is missing.
-   * `next` is the item about to be sent, with how many the stage has sent and what they came to. The
-   * estimate was the first one's price for each. One more item than it counted (a redo, the drafts of a
-   * lowered direction) or a dearer item (more reference pictures) makes the stage come to more, and a
-   * larger estimate is a new question for the owner.
+   * `next` is the item about to be sent, with how many the stage has sent and what the stage came to
+   * so far. The estimate is then what it came to, this item, and the first one's price for each of the
+   * rest. One more item than it counted (a redo, the drafts of a lowered direction), a dearer item (more
+   * reference pictures) or a failed one that was charged makes it larger, and a larger estimate is a new
+   * question for the owner. An item that was refused and never sent leaves nothing behind in it.
    */
   async check(batchId: string, stage: GateStage, next?: { sent: number; usedMicro: number; micro: number }): Promise<GateState> {
     let item = await this.table.get<GateItem>(...key(batchId, stage));
@@ -124,10 +125,10 @@ export class SpendGate {
       const count = Math.max(item.count, next.sent + 1);
       const rest = (count - next.sent - 1) * (item.eachMicro ?? item.estimateMicro / item.count);
       const projected = Math.round(next.usedMicro + next.micro + rest);
-      // A micro-dollar of rounding for each item is not a larger estimate.
-      const larger = projected - item.estimateMicro > count;
-      if (count > item.count || larger) {
-        item = { ...item, count, estimateMicro: larger ? projected : item.estimateMicro };
+      // A micro-dollar of rounding for each item is not another estimate.
+      const moved = Math.abs(projected - item.estimateMicro) > count;
+      if (count > item.count || moved) {
+        item = { ...item, count, estimateMicro: moved ? projected : item.estimateMicro };
         await this.table.put(item);
       }
     }
