@@ -5,22 +5,33 @@ import { isDefect } from "./codes.js";
 const pk = (batchId: string) => `BATCH#${batchId}`;
 const sk = (imageId: string) => `CHECK#${imageId}`;
 
-interface CheckRecord extends Item {
+/** What the agent saw in one picture. Each save replaces the list. */
+interface SeenRecord extends Item {
   imageId: string;
-  /** What the agent saw. Each save replaces the list. */
   seen: CheckItem[];
-  /** What a pixel tool measured, by tool name. Only that tool's next run changes its entry. */
-  measured: Record<string, CheckItem | null>;
-  looked: boolean;
   savedAt: string;
 }
 
-const view = (item: CheckRecord): ImageChecks => ({
-  imageId: item.imageId,
-  items: [...Object.values(item.measured).filter((entry): entry is CheckItem => entry !== null), ...item.seen],
-  looked: item.looked,
-  savedAt: item.savedAt,
-});
+/** What one pixel tool measured in one picture: its item, or null for a pass. Each tool has its own row, so a save by the agent or by another tool cannot overwrite it. */
+interface MeasureRecord extends Item {
+  imageId: string;
+  tool: string;
+  item: CheckItem | null;
+  /** When the job that measured it was sent. An older job does not replace a newer one's result. */
+  at: string;
+  savedAt: string;
+}
+
+const measureSk = (imageId: string, tool: string) => `MEASURE#${imageId}#${tool}`;
+
+function view(imageId: string, seen: SeenRecord | undefined, measured: MeasureRecord[]): ImageChecks {
+  return {
+    imageId,
+    items: [...measured.map((entry) => entry.item).filter((entry): entry is CheckItem => entry !== null), ...(seen?.seen ?? [])],
+    looked: seen !== undefined,
+    savedAt: [seen?.savedAt ?? "", ...measured.map((entry) => entry.savedAt)].sort().at(-1) ?? "",
+  };
+}
 
 /** The first defect of a picture, or nothing. A picture with a defect never becomes a final. */
 export const defectOf = (checks: ImageChecks | undefined): CheckItem | undefined => checks?.items.find((item) => isDefect(item.code));
@@ -35,37 +46,50 @@ export class CheckStore {
     private readonly now: () => Date,
   ) {}
 
-  private async read(batchId: string, imageId: string): Promise<CheckRecord> {
-    return (await this.table.get<CheckRecord>(pk(batchId), sk(imageId))) ?? { pk: pk(batchId), sk: sk(imageId), imageId, seen: [], measured: {}, looked: false, savedAt: "" };
+  private async rows(batchId: string): Promise<{ seen: SeenRecord[]; measured: MeasureRecord[] }> {
+    const items = await this.table.query<Item>(pk(batchId));
+    return {
+      seen: items.filter((item): item is SeenRecord => item.sk.startsWith("CHECK#")),
+      measured: items.filter((item): item is MeasureRecord => item.sk.startsWith("MEASURE#")),
+    };
   }
 
   /** Saves the agent's own look. It cannot add or remove an item that a tool measured. */
   async save(batchId: string, imageId: string, items: Omit<CheckItem, "tool">[]): Promise<ImageChecks> {
-    const record = { ...(await this.read(batchId, imageId)), seen: items.map(({ code, note }) => ({ code, note })), looked: true, savedAt: this.now().toISOString() };
-    await this.table.put(record);
-    return view(record);
+    await this.table.put({ pk: pk(batchId), sk: sk(imageId), imageId, seen: items.map(({ code, note }) => ({ code, note })), savedAt: this.now().toISOString() });
+    return (await this.get(batchId, imageId))!;
   }
 
-  /** Saves what a pixel tool measured: its item when the picture failed, or a pass that clears that tool's earlier item. */
-  async measure(batchId: string, imageId: string, tool: string, failed: Omit<CheckItem, "tool"> | null): Promise<ImageChecks> {
-    const before = await this.read(batchId, imageId);
-    const record = { ...before, measured: { ...before.measured, [tool]: failed ? { ...failed, tool } : null }, savedAt: this.now().toISOString() };
-    await this.table.put(record);
-    return view(record);
+  /** Saves what a pixel tool measured: its item when the picture failed, or a pass that clears that tool's earlier item. `at` is when the job was sent. */
+  async measure(batchId: string, imageId: string, tool: string, failed: Omit<CheckItem, "tool"> | null, at = this.now().toISOString()): Promise<ImageChecks> {
+    const before = await this.table.get<MeasureRecord>(pk(batchId), measureSk(imageId, tool));
+    if (!before || before.at <= at) {
+      await this.table.put({ pk: pk(batchId), sk: measureSk(imageId, tool), imageId, tool, item: failed ? { ...failed, tool } : null, at, savedAt: this.now().toISOString() });
+    }
+    return (await this.get(batchId, imageId))!;
   }
 
   async get(batchId: string, imageId: string): Promise<ImageChecks | undefined> {
-    const item = await this.table.get<CheckRecord>(pk(batchId), sk(imageId));
-    return item ? view(item) : undefined;
+    return (await this.all(batchId)).get(imageId);
   }
 
   /** The tools that have measured this picture, whatever they found. */
   async measuredBy(batchId: string, imageId: string): Promise<string[]> {
-    return Object.keys((await this.read(batchId, imageId)).measured);
+    return (await this.rows(batchId)).measured.filter((entry) => entry.imageId === imageId).map((entry) => entry.tool);
   }
 
   async all(batchId: string): Promise<Map<string, ImageChecks>> {
-    const items = await this.table.query<CheckRecord>(pk(batchId));
-    return new Map(items.filter((item) => item.sk.startsWith("CHECK#")).map((item) => [item.imageId, view(item)]));
+    const { seen, measured } = await this.rows(batchId);
+    const ids = new Set([...seen.map((entry) => entry.imageId), ...measured.map((entry) => entry.imageId)]);
+    return new Map(
+      [...ids].map((imageId) => [
+        imageId,
+        view(
+          imageId,
+          seen.find((entry) => entry.imageId === imageId),
+          measured.filter((entry) => entry.imageId === imageId),
+        ),
+      ]),
+    );
   }
 }

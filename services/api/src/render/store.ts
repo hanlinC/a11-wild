@@ -53,8 +53,10 @@ export class RenderStore {
    * that gets here first returns true, so the ledger is settled or released a single time.
    */
   async end(render: StoredRender, result: { status: "done"; imageId: string } | { status: "failed"; error: string }): Promise<boolean> {
-    if (!(await this.table.put({ pk: pk(render.batchId), sk: `ENDED#${render.id}` }, { ifNotExists: true }))) return false;
+    const first = await this.table.put({ pk: pk(render.batchId), sk: `ENDED#${render.id}` }, { ifNotExists: true });
+    // A read that set the mark and then stopped left the render queued: this one writes its end, and leaves the ledger alone.
+    if (!first && (await this.get(render.batchId, render.id)).status !== "queued") return false;
     await this.table.put({ pk: pk(render.batchId), sk: sk(render.id), ...render, ...result, updatedAt: this.now().toISOString() });
-    return true;
+    return first;
   }
 }

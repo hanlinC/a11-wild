@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RULES_VERSION } from "../../src/houserules.js";
 import type { PixelEvent } from "../../src/pixels/runner.js";
 import { batchAtTruth, idea } from "../helpers/batch.js";
@@ -106,6 +106,36 @@ describe("pack_check and cap_check", () => {
     pass = true;
     await run("pack_check", { imageId, at: [512, 900], bg: "E83C28" });
     expect((await studio.services.checks.get(batchId, imageId))!.items).toEqual([{ code: "D11", note: "cap centre 5.5 px right", tool: "cap_check" }]);
+  });
+
+  it("keeps a tool's D11 when the agent's look is saved at the same moment", async () => {
+    const imageId = await draft();
+    const { checks } = studio.services;
+    await Promise.all([checks.save(batchId, imageId, []), checks.measure(batchId, imageId, "pack_check", { code: "D11", note: "5% too wide" })]);
+    expect(await checks.get(batchId, imageId)).toMatchObject({ looked: true, items: [{ code: "D11", tool: "pack_check" }] });
+    // An older job that is read late does not replace a newer job's pass.
+    await checks.measure(batchId, imageId, "pack_check", null, "2026-11-22T10:00:00.000Z");
+    await checks.measure(batchId, imageId, "pack_check", { code: "D11", note: "an older run" }, "2026-11-22T09:00:00.000Z");
+    expect((await checks.get(batchId, imageId))!.items).toEqual([]);
+  });
+
+  it("saves what a job measured on the next read, when the first read stopped half way", async () => {
+    await start(() => ({ ok: true, passed: false, line: "5% too wide" }));
+    const imageId = await draft();
+    const sent = await callTool(studio, "pack_check", { batchId, imageId, at: [512, 900], bg: "E83C28" });
+    const measure = vi.spyOn(studio.services.checks, "measure").mockRejectedValueOnce(new Error("the table did not answer"));
+    await callTool(studio, "pixel_status", { batchId, jobId: sent.value.id }).catch(() => undefined);
+    expect(await studio.services.checks.get(batchId, imageId)).toBeUndefined();
+    measure.mockRestore();
+    expect((await status(sent.value.id)).status).toBe("done");
+    expect((await studio.services.checks.get(batchId, imageId))!.items).toEqual([{ code: "D11", note: "5% too wide", tool: "pack_check" }]);
+  });
+
+  it("ends a job whose end mark was set by a read that then stopped", async () => {
+    const imageId = await draft();
+    const sent = await callTool(studio, "pack_check", { batchId, imageId, at: [512, 900], bg: "E83C28" });
+    await studio.table.put({ pk: `BATCH#${batchId}`, sk: `ENDED#${sent.value.id}` });
+    expect((await status(sent.value.id)).status).toBe("done");
   });
 
   it("applies a result one time, however often the job is read", async () => {

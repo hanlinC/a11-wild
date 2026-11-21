@@ -35,11 +35,13 @@ export class JobStore {
     return record<StoredJob>(item);
   }
 
-  /** Ends a job once. Returns false when it had already ended, so its result is applied one time only. */
+  /** Ends a job. Returns nothing when another read had already ended it. */
   async end(job: StoredJob, result: Partial<Pick<StoredJob, "line" | "passed" | "madeId" | "error">> & { status: "done" | "failed" }): Promise<StoredJob | undefined> {
-    if (!(await this.table.put({ pk: pk(job.batchId), sk: `ENDED#${job.id}` }, { ifNotExists: true }))) return undefined;
+    const first = await this.table.put({ pk: pk(job.batchId), sk: `ENDED#${job.id}` }, { ifNotExists: true });
+    // A read that set the mark and then stopped left the job queued: this one writes its end.
+    if (!first && (await this.get(job.batchId, job.id)).status !== "queued") return undefined;
     const ended: StoredJob = { ...job, ...result, updatedAt: this.now().toISOString() };
     await this.table.put({ pk: pk(job.batchId), sk: sk(job.id), ...ended });
-    return ended;
+    return first ? ended : undefined;
   }
 }

@@ -203,16 +203,15 @@ export class PixelService {
         job = (await jobs.end(job, { status: "failed", error: String(result.error ?? "The tool gave no result.").slice(0, 600) })) ?? (await jobs.get(batchId, jobId));
       } else {
         const line = String(result.line ?? "").slice(0, 600);
-        const ended = await jobs.end(job, { status: "done", line, ...(job.out ? { madeId: job.id } : { passed: result.passed === true }) });
-        if (ended) {
-          if (job.out) {
-            const { key, kind, ideaId, fromId, rootId } = job.out;
-            await images.add({ id: job.id, batchId, kind, key, ...(ideaId ? { ideaId } : {}), ...(fromId ? { fromId } : {}), ...(rootId ? { rootId } : {}) });
-          } else if (job.imageId) {
-            // D11 is the product drawn wrong: the pack's shape, and where the cap sits.
-            await checks.measure(batchId, job.imageId, job.tool, result.passed === true ? null : { code: "D11", note: line });
-          }
+        // What the job made or measured is saved before the job ends, so a read that stops half way is done again by the next one. Each write gives the same row again.
+        if (job.out) {
+          const { key, kind, ideaId, fromId, rootId } = job.out;
+          await images.add({ id: job.id, batchId, kind, key, ...(ideaId ? { ideaId } : {}), ...(fromId ? { fromId } : {}), ...(rootId ? { rootId } : {}) });
+        } else if (job.imageId) {
+          // D11 is the product drawn wrong: the pack's shape, and where the cap sits.
+          await checks.measure(batchId, job.imageId, job.tool, result.passed === true ? null : { code: "D11", note: line }, job.createdAt);
         }
+        const ended = await jobs.end(job, { status: "done", line, ...(job.out ? { madeId: job.id } : { passed: result.passed === true }) });
         job = ended ?? (await jobs.get(batchId, jobId));
       }
     }
