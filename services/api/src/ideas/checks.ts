@@ -33,6 +33,8 @@ const OFFER = new RegExp(
   ].join("|"),
   "i",
 );
+/** True when the words name a price, a saving or a delivery offer. */
+export const namesOffer = (text: string): boolean => OFFER.test(text);
 /** A number as written: "58.90", "1,000", "10". */
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 const plain = (text: string) => text.replace(/(\d),(?=\d{3})/g, "$1");

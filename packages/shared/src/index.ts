@@ -276,6 +276,33 @@ export interface Idea {
   shows?: string[];
 }
 
+/** The buttons Meta offers that the studio uses. The text of an ad names one of them and no other. */
+export const META_CTAS = ["Shop Now", "Order Now", "Learn More", "Get Offer", "Sign Up", "Subscribe", "Book Now", "Contact Us", "Send WhatsApp Message"] as const;
+export type MetaCta = (typeof META_CTAS)[number];
+
+/** One way to word the text round an ad in Meta. */
+export interface MetaVariant {
+  /** The text above the picture. Its first 125 characters show before "See more". */
+  primary: string;
+  /** The bold line under the picture, about 40 characters. */
+  headline: string;
+  /** The small line under the headline: it supports the button. */
+  description: string;
+  cta: MetaCta;
+}
+
+/** The Meta text of one ad, in two variants. A version is never changed: other text is a new version. */
+export interface MetaText {
+  ideaId: string;
+  variants: [MetaVariant, MetaVariant];
+  /** 1 for the first text. Other text adds one. */
+  version: number;
+  at: string;
+  by: string;
+  /** The owner's yes to this version, in his own words. A pack carries only text with it. */
+  approved?: { ownerSaid: string; at: string; by: string };
+}
+
 /** The words the owner approved for one idea. They are set on its pictures and reused word for word. */
 export interface ApprovedCopy {
   ideaId: string;
