@@ -1,19 +1,24 @@
 import type { BrandPage, Measure } from "@a11-wild/shared";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
+import { CanonCard, FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { Card, Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api";
+import { Banner, BannerTitle } from "@/components/ui/banner";
+import { Button } from "@/components/ui/button";
+import { api, describeError } from "@/lib/api";
+import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
 
 export function Brand() {
   const { brandId = "" } = useParams();
-  const { value: page, error } = useLoad(useCallback(() => api.brand(brandId), [brandId]));
+  const isOwner = useMe().role === "owner";
+  const { value: page, error, reload } = useLoad(useCallback(() => api.brand(brandId), [brandId]));
 
   if (page === undefined) return <Loading error={error} />;
-  const { brand, logoUrl, products, batches } = page;
+  const { brand, logoUrl, products, batches, canon, canonVersions, notes } = page;
 
   return (
     <>
@@ -79,6 +84,49 @@ export function Brand() {
             ) : null}
           </dl>
         </Card>
+      </Section>
+
+      <Section title="What you chose" count={notes.length}>
+        <p className="mb-3 max-w-2xl text-caption text-muted-foreground">
+          Your choices for {brand.name}, in your words: which pack to show, what to leave out. The next batch of this brand reads them. They are not product facts, and copy may not state them.
+        </p>
+        {isOwner ? <NoteForm brandId={brand.id} reload={reload} /> : null}
+        {notes.length === 0 ? (
+          <Empty>Nothing yet for this brand.</Empty>
+        ) : (
+          <ul className="grid gap-2">
+            {notes.map((note) => (
+              <li key={note.id}>
+                <Card className="py-4">
+                  <p className="text-body whitespace-pre-line">{note.note}</p>
+                  {note.ownerSaid !== note.note ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">You said: {note.ownerSaid}</p> : null}
+                  <p className="mt-1 text-caption text-muted-foreground">
+                    {when(note.at)}
+                    {note.batchId ? (
+                      <>
+                        {" · "}
+                        <Link to={`/batches/${note.batchId}`} className="underline underline-offset-2">
+                          the batch it came from
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Rules for this brand">
+        <CanonCard
+          scope={{ kind: "brand", brandId: brand.id }}
+          canon={canon}
+          versions={canonVersions}
+          isOwner={isOwner}
+          empty={`No rule yet for ${brand.name} alone. Rules here reach only this brand's batches.`}
+          reload={reload}
+        />
       </Section>
 
       {products.length === 0 ? (
@@ -209,5 +257,46 @@ function MeasureRow({ measure }: { measure: Measure }) {
         <Badge color="amber">unverified</Badge>
       )}
     </li>
+  );
+}
+
+/** The owner types a choice for this brand himself, so what is saved is his own words. */
+function NoteForm({ brandId, reload }: { brandId: string; reload: () => Promise<void> }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      await api.brandNote(brandId, note);
+      await reload();
+      setNote("");
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="mb-3 grid gap-2">
+      {error ? (
+        <Banner status="error">
+          <BannerTitle>{error}</BannerTitle>
+        </Banner>
+      ) : null}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid min-w-0 flex-1 basis-64 gap-1.5 text-caption text-muted-foreground">
+          A choice for this brand
+          <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={500} className={`${FIELD} text-foreground`} required />
+        </label>
+        <Button type="submit" variant="secondary" size="compact" loading={busy}>
+          Keep it
+        </Button>
+      </div>
+    </form>
   );
 }

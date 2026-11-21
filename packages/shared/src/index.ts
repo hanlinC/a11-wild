@@ -687,6 +687,7 @@ export interface BrandPage {
   batches: Batch[];
   /** The rules of this brand alone. Version 0 with no text when there are none. */
   canon: CanonVersion;
+  canonVersions: Omit<CanonVersion, "text">[];
   /** What the owner chose for this brand before, newest first. */
   notes: BrandNote[];
 }

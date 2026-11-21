@@ -31,6 +31,9 @@ function brandPage(overrides: Partial<BrandPage["products"][number]> = {}): Bran
       },
     ],
     batches: [],
+    canon: { version: 0, text: "", reason: "", savedBy: "", savedAt: "" },
+    canonVersions: [],
+    notes: [],
   };
 }
 

@@ -1,5 +1,6 @@
-import type { CanonVersion, TasteEntry } from "@a11-wild/shared";
+import type { LearningRecord, ProposalView, TasteEntry } from "@a11-wild/shared";
 import { useState } from "react";
+import { CanonCard, FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { Card, Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
@@ -15,17 +16,15 @@ const KIND: Record<TasteEntry["kind"], { label: string; color: "green" | "amber"
   pass: { label: "Passed", color: "amber" },
   note: { label: "Said", color: "gray" },
 };
-const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-offset-2";
+const DECIDED: Record<Exclude<ProposalView["status"], "proposed">, { label: string; color: "green" | "gray" }> = {
+  approved: { label: "You said yes", color: "green" },
+  declined: { label: "You said no", color: "gray" },
+};
+const SURE: Record<LearningRecord["confidence"], string> = { low: "Not sure yet", medium: "Fairly sure", high: "Sure" };
 
 export function Taste() {
   const isOwner = useMe().role === "owner";
   const { value: taste, error, reload } = useLoad(api.taste);
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState("");
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string>();
-  const [old, setOld] = useState<CanonVersion>();
 
   if (taste === undefined) {
     return (
@@ -35,106 +34,96 @@ export function Taste() {
       </>
     );
   }
-  const { canon, versions, log, swipe } = taste;
-
-  function edit() {
-    setText(canon.text);
-    setReason("");
-    setSaveError(undefined);
-    setEditing(true);
-  }
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setSaveError(undefined);
-    try {
-      await api.saveCanon(text, reason);
-      await reload();
-      setEditing(false);
-    } catch (cause) {
-      setSaveError(describeError(cause));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function show(version: number) {
-    setSaveError(undefined);
-    try {
-      setOld(await api.canonVersion(version));
-    } catch (cause) {
-      setSaveError(describeError(cause));
-    }
-  }
+  const { canon, versions, log, swipe, canons, proposals, learning } = taste;
+  const waiting = proposals.filter((proposal) => proposal.status === "proposed");
+  const decided = proposals.filter((proposal) => proposal.status !== "proposed");
 
   return (
     <>
       <Header />
-      {saveError ? (
-        <Banner status="error" className="mb-6">
-          <BannerTitle>{saveError}</BannerTitle>
-        </Banner>
+
+      {waiting.length > 0 ? (
+        <Section title="Waiting for your yes" count={waiting.length}>
+          <p className="mb-3 max-w-2xl text-caption text-muted-foreground">A change an agent wants to make to a canon. Nothing here is in use until you say yes.</p>
+          <ul className="grid gap-3">
+            {waiting.map((proposal) => (
+              <li key={proposal.id}>
+                <Proposal proposal={proposal} isOwner={isOwner} reload={reload} />
+              </li>
+            ))}
+          </ul>
+        </Section>
       ) : null}
 
       <Section title="Canon">
-        <Card>
-          {editing ? (
-            <form onSubmit={save} className="grid gap-4">
-              <label className="grid gap-1.5 text-caption text-muted-foreground">
-                The whole canon
-                <textarea value={text} onChange={(event) => setText(event.target.value)} rows={18} className={`${FIELD} font-mono text-caption text-foreground`} required />
-              </label>
-              <label className="grid gap-1.5 text-caption text-muted-foreground">
-                What changed, and why
-                <input value={reason} onChange={(event) => setReason(event.target.value)} className={`${FIELD} text-foreground`} required />
-              </label>
-              <div className="flex gap-2">
-                <Button type="submit" size="compact" loading={saving}>
-                  Save as version {canon.version + 1}
-                </Button>
-                <Button type="button" variant="ghost" size="compact" onClick={() => setEditing(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <>
-              {canon.version === 0 ? (
-                <p className="text-body text-muted-foreground">No canon yet. It is your taste in plain words; every agent reads it before it writes an idea.</p>
-              ) : (
-                <>
-                  <p className="mb-3 text-caption text-muted-foreground">
-                    Version {canon.version} · {when(canon.savedAt)} · {canon.savedBy} · {canon.reason}
-                  </p>
-                  <pre className="font-sans text-body whitespace-pre-wrap">{canon.text}</pre>
-                </>
-              )}
-              {isOwner ? (
-                <Button variant="secondary" size="compact" className="mt-4" onClick={edit}>
-                  {canon.version === 0 ? "Write the canon" : "Edit"}
-                </Button>
-              ) : null}
-            </>
-          )}
-        </Card>
+        <CanonCard canon={canon} versions={versions} isOwner={isOwner} empty="No canon yet. It is your taste in plain words; every agent reads it before it writes an idea." reload={reload} />
       </Section>
 
-      {versions.length > 1 ? (
-        <Section title="Versions" count={versions.length}>
+      <Section title="Other rules">
+        <p className="mb-3 max-w-2xl text-caption text-muted-foreground">
+          Rules that are not your taste: what makes an ad well made, what the results of past ads showed, and what holds for one brand only. A brand's rules reach only that brand's batches.
+        </p>
+        <div className="grid gap-6">
+          {canons.map((entry) => (
+            <CanonCard
+              key={`${entry.scope.kind}${entry.scope.brandId ?? ""}`}
+              scope={entry.scope}
+              name={entry.name}
+              canon={entry.canon}
+              versions={entry.versions}
+              isOwner={isOwner}
+              empty={entry.scope.kind === "craft" ? "Nothing yet. Rules of craft that hold for every brand go here." : entry.scope.kind === "performance" ? "Nothing yet. What the results of past ads showed goes here." : "Nothing yet for this brand."}
+              reload={reload}
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="What the studio noticed" count={learning.length}>
+        {learning.length === 0 ? (
+          <Empty>Nothing yet. An agent writes here what it saw in a batch or in results. A note changes no rule until you say yes to a change built on it.</Empty>
+        ) : (
           <ul className="grid gap-2">
-            {versions.map((version) => (
-              <li key={version.version}>
-                <Card className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3 text-caption">
-                  <span className="font-medium">Version {version.version}</span>
-                  <span className="text-muted-foreground">
-                    {when(version.savedAt)} · {version.savedBy}
-                  </span>
-                  <span className="min-w-0 flex-1 basis-full sm:basis-0">{version.reason}</span>
-                  <Button variant="tertiary" size="compact" onClick={() => (old?.version === version.version ? setOld(undefined) : show(version.version))}>
-                    {old?.version === version.version ? "Hide" : "Read"}
-                  </Button>
-                  {old?.version === version.version ? <pre className="basis-full font-sans text-body whitespace-pre-wrap">{old.text}</pre> : null}
+            {learning.map((entry) => (
+              <li key={entry.id}>
+                <Card className="py-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                    <Badge variant="dot" color="gray">
+                      {entry.scopeName}
+                    </Badge>
+                    <span>{when(entry.savedAt)}</span>
+                    <span>
+                      Seen {entry.evidence} {entry.evidence === 1 ? "time" : "times"} · {SURE[entry.confidence]}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-body">{entry.lesson}</p>
+                  <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">
+                    {entry.observation} ({entry.source})
+                  </p>
+                  {entry.counterexamples.length > 0 ? <p className="mt-1 text-caption text-muted-foreground">Against it: {entry.counterexamples.join("; ")}</p> : null}
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {decided.length > 0 ? (
+        <Section title="Changes you decided" count={decided.length}>
+          <ul className="grid gap-2">
+            {decided.map((proposal) => (
+              <li key={proposal.id}>
+                <Card className="py-4">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                    <Badge variant="dot" color={DECIDED[proposal.status as "approved" | "declined"].color}>
+                      {DECIDED[proposal.status as "approved" | "declined"].label}
+                    </Badge>
+                    <span>{proposal.scopeName}</span>
+                    {proposal.decidedAt ? <span>{when(proposal.decidedAt)}</span> : null}
+                    {proposal.version ? <span>Version {proposal.version}</span> : null}
+                  </div>
+                  <p className="mt-2 text-body">{proposal.reason}</p>
+                  {proposal.ownerSaid ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">{proposal.ownerSaid}</p> : null}
                 </Card>
               </li>
             ))}
@@ -193,7 +182,87 @@ function Header() {
   return (
     <PageHeader
       title="Taste"
-      lead="What the studio has learned about your taste: the canon in plain words, what you picked and passed, and the work you saved. Agents read all three before they write an idea."
+      lead="What the studio has learned: your taste in plain words, the other rules it works by, what you picked and passed, and the work you saved. Agents read these before they write an idea, and no rule changes without your yes."
     />
+  );
+}
+
+/** One change that waits: what it would make the canon say, why, and the owner's yes or no in his own words. */
+function Proposal({ proposal, isOwner, reload }: { proposal: ProposalView; isOwner: boolean; reload: () => Promise<void> }) {
+  const [said, setSaid] = useState("");
+  const [busy, setBusy] = useState<"yes" | "no">();
+  const [error, setError] = useState<string>();
+  const stale = proposal.current.version !== proposal.baseVersion;
+
+  async function decide(approve: boolean) {
+    setBusy(approve ? "yes" : "no");
+    setError(undefined);
+    try {
+      await api.decideProposal(proposal.id, approve, said);
+      await reload();
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
+  return (
+    <Card className="grid gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+        <Badge variant="dot" color="amber">
+          {proposal.scopeName}
+        </Badge>
+        <span>
+          {when(proposal.proposedAt)} · {proposal.proposedBy}
+        </span>
+        <span>
+          Rests on {proposal.recordIds.length} {proposal.recordIds.length === 1 ? "note" : "notes"}
+        </span>
+      </div>
+      <p className="text-body">{proposal.reason}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 text-caption text-muted-foreground">{proposal.current.version === 0 ? "Now: nothing written" : `Now (version ${proposal.current.version})`}</p>
+          <pre className="rounded-lg bg-(--tint) p-3 font-sans text-caption whitespace-pre-wrap">{proposal.current.text || "Nothing yet."}</pre>
+        </div>
+        <div>
+          <p className="mb-1 text-caption text-muted-foreground">As it would read</p>
+          <pre className="rounded-lg bg-(--tint) p-3 font-sans text-caption whitespace-pre-wrap">{proposal.text}</pre>
+        </div>
+      </div>
+      {stale ? (
+        <Banner status="warning">
+          <BannerTitle>
+            This was written against version {proposal.baseVersion}, and the canon has changed since. A yes is refused; say no, and ask your agent to write it again.
+          </BannerTitle>
+        </Banner>
+      ) : null}
+      {error ? (
+        <Banner status="error">
+          <BannerTitle>{error}</BannerTitle>
+        </Banner>
+      ) : null}
+      {isOwner ? (
+        <form
+          className="flex flex-wrap items-end gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void decide(true);
+          }}
+        >
+          <label className="grid min-w-0 flex-1 basis-64 gap-1.5 text-caption text-muted-foreground">
+            In your own words, for {proposal.scopeName}
+            <input value={said} onChange={(event) => setSaid(event.target.value)} className={`${FIELD} text-foreground`} required />
+          </label>
+          <Button type="submit" size="compact" loading={busy === "yes"} disabled={stale || busy === "no"}>
+            Yes, use it
+          </Button>
+          <Button type="button" variant="secondary" size="compact" loading={busy === "no"} disabled={busy === "yes" || said.trim() === ""} onClick={() => void decide(false)}>
+            No
+          </Button>
+        </form>
+      ) : null}
+    </Card>
   );
 }

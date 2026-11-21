@@ -6,7 +6,7 @@ import { MEMBER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Taste } from "./taste";
 
 const v1 = { version: 1, text: "One clever object.", reason: "First canon.", savedBy: "owner@example.com", savedAt: "2026-11-21T10:00:00.000Z" };
-const page = (overrides: Partial<TastePage> = {}): TastePage => ({ canon: v1, versions: [{ ...v1, text: undefined } as never], log: [], swipe: [], ...overrides });
+const page = (overrides: Partial<TastePage> = {}): TastePage => ({ canon: v1, versions: [{ ...v1, text: undefined } as never], log: [], swipe: [], canons: [], proposals: [], learning: [], ...overrides });
 
 describe("Taste page", () => {
   it("shows the canon, the owner's words in the log, and a saved reference", async () => {

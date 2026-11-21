@@ -68,6 +68,7 @@ export function studioRoutes(
       products,
       batches: (await batches.list()).filter((batch) => batch.brandId === brandId),
       canon: await canon.get({ kind: "brand", brandId }),
+      canonVersions: await canon.versions({ kind: "brand", brandId }),
       notes: await brandNotes.list(brandId),
     };
     return c.json(page);
