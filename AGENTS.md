@@ -39,6 +39,7 @@ A private ad studio. An AI agent takes one brand and one product to three finish
 | Path | Holds |
 |---|---|
 | `services/api` | The API and the MCP server (one Lambda), and the daily clean-up job |
+| `services/pixels` | The pixel tools in Python (a second Lambda, from a container): skeleton, reprint, swap, pack and cap measures, real-camera finish, food crop |
 | `infra` | The CDK app: the studio stack and the GitHub deploy role |
 | `web` | The dashboard |
 | `packages/shared` | Types the API and the dashboard share |

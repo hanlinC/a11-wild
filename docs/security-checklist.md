@@ -22,6 +22,7 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | Dependency | A new package has a stated need. `npm audit` shows no new finding. |
 | Workflow action | Each `uses:` names a full commit SHA with the release tag as a comment. `scripts/workflows.test.mjs` checks the form. |
 | Money | A paid call goes through the spend ledger and its caps. |
+| Pictures | A tool takes a picture by its id, never by a key or an address. The role of the pixel function allows the picture bucket only, with no table and no key; only the API may start it. A picture from fal is read from fal's own hosts only, and the fal key goes to the queue host only. |
 | Tests | A test shows the bad input is refused. Remove the fix and check that the test fails. |
 
 ## 2. After every deploy
@@ -33,7 +34,7 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | `GET /api/health` | 200, `ok: true` |
 | `POST /mcp` with no token | 401, with `resource_metadata` in `WWW-Authenticate` |
 | `GET /.well-known/oauth-protected-resource/mcp` | 200, names this server and one authorization server |
-| `GET /api/me`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste` with no session | 401 each |
+| `GET /api/me`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste`, `/api/batches/<id>/board` with no session | 401 each |
 | `POST /api/clients/<id>/approve` from another origin | 401 or 403 |
 | `GET /` and `GET /api/health` | HSTS, CSP with `frame-ancestors 'none'`, `nosniff`, `X-Frame-Options: DENY` |
 | `GET /api/<unknown>` | 404 as JSON, not the dashboard page |

@@ -31,6 +31,7 @@ function healthyStudio(overrides = {}) {
     "GET /api/brands": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/spend": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/taste": () => Response.json({ error: "signed_out" }, { status: 401 }),
+    "GET /api/batches/none/board": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "POST /api/clients/probe/approve": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/no-such-path": () => Response.json({ error: "not_found" }, { status: 404 }),
     ...overrides,

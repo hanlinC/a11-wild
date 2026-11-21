@@ -31,6 +31,8 @@ Run these once, signed in to AWS with the owner's browser sign-in (`aws login`),
 
 The workflow runs `npm run check`, deploys `A11WildStudio`, then runs the live probes. A failed probe fails the run.
 
+The pixel function is a container, so a deploy needs Docker on the machine that runs it. GitHub's runner has it. CDK builds the image from `services/pixels` and pushes it to the bootstrap repository of the account.
+
 By hand, with the owner's browser sign-in:
 
 ```
