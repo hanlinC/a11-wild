@@ -49,7 +49,7 @@ export class PackService {
   }
 
   /** The ads of a done batch as a pack carries them now. It refuses when anything a client must get is missing. */
-  private async content(batch: Batch, input: PackContent, before: PackVersion | undefined, version: number): Promise<Omit<PackVersion, "at" | "by">> {
+  private async content(batch: Batch, input: PackContent, before: PackVersion | undefined, version: number, versions: PackVersion[] = []): Promise<Omit<PackVersion, "at" | "by">> {
     const { batches, brands, facts, board, copy, meta } = this.deps;
     if (batch.test) throw new Refusal("This is a test batch. A test batch is never done, and nothing of it goes to a client.");
     if (batch.state !== "done") throw new Refusal(`This batch is "${batch.state}". A pack holds the finals of a done batch: run batch_done first.`);
@@ -71,11 +71,12 @@ export class PackService {
       const earlier = before?.ads.find((ad) => ad.ideaId === idea.id);
       const why = input.why?.find((entry) => entry.ideaId === idea.id)?.why ?? earlier?.why;
       if (!why) throw new Refusal(`Give one line of why for ${idea.id}: the buyer truth, what the ad does, and the source.`);
-      // The name stands for the creative: the same picture with the same text keeps its name, so its results stay with it.
-      const same = earlier && earlier.imageId === final.delivered.id && earlier.meta.version === text.version;
+      // The name stands for the creative: the same picture with the same text keeps the name it got first, in any version, so its results stay with it.
+      const delivered = final.delivered;
+      const named = versions.flatMap((entry) => entry.ads).find((ad) => ad.ideaId === idea.id && ad.imageId === delivered.id && ad.meta.version === text.version);
       ads.push({
         ideaId: idea.id,
-        adName: same ? earlier.adName : adName({ at: this.deps.now(), brand: brand.name, batchNumber, ...(idea.stage ? { stage: idea.stage } : {}), idea: index + 1, version }),
+        adName: named ? named.adName : adName({ at: this.deps.now(), brand: brand.name, batchNumber, ...(idea.stage ? { stage: idea.stage } : {}), idea: index + 1, version }),
         ...(idea.stage ? { stage: idea.stage } : {}),
         imageId: final.delivered.id,
         key: final.delivered.key,
@@ -114,7 +115,7 @@ export class PackService {
     const versions = await packs.versions(batch.id);
     const before = versions.find((entry) => entry.version === pack.current);
     const number = (versions.at(-1)?.version ?? 0) + 1;
-    const version: PackVersion = { ...(await this.content(batch, input, before, number)), at: now().toISOString(), by };
+    const version: PackVersion = { ...(await this.content(batch, input, before, number, versions)), at: now().toISOString(), by };
     if (!(await packs.addVersion(batch.id, version))) throw new Refusal("Another change to this pack was saved at the same moment. Read it with pack_get and send the change again.");
     await packs.save({ ...pack, current: number });
     return version;

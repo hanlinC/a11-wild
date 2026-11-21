@@ -165,7 +165,10 @@ describe("pack_update", () => {
     expect((await callTool(studio, "pack_get", { batchId })).value.versions).toHaveLength(2);
     expect(await callTool(studio, "pack_restore", { batchId, version: 7 })).toMatchObject({ ok: false, error: expect.stringMatching(/no version 7/) });
     // The next change is version 3: a number is never used twice.
-    expect((await callTool(studio, "pack_update", { ...rules, batchId })).value.version.version).toBe(3);
+    const third = (await callTool(studio, "pack_update", { ...rules, batchId })).value.version;
+    expect(third.version).toBe(3);
+    // The picture of version 2 is back under the name it got in version 2: one creative has one name, so its results stay together.
+    expect(third.ads.map((ad: { adName: string }) => ad.adName)).toEqual(["a11_W47_wongi_b01_tof_c1_v2", "a11_W47_wongi_b01_mof_c2_v1", "a11_W47_wongi_b01_bof_c3_v1"]);
   });
 
   it("refuses text that is saved but not approved: the approved text stays in the pack", async () => {
