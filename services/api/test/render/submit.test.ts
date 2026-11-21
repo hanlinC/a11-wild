@@ -98,6 +98,8 @@ describe("render_submit", () => {
   it("takes only the product's photos and the brand's logo as other references", async () => {
     expect(await draft({ references: ["products/other/secret.jpg"] })).toMatchObject({ ok: false });
     expect(await draft({ references: ["food-2"] })).toEqual(refused(/no food photo 2/));
+    // A prop is a real photo like the pack and the food: its name reaches the service.
+    expect(await draft({ references: ["prop-1"] })).toEqual(refused(/no prop photo 1/));
     expect(await draft({ references: ["logo"] })).toEqual(refused(/brand has no logo/));
     expect(studio.fal.calls).toEqual([]);
   });
