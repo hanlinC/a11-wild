@@ -2,6 +2,7 @@ import type { Board as BoardData, BoardDraft, Pick } from "@a11-wild/shared";
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Loading } from "@/components/loading";
+import { DoneGate } from "@/components/done-gate";
 import { Card, Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
@@ -84,13 +85,14 @@ export function Board() {
       {ideas.map((entry, index) => (
         <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} canPick={picking === "open"} onSaved={reload} />
       ))}
+      {["finals", "finished", "done"].includes(batch.state) ? <DoneGate batchId={batch.id} /> : null}
     </>
   );
 }
 
 function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: string; entry: Entry; number: number; canPick: boolean; onSaved: () => Promise<void> }) {
   const picks = useMe().role === "owner" && canPick;
-  const { idea, drafts, pick, finals } = entry;
+  const { idea, drafts, pick, rank, finals } = entry;
   const [chosen, setChosen] = useState<string | null | undefined>();
   const [said, setSaid] = useState("");
   const [saving, setSaving] = useState(false);
@@ -124,6 +126,7 @@ function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: st
             {drafts.map((draft) => (
               <li key={draft.image.id}>
                 <Draft draft={draft} label={`Draft ${draft.number}`} alt={`${idea.title}, draft ${draft.number}`} picked={pick?.imageId === draft.image.id} />
+                <CriticPlace rank={rank} imageId={draft.image.id} />
                 {picks ? (
                   <Button type="button" variant={chosen === draft.image.id ? "primary" : "secondary"} size="compact" className="mt-2" onClick={() => setChosen(draft.image.id)}>
                     Pick draft {draft.number}
@@ -210,6 +213,19 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
         </ul>
       ) : null}
     </figure>
+  );
+}
+
+const PLACES = ["first", "second", "third"];
+
+/** Where the blind critic put this draft. The board has it only after the owner's own choice. */
+function CriticPlace({ rank, imageId }: { rank: Entry["rank"]; imageId: string }) {
+  const place = rank?.order.findIndex((entry) => entry.imageId === imageId) ?? -1;
+  if (!rank || place < 0) return null;
+  return (
+    <p className="mt-1 text-caption text-muted-foreground">
+      The blind critic put it {PLACES[place] ?? `at place ${place + 1}`}: {rank.order[place]?.reason}
+    </p>
   );
 }
 

@@ -1,4 +1,4 @@
-import type { BatchSummary, Board, BrandPage, BrandSummary, CanonVersion, ClientRecord, Me, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, Board, BrandPage, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -51,6 +51,8 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(pick),
     }),
+  done: (batchId: string) => request<DoneReport>(`/api/batches/${encodeURIComponent(batchId)}/done`),
+  calibration: () => request<CalibrationPage>("/api/calibration"),
   logout: () => post<{ redirect: string }>("/auth/logout"),
 };
 

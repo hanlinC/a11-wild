@@ -7,6 +7,7 @@ import { SessionProvider } from "@/lib/session";
 import { Board } from "@/routes/board";
 import { Brand } from "@/routes/brand";
 import { Brands } from "@/routes/brands";
+import { Calibration } from "@/routes/calibration";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
 import { SignedOut } from "@/routes/signed-out";
@@ -42,6 +43,7 @@ export function App() {
           <Route path="brands/:brandId" element={<Brand />} />
           <Route path="batches/:batchId" element={<Board />} />
           <Route path="taste" element={<Taste />} />
+          <Route path="calibration" element={<Calibration />} />
           <Route path="spend" element={<Spend />} />
           <Route path="connections" element={<Connections />} />
           <Route path="*" element={<Home />} />
