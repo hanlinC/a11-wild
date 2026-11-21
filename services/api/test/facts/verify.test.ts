@@ -22,6 +22,15 @@ describe("quoteIn", () => {
     expect(quoteIn("Net weight: 500 g", TEXT)).toBe(false);
     expect(quoteIn("   ", TEXT)).toBe(false);
   });
+
+  it("does not find a number or a word inside a longer one", () => {
+    expect(quoteIn("50 g", "Net weight: 250 g")).toBe(false);
+    expect(quoteIn("50 g", "Net weight: 2.50 g")).toBe(false);
+    expect(quoteIn("Net weight 95", "Net weight 95.5 g")).toBe(false);
+    expect(quoteIn("egg", "Made with eggplant")).toBe(false);
+    expect(quoteIn("250 g", "Net weight: 250 g. 1,250 g for the family pack.")).toBe(true);
+    expect(quoteIn("Net weight 95g.", "Mildly spicy. Net weight 95g. Made in Singapore.")).toBe(true);
+  });
 });
 
 describe("fact store", () => {
