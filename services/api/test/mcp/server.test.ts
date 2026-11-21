@@ -98,7 +98,7 @@ describe("MCP server", () => {
 
   it("serves the pipeline as the prompt wild_ads, and its first step asks for brand and product", async () => {
     const list = await send(rpc("prompts/list"));
-    expect(list.body.result.prompts.map((prompt: { name: string }) => prompt.name)).toEqual(["headline_ads", "wild_ads"]);
+    expect(list.body.result.prompts.map((prompt: { name: string }) => prompt.name)).toEqual(["concept_ads", "headline_ads", "wild_ads"]);
 
     const { body } = await send(rpc("prompts/get", { name: "wild_ads" }));
     const text: string = body.result.messages[0].content.text;

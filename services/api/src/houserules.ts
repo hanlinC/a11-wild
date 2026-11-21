@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.6";
+export const RULES_VERSION = "2026-11-22.7";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -22,6 +22,7 @@ export interface HouseRule {
 
 const ALL: readonly RuleRole[] = RULE_ROLES;
 const WORDS: readonly BatchKind[] = ["v2", "v3"];
+const CONCEPTS: readonly BatchKind[] = ["v3"];
 const MAKERS: readonly RuleRole[] = ["main", "art_director", "critic"];
 const THINKERS: readonly RuleRole[] = ["main", "writer", "critic"];
 
@@ -109,6 +110,36 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     roles: THINKERS,
     kinds: ["v2"],
     text: "Write the whole burst before any idea is chosen: 24 to 30 ideas, 8 or more for each of top, middle and bottom of funnel, and save all of them. A fresh blind critic chooses one for each stage. When it refuses a stage, write more; never lower the bar.",
+  },
+  {
+    id: "v3-brief",
+    roles: THINKERS,
+    kinds: CONCEPTS,
+    text: "A concept ad starts from a brief (brief_save): what buyers think, feel and do, each insight marked as evidence (a buyer's exact words and the page), an interpretation, or a hypothesis. With fewer than three insights that are no hypothesis, stop and tell the owner. Never invent an insight, and say so when a concept stands on a hypothesis.",
+  },
+  {
+    id: "v3-concepts",
+    roles: THINKERS,
+    kinds: CONCEPTS,
+    text: "A concept is a pair: one picture device and the line that points at it. Neither half works alone, and a nice photo with a caption is not a concept. Find the device from first principles for this product. For food, the food is the device: no prop beside it. One prop at most elsewhere. Write 6 to 15 concepts in 3 to 5 territories, each territory on its own insight, and save the whole set before anyone judges it (concepts_save). More concepts are added to the set; none is deleted.",
+  },
+  {
+    id: "v3-roughs",
+    roles: ALL,
+    kinds: CONCEPTS,
+    text: 'A concept is judged as a picture, not as words. Make a rough of each concept worth one (render_submit with kind "rough"): low quality, from the product\'s real photos, two at most for a concept and eight for a batch. A rough needs no approved words and paints none. A concept with no rough cannot be recommended.',
+  },
+  {
+    id: "v3-review",
+    roles: ALL,
+    kinds: CONCEPTS,
+    text: 'A fresh critic reviews every concept from its rough, beside the owner\'s reference ads, at phone size, in this order: does it stop me, do I get it in one second, do I want it (critic_open with step "concepts", then concept_review_save). It may recommend none: the bar is not lowered to fill three places. A new concept or rough makes the review old.',
+  },
+  {
+    id: "v3-pick",
+    roles: ALL,
+    kinds: CONCEPTS,
+    text: "The owner picks the three concepts himself, of any funnel stage (concept_pick). Show him every concept with its rough, its words and the critic's notes first (concept_board, or the concept board in the dashboard), not only the ones the critic recommends. The critic advises and never chooses. His pick of a concept is not his yes to its words: the words are approved after it (copy_approve).",
   },
   {
     id: "concept",

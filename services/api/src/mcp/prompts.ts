@@ -58,7 +58,37 @@ Done when: the owner has picked one draft for each idea; each final has its appr
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
 
+const CONCEPT_ADS = `Concept ads (v3) for one brand and one product: three ads, each one picture device and the line that points at it. The owner picks the three concepts himself from the whole set. House rules version ${RULES_VERSION}.
+
+Step 0. Ask first. If the brand or the product is not given, ask the owner for both and wait. Ask which kind of ad he wants; this prompt is for v3.
+
+Step 1. Set-up. Call rules_get with role "main" and kind "v3". Start the batch with kind "v3". Read the taste canon, the taste log, the swipe file and references_get with kind "v3": the owner's own proud ads are the bar, never a layout to copy.
+
+Step 2. Truth first. Save the facts, each with an exact quote and its page address. Build the truth sheet. Save a real photo of every thing a picture will show: the pack, the food, each variant, each prop (product_save). A rough or a draft with a missing photo is refused.
+
+Step 3. Brief. Read what buyers say in public: reviews, forums, comments. Save the brief (brief_save): each insight marked as evidence (with the buyer's exact words and the page), an interpretation, or a hypothesis. With fewer than three insights that are no hypothesis, stop and tell the owner. Never invent an insight.
+
+Step 4. Concepts. Write 6 to 15 concepts in 3 to 5 territories, each territory on its own insight, and save the whole set in one concepts_save call. A concept is a pair: neither the picture nor the line works alone. For food, the food is the device.
+
+Step 5. Roughs. Make a rough of each concept worth one (render_submit with kind "rough"): from the product's real photos, with no words in the picture, two at most for a concept and eight for the batch. Send one first to read the real price; at US$1 or more, wait for the owner's yes. Look at each rough yourself.
+
+Step 6. Review. Give only the batch id to a fresh critic. It calls critic_open with step "concepts", looks at every rough beside the reference ads, and saves its review of every concept (concept_review_save). It may recommend none. If you cannot start a fresh helper, tell the owner and stop.
+
+Step 7. The owner's pick. Show the owner every concept with its rough, its words and the critic's notes (concept_board, or the concept board in the dashboard), not only the ones the critic recommends. He picks three, of any funnel stage. Save his pick with his own words (concept_pick). Never pick for him. If he wants more, write more concepts and go back to step 5.
+
+Step 8. Words. Show him the words of his three concepts as text and wait for his yes (copy_approve). His pick of a concept is not his yes to its words.
+
+Step 9. Follow batch_get: its nextStep names what comes next, from the direction of each concept to the drafts, the owner's pick of a draft and the finals.
+
+If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
+
 export const PROMPTS: readonly Prompt[] = [
+  {
+    name: "concept_ads",
+    title: "Concept ads (v3)",
+    description: "The v3 pipeline: a brief from what buyers say, a set of concepts with a rough of each, a fresh critic's review, and the owner's own pick of three.",
+    text: CONCEPT_ADS,
+  },
   {
     name: "headline_ads",
     title: "Headline ads (v2)",
