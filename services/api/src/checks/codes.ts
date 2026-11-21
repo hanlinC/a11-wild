@@ -1,4 +1,4 @@
-import type { CheckCode } from "@a11-wild/shared";
+import type { BatchKind, CheckCode } from "@a11-wild/shared";
 
 /**
  * The owner's picture checks, carried from a11-adgen's render checklist. A D item is a defect:
@@ -25,6 +25,13 @@ export const CHECK_CODES: Record<CheckCode, string> = {
   F7: "Weak contrast. The product and the logo stand clear of what is behind them at phone size.",
   F8: "Sameness across the batch. The drafts of an idea differ in camera, crop and scale.",
 };
+
+/** D1 for an ad with words: the words the owner approved, set by type_set, are the ad and not a fault. */
+const D1_WITH_WORDS =
+  "Writing the model painted. The only readable words, letters and numbers are the print on the product itself, the brand logo, and the owner's approved headline, subline and footnote that type_set put on the picture: no note, card, sign, book or printed paper, and no word the model drew.";
+
+/** The picture checks as an agent of this kind of ad reads them. */
+export const checkCodesFor = (kind: BatchKind): Record<CheckCode, string> => (kind === "v1" ? CHECK_CODES : { ...CHECK_CODES, D1: D1_WITH_WORDS });
 
 export const CHECK_CODE_LIST = Object.keys(CHECK_CODES) as [CheckCode, ...CheckCode[]];
 export const isDefect = (code: CheckCode) => code.startsWith("D");
