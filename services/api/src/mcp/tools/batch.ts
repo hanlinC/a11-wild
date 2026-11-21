@@ -76,15 +76,21 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
         format: z.enum(["static_4x5", "other"]).default("static_4x5"),
         formatNote: line(200).optional().describe('The format in the owner\'s words, when format is other: "9:16 story".'),
         label: line(80).optional(),
+        test: z
+          .boolean()
+          .default(false)
+          .describe(
+            "True only for a batch that tries the studio, when the owner asked for a test. It cannot be changed later. In a test batch the tester approves the words and picks the drafts in the owner's place: those choices stay out of the taste log and out of the calibration, and the batch is never done and never goes to a client. A batch whose ads the owner may use is never a test.",
+          ),
       },
       writes: true,
-      handler: async ({ kind, brandId, productId, format, formatNote, label }, context) => {
+      handler: async ({ kind, brandId, productId, format, formatNote, label, test }, context) => {
         if (kind === "v3") throw new Refusal("The studio does not make v3 ads yet. Tell the owner, and offer v1 or v2.");
         await brands.brand(brandId);
         const product = await brands.product(productId);
         if (product.brandId !== brandId) throw new Refusal("That product belongs to another brand. brand_list gives each brand's products.");
         if (format === "other" && !formatNote) throw new Refusal("Give formatNote: the format in the owner's words.");
-        const batch = await batches.create({ kind, brandId, productId, format, createdBy: context.user.email, ...(formatNote ? { formatNote } : {}), ...(label ? { label } : {}) });
+        const batch = await batches.create({ kind, brandId, productId, format, createdBy: context.user.email, ...(test ? { test: true as const } : {}), ...(formatNote ? { formatNote } : {}), ...(label ? { label } : {}) });
         return { ...(await view(batch)), ...(format === "other" ? { note: CANNOT_RENDER } : {}) };
       },
     }),

@@ -16,7 +16,7 @@ export class BatchStore {
     private readonly now: () => Date,
   ) {}
 
-  async create(input: Pick<Batch, "kind" | "brandId" | "productId" | "format" | "createdBy"> & { formatNote?: string; label?: string }): Promise<Batch> {
+  async create(input: Pick<Batch, "kind" | "brandId" | "productId" | "format" | "createdBy"> & { test?: true; formatNote?: string; label?: string }): Promise<Batch> {
     const at = this.now().toISOString();
     const batch: Batch = { ...input, id: randomUUID(), state: "intake", createdAt: at, updatedAt: at };
     await this.table.put({ pk: PK, sk: batch.id, ...batch });

@@ -88,6 +88,7 @@ export function Home() {
                     {batch.state.replace("_", " ")}
                   </Badge>
                   <Badge color="gray">{KIND_NAMES[batch.kind]}</Badge>
+                  {batch.test && <Badge color="amber">Test batch: not the owner's picks</Badge>}
                   <span className="ml-auto text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
                 </Card>
               </li>
