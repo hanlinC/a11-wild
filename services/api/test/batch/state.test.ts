@@ -25,6 +25,29 @@ describe("batch state", () => {
     expect(stepAfter({ kind: "v1", state: "done" })).toMatch(/at its end/);
   });
 
+  it("takes a concept ad through its brief, the critic's review and the direction, in that order", () => {
+    const path = ["intake", "truth", "briefed", "ideas", "reviewed", "judged", "worded", "directed", "priced"] as const;
+    for (let at = 0; at < path.length - 1; at++) expect(missingStep("v3", path[at]!, path[at + 1]!)).toBeUndefined();
+    expect(missingStep("v3", "truth", "ideas")).toMatch(/brief_save/);
+    expect(missingStep("v3", "ideas", "judged")).toMatch(/concept_review_save/);
+    expect(missingStep("v3", "reviewed", "worded")).toMatch(/concept_pick/);
+    expect(missingStep("v3", "worded", "priced")).toMatch(/direction_save/);
+    expect(stepAfter({ kind: "v3", state: "briefed" })).toMatch(/6 to 15 concepts/);
+    expect(() => requireMove({ kind: "v3", state: "ideas" }, "worded", "copy_approve")).toThrow(/The step that is missing: the review of every concept/);
+  });
+
+  it("keeps the states of a concept ad out of the other kinds", () => {
+    expect(missingStep("v1", "truth", "ideas")).toBeUndefined();
+    expect(missingStep("v2", "truth", "ideas")).toBeUndefined();
+    expect(missingStep("v2", "ideas", "judged")).toBeUndefined();
+    expect(missingStep("v2", "worded", "priced")).toBeUndefined();
+    for (const kind of ["v1", "v2"] as const) {
+      expect(missingStep(kind, "truth", "briefed")).toBeDefined();
+      expect(missingStep(kind, "ideas", "reviewed")).toBeDefined();
+      expect(missingStep(kind, "worded", "directed")).toBeDefined();
+    }
+  });
+
   it("refuses a batch without a saved brand and product", async () => {
     const none = await callTool(studio, "batch_create", { kind: "v1", brandId: "nope", productId: "nope" });
     expect(none).toEqual({ ok: false, error: expect.stringMatching(/no brand/) });

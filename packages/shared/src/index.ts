@@ -166,10 +166,16 @@ export interface SwipeItem {
 export const BATCH_STATES = [
   "intake",
   "truth",
+  /** v3: the brief with the buyer insights is saved. */
+  "briefed",
   "ideas",
+  /** v3: the critic's review of the concepts is saved. */
+  "reviewed",
   "judged",
   /** The owner approved the words. Only a batch whose kind has words passes through it. */
   "worded",
+  /** v3: each picked concept has its direction. */
+  "directed",
   "priced",
   "waiting_spend",
   "drafting",

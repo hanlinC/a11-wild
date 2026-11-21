@@ -8,9 +8,12 @@ export const hasWords = (kind: BatchKind): boolean => kind !== "v1";
 const STEP: Record<BatchState, string> = {
   intake: "choose a saved brand and product (batch_create)",
   truth: "save the product's truth sheet (truth_save)",
+  briefed: "save the brief with the buyer insights (brief_save)",
   ideas: "save three ideas (ideas_save)",
+  reviewed: "the review of every concept, by a fresh helper that gets the batch id only (concept_packet, then concept_review_save)",
   judged: 'the blind pick, by a fresh helper that gets the batch id only: critic_open with step "ideas", then critic_pick',
   worded: "the owner's yes to the words of each idea, saved with his exact words (copy_approve)",
+  directed: "save the direction of each picked concept (direction_save)",
   priced: "send one draft to read its price",
   waiting_spend: "the owner's yes to the estimate (spend_approve)",
   drafting: "make the drafts",
@@ -28,15 +31,25 @@ const STEP_WITH_WORDS: Partial<Record<BatchState, string>> = {
   judged: 'the blind choice of one idea for each of tof, mof and bof, by a fresh helper that gets the batch id only: critic_open with step "ideas", then critic_select',
 };
 
-const stepTo = (kind: BatchKind, state: BatchState): string => (hasWords(kind) ? STEP_WITH_WORDS[state] : undefined) ?? STEP[state];
+/** The steps that read differently for a concept ad. */
+const STEP_V3: Partial<Record<BatchState, string>> = {
+  ideas: "save the whole set of 6 to 15 concepts in 3 to 5 territories (concepts_save)",
+  judged: "the owner's pick of three concepts, saved with his exact words (concept_pick). Show him every concept with its rough and the critic's notes first",
+};
+
+const stepTo = (kind: BatchKind, state: BatchState): string =>
+  (kind === "v3" ? STEP_V3[state] : undefined) ?? (hasWords(kind) ? STEP_WITH_WORDS[state] : undefined) ?? STEP[state];
 
 /** The states that follow each state. `waiting_spend` is skipped when the estimate is under the gate. */
 const NEXT: Record<BatchState, BatchState[]> = {
   intake: ["truth"],
   truth: ["ideas"],
+  briefed: ["ideas"],
   ideas: ["judged", "spec_only"],
+  reviewed: ["judged"],
   judged: ["priced"],
   worded: ["priced"],
+  directed: ["priced"],
   priced: ["waiting_spend", "drafting"],
   waiting_spend: ["drafting"],
   drafting: ["checked"],
@@ -52,13 +65,21 @@ const NEXT: Record<BatchState, BatchState[]> = {
 
 export class StateError extends Refusal {}
 
+/** The states a concept ad passes that no other kind does: the brief, the critic's review, the direction. */
+const NEXT_V3: Partial<Record<BatchState, BatchState[]>> = {
+  truth: ["briefed"],
+  ideas: ["reviewed", "spec_only"],
+  worded: ["directed"],
+};
+
 function nextOf(kind: BatchKind, state: BatchState): BatchState[] {
+  if (kind === "v3" && NEXT_V3[state]) return NEXT_V3[state];
   if (state === "judged" && hasWords(kind)) return ["worded"];
   return NEXT[state];
 }
 
 /** The order of the picture path, to tell how far a batch has come. */
-const PATH: BatchState[] = ["intake", "truth", "ideas", "judged", "worded", "priced", "waiting_spend", "drafting", "checked", "waiting_pick", "finals", "finished", "done"];
+const PATH: BatchState[] = ["intake", "truth", "briefed", "ideas", "reviewed", "judged", "worded", "directed", "priced", "waiting_spend", "drafting", "checked", "waiting_pick", "finals", "finished", "done"];
 
 /** The first step still to do before a batch can reach `wanted`, or nothing when the move is allowed. */
 export function missingStep(kind: BatchKind, from: BatchState, wanted: BatchState): string | undefined {
