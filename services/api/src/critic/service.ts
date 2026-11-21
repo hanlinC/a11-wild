@@ -8,6 +8,7 @@ import type { FactStore } from "../facts/store.js";
 import type { ImageStore } from "../images/store.js";
 import type { Pictures } from "../pictures/store.js";
 import type { RenderStore } from "../render/store.js";
+import type { BriefStore } from "../brief/store.js";
 import { Refusal } from "../mcp/registry.js";
 import { DRAFTS_PER_IDEA } from "../render/service.js";
 import type { TruthStore } from "../truth/store.js";
@@ -24,6 +25,7 @@ interface Deps {
   images: ImageStore;
   pictures: Pictures;
   renders: RenderStore;
+  briefs: BriefStore;
 }
 
 /** The lowest score for the picture of a concept that the critic recommends. */
@@ -73,7 +75,7 @@ export class CriticService {
           roughs: await Promise.all((roughs.get(idea.id) ?? []).map(async (image) => ({ imageId: image.id, viewUrl: await pictures.viewUrl(image.key) }))),
         })),
       );
-      return { ...conceptsPacket(common, shown), ...(await critic.issue(batchId, { step, ideaIds: concepts.map((idea) => idea.id), stamp })) };
+      return { ...conceptsPacket(common, shown, (await this.deps.briefs.get(batchId))?.insights), ...(await critic.issue(batchId, { step, ideaIds: concepts.map((idea) => idea.id), stamp })) };
     }
     if (step === "ideas" && batch.kind === "v3") throw new Refusal('A batch of concept ads is reviewed with step "concepts".');
     const ideas = await this.judgedAt(batch, step);

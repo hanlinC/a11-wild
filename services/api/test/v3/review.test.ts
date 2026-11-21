@@ -28,6 +28,9 @@ describe("the critic's review of the concepts", () => {
     const second = packet.value.concepts.find((entry: { id: string }) => entry.id === "idea-2");
     expect(second.roughs).toEqual([{ imageId: roughId, viewUrl: expect.stringMatching(/^https:\/\//) }]);
     expect(second).toMatchObject({ territory: "Territory 3", proposition: "You will not share it.", headline: "Gone again B" });
+    // The buyer's words behind a concept are in the packet: the critic scores the insight from them.
+    expect(second.insight).toMatchObject({ text: expect.any(String), basis: expect.stringMatching(/evidence|interpretation|hypothesis/) });
+    expect(packet.value.concepts.some((entry: { insight: { quote?: string } }) => entry.insight.quote)).toBe(true);
     const text = JSON.stringify(packet.value.concepts);
     for (const hidden of ["pictureAlone", "headlineAlone", "killTest", "coverTest", "risks", "Someone finished the pack."]) expect(text).not.toContain(hidden);
   });
