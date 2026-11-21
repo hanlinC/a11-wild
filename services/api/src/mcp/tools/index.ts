@@ -5,6 +5,7 @@ import { BoardService } from "../../board/service.js";
 import { BrandStore } from "../../brand/store.js";
 import { CheckStore } from "../../checks/store.js";
 import { BriefStore } from "../../brief/store.js";
+import { DirectionStore } from "../../direction/store.js";
 import { CopyStore } from "../../copy/store.js";
 import type { Config } from "../../config.js";
 import { Calibration } from "../../critic/calibration.js";
@@ -43,6 +44,7 @@ import { brandTools } from "./brand.js";
 import { ConceptBoardService } from "../../concepts/board.js";
 import { ConceptPicks } from "../../concepts/pick.js";
 import { conceptTools } from "./concepts.js";
+import { directionTools } from "./direction.js";
 import { copyTools } from "./copy.js";
 import { coreTools } from "./core.js";
 import { criticTools } from "./critic.js";
@@ -95,6 +97,7 @@ export function studioTools(parts: StudioParts) {
   const criticStore = new CriticStore(table, now);
   const copy = new CopyStore(table, now);
   const briefs = new BriefStore(table, now);
+  const directions = new DirectionStore(table, now);
   const references = new References(table, now);
   const meta = new MetaStore(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
@@ -109,7 +112,7 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, done, copy, meta, packs, pack, results };
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -119,6 +122,7 @@ export function studioTools(parts: StudioParts) {
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
     ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }),
+    ...directionTools({ batches, copy, directions }),
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),

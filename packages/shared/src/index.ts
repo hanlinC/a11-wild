@@ -355,6 +355,48 @@ export interface ConceptPick {
   at: string;
 }
 
+/** What one draft of a concept changes against the other two. Each is a few plain words. */
+export const DRAFT_AXES = ["composition", "productPosition", "scale", "camera", "light", "environment", "negativeSpace", "staging"] as const;
+export type DraftAxis = (typeof DRAFT_AXES)[number];
+/** The axes that change what the picture is, not only how it is lit: each pair of drafts differs on one of them. */
+export const MAIN_AXES: readonly DraftAxis[] = ["composition", "camera", "scale"];
+
+export const RISKS = ["low", "medium", "high"] as const;
+export type Risk = (typeof RISKS)[number];
+
+/** Where the words stand on the picture. The logo is small at the head of the column. */
+export const LOCKUPS = ["flush_left", "flush_right", "top_band_left"] as const;
+export type Lockup = (typeof LOCKUPS)[number];
+
+/** One of the three drafts of a concept: the question it asks the owner, and how it answers each axis. */
+export interface DraftPlan {
+  number: number;
+  question: string;
+  axes: Record<DraftAxis, string>;
+}
+
+/** How one picked concept will look: decided before any draft is paid for. */
+export interface ConceptDirection {
+  ideaId: string;
+  /** Why this look says the concept. */
+  why: string;
+  /** How hard the picture is for the model to make right. */
+  risk: Risk;
+  riskReason?: string;
+  /** What the three drafts share: the stage, the colour, the light. */
+  look: string;
+  lockup: Lockup;
+  drafts: DraftPlan[];
+}
+
+/** The direction of a batch of concept ads. Every save is a new version. */
+export interface Direction {
+  concepts: ConceptDirection[];
+  version: number;
+  at: string;
+  by: string;
+}
+
 /** The concept board: every concept of a batch with its roughs and the critic's review, for the owner's pick of three. */
 export interface ConceptBoard {
   batch: Batch;
