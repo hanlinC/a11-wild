@@ -57,6 +57,18 @@ describe("the copy from a11-adgen", () => {
     expect(second.value.canon).toEqual({ version: 1, lines: 2, changed: false });
   });
 
+  it("leaves a canon alone that the owner changed after the copy", async () => {
+    const records = [line(1), line(2)];
+    await callTool(studio, "import_ingest", { records, buildCanon: true });
+    await studio.services.canon.save({ text: "One clever object.", reason: "My own words.", by: "owner" });
+
+    const again = await callTool(studio, "import_ingest", { records, buildCanon: true });
+    expect(again.value.canon).toEqual({ version: 2, lines: 2, changed: false });
+    const more = await callTool(studio, "import_ingest", { records: [...records, line(4)], buildCanon: true });
+    expect(more.value.canon).toMatchObject({ version: 2, changed: false, note: expect.stringMatching(/left it alone/) });
+    expect((await studio.services.canon.get()).text).toBe("One clever object.");
+  });
+
   it("copies taste rows and swipe items once, with their own times", async () => {
     const records = [
       { kind: "taste", originId: "pick:b1:tof", entry: "pick", at: "2026-11-08T03:00:00.000Z", ownerSaid: "this one", about: "Kaya toast, draft 2" },

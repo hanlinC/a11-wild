@@ -10,6 +10,8 @@ import type { SwipeFile } from "../taste/swipe.js";
 import type { Net } from "../urlsafety.js";
 
 const PK = "IMPORT";
+/** The mark of the canon text that the copy last wrote. */
+const CANON_BUILT = "CANON_BUILT";
 const originId = z.string().min(1).max(200).describe("The record's id in a11-adgen.");
 const iso = z.string().datetime({ offset: true });
 const STAGES = ["all", "tof", "mof", "bof"] as const;
@@ -159,9 +161,13 @@ export class Importer {
     return Object.fromEntries(IMPORT_KINDS.map((kind) => [kind, items.filter((item) => item.sk.startsWith(`${kind}#`)).length])) as Record<ImportKind, number>;
   }
 
-  /** Writes the copied canon lines that are active as one canon version. A canon that already reads the same is left alone. */
-  async canonFromLines(by: string): Promise<{ version: number; lines: number; changed: boolean }> {
-    const items = await this.deps.table.query<{ pk: string; sk: string; line?: Extract<ImportRecord, { kind: "canon_line" }> }>(PK);
+  /**
+   * Writes the copied canon lines that are active as one canon version, once. The copy remembers the
+   * text it wrote, so a second run leaves the canon alone, and a canon the owner wrote or changed is
+   * never replaced by the copy.
+   */
+  async canonFromLines(by: string): Promise<{ version: number; lines: number; changed: boolean; note?: string }> {
+    const items = await this.deps.table.query<{ pk: string; sk: string; line?: Extract<ImportRecord, { kind: "canon_line" }>; built?: string }>(PK);
     const lines = items.flatMap((item) => (item.line?.status === "active" ? [item.line] : []));
     const current = await this.deps.canon.get();
     if (lines.length === 0) return { version: current.version, lines: 0, changed: false };
@@ -174,9 +180,22 @@ export class Importer {
     const text = STAGES.flatMap((stage) => {
       const mine = lines.filter((line) => line.stage === stage).sort((a, b) => a.originId.localeCompare(b.originId));
       return mine.length ? [`## ${titles[stage]}\n${mine.map((line) => `- ${line.text}`).join("\n")}`] : [];
-    }).join("\n\n");
-    if (text === current.text) return { version: current.version, lines: lines.length, changed: false };
+    })
+      .join("\n\n")
+      .trim();
+    const mark = (value: string) => createHash("sha256").update(value).digest("hex");
+    const built = items.find((item) => item.sk === CANON_BUILT)?.built;
+    const unchanged = { version: current.version, lines: lines.length, changed: false };
+    if (text === current.text) {
+      if (built !== mark(text)) await this.deps.table.put({ pk: PK, sk: CANON_BUILT, built: mark(text) });
+      return unchanged;
+    }
+    if (built === mark(text)) return unchanged;
+    if (current.version > 0 && built !== mark(current.text)) {
+      return { ...unchanged, note: "The canon was written or changed outside the copy, so the copy left it alone. Change it with canon_save." };
+    }
     const saved = await this.deps.canon.save({ text, reason: `Copied ${lines.length} active canon lines from a11-adgen.`, by });
+    await this.deps.table.put({ pk: PK, sk: CANON_BUILT, built: mark(saved.text) });
     return { version: saved.version, lines: lines.length, changed: true };
   }
 }
