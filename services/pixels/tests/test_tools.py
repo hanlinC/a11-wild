@@ -26,7 +26,10 @@ def load(name):
     return mod
 
 
+box_print = load("box_print")
 product_lock = load("product_lock")
+food_grade = load("food_grade")
+headline = load("headline")
 photo_finish = load("photo_finish")
 pack_check = load("pack_check")
 cap_check = load("cap_check")
@@ -53,6 +56,81 @@ class Tmp(unittest.TestCase):
         path = os.path.join(self.dir.name, name)
         Image.fromarray(arr.astype("uint8")).save(path)
         return path
+
+
+class BoxPrint(Tmp):
+    def packshot(self):
+        """A light 200x120 card with three dark bars (the print) in the block 40,40,160,80."""
+        a = np.full((120, 200, 3), 230, np.uint8)
+        for x in (50, 90, 130):
+            a[50:70, x:x + 8] = 30
+        return self.save("pack.png", a)
+
+    def box(self, **block):
+        return box_print.Box({"packshot": self.packshot(), "face": [0, 0, 200, 120], "blocks": [{"box": [40, 40, 160, 80], **block}]})
+
+    def test_an_ink_rel_out_of_range_is_refused(self):
+        for bad in (0, 1.5, -0.2, float("nan"), "0.8", True):
+            self.assertIn("ink_rel must be", exit_message(lambda: self.box(ink_rel=bad)))
+        self.box(ink_rel=1)  # the top of the range passes
+
+    def test_xmin_left_of_the_crop_cuts_nothing(self):
+        # P1: the crop starts at x 28 (40 - 12). An xmin of 5 is left of it and must keep the whole block.
+        plain, _ = self.box().ink_alpha(0)
+        cut, _ = self.box(xmin=5).ink_alpha(0)
+        self.assertGreater(plain.sum(), 0)
+        np.testing.assert_allclose(cut, plain)
+
+    def test_a_band_outside_the_block_stops_with_a_clear_message(self):
+        # P2: a band far outside the block leaves an empty mask.
+        msg = exit_message(self.box(band=[[1000, 1000], [1100, 1000], 3]).ink_alpha, 0)
+        self.assertIn("leaves no part of the block box", msg)
+
+    def test_a_band_only_in_the_crop_padding_stops_with_a_clear_message(self):
+        # The crop has 12 px of padding around the box; a band at y 30 (above the box top at 40) touches only that padding.
+        msg = exit_message(self.box(band=[[40, 30], [160, 30], 3]).ink_alpha, 0)
+        self.assertIn("leaves no part of the block box", msg)
+
+    def test_an_xmin_right_of_the_block_stops_with_a_clear_message(self):
+        msg = exit_message(self.box(xmin=500).ink_alpha, 0)
+        self.assertIn("leaves no part of the block box", msg)
+
+    def test_a_weak_local_fit_is_reported(self):
+        # P3: two flat pictures give no fit (ECC fails or scores 0): the script must say so.
+        flat = np.full((120, 200), 200, np.float32)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            H = box_print.refine(np.eye(3), [40, 40, 160, 80], flat, flat)
+        self.assertIn("WARNING: block [40, 40, 160, 80]: the local fit is weak", out.getvalue())
+        self.assertEqual(H.shape, (3, 3))
+
+
+    def test_the_plain_face_next_to_a_pale_backdrop_is_not_cleaned(self):
+        # W46 Sonnet run: the face beside the box edge read as print (dark against the backdrop) and was inpainted pale.
+        g = np.full((120, 200), 170, np.float32)  # the box face
+        g[:, 150:] = 240  # a pale backdrop right of the box edge
+        g[58:64, 100:140] = 60  # the render's own print, ending 10 px before the edge
+        amap = np.zeros_like(g)
+        amap[58:64, 100:140] = 1
+        dark, kill = box_print.print_mask(g, [amap])
+        self.assertTrue(dark[60, 120] > 0, "the print must be found")
+        self.assertEqual(int(kill[75, 146]), 0, "the plain face next to the edge must stay")
+        self.assertEqual(int(dark[50, 145]), 0)
+
+    def test_each_block_is_judged_against_its_own_face(self):
+        # Two blocks: one on a light face, one on a face in shade. Print in the shaded block is lighter than 0.82 of the
+        # light face but darker than 0.82 of its own face, so it must still be found.
+        g = np.full((120, 300), 200, np.float32)
+        g[:, 150:] = 110  # the face in shade
+        g[58:64, 40:100] = 60
+        g[58:64, 190:250] = 80
+        a1, a2 = np.zeros_like(g), np.zeros_like(g)
+        a1[58:64, 40:100] = 1
+        a2[58:64, 190:250] = 1
+        dark, _ = box_print.print_mask(g, [a1, a2])
+        self.assertTrue(dark[60, 70] > 0 and dark[60, 220] > 0)
+        dark, _ = box_print.print_mask(g, [a1, a2], [None, 0.5])  # a block's ink_rel overrides the default
+        self.assertEqual(int(dark[60, 220]), 0)
 
 
 class ProductLock(Tmp):
@@ -258,6 +336,299 @@ class LayoutReprint(Tmp):
         self.assertIn("--search-rot", exit_message(product_lock.reprint, self.rp(self.pack, search_rot=-1)))
         self.assertIn("--search-px", exit_message(product_lock.reprint, self.rp(self.pack, search_px=-5)))
         self.assertIn("--light-px", exit_message(product_lock.reprint, self.rp(self.pack, light_px=0)))
+
+
+class FoodGrade(unittest.TestCase):
+    def picture(self):
+        """A pale backdrop (240,235,225) with orange 'kernels' at x 0 to 40: the food touches the left edge."""
+        a = np.full((60, 120, 3), (240, 235, 225), float)
+        a[10:50, 0:40] = (200, 120, 40)
+        return Image.fromarray(a.astype("uint8"))
+
+    def ref(self):
+        return Image.fromarray(np.full((40, 40, 3), (210, 140, 50), np.uint8))
+
+    def test_a_region_at_the_left_edge_samples_the_backdrop_at_its_right(self):
+        # P5: X0 = 0 used to give an empty or wrapped slice, so a wrong backdrop and a wrong mask.
+        src = self.picture()
+        out, _ = food_grade.grade(src, [(0, 10, 40, 50)], self.ref(), (0, 0, 40, 40))
+        a, b = np.asarray(src).astype(int), np.asarray(out).astype(int)
+        want = np.array([210, 140, 50])  # the reference kernels
+        before = np.abs(a[20:40, 5:35] - want).sum(axis=-1).mean()
+        after = np.abs(b[20:40, 5:35] - want).sum(axis=-1).mean()
+        self.assertLess(after, before / 2)  # the kernels moved toward the reference
+        np.testing.assert_array_equal(b[:, 60:], a[:, 60:])  # the backdrop beside them did not change
+
+    def test_a_region_outside_the_picture_is_refused(self):
+        with self.assertRaisesRegex(ValueError, r"region \(100, 10, 140, 50\) is outside the packshot \(120x60\)"):
+            food_grade.grade(self.picture(), [(100, 10, 140, 50)], self.ref(), (0, 0, 40, 40))
+
+    def test_a_region_as_wide_as_the_picture_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "leaves no backdrop to sample"):
+            food_grade.grade(self.picture(), [(0, 10, 120, 50)], self.ref(), (0, 0, 40, 40))
+
+    def test_a_ref_box_outside_the_close_up_is_refused(self):
+        with self.assertRaisesRegex(ValueError, r"ref_box \(0, 0, 80, 40\) is outside the close-up \(40x40\)"):
+            food_grade.grade(self.picture(), [(0, 10, 40, 50)], self.ref(), (0, 0, 80, 40))
+
+
+FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+
+@unittest.skipUnless(os.path.isfile(FONT), "needs DejaVu Sans (on the Ubuntu CI runner)")
+
+
+class Headline(Tmp):
+    # DejaVu Sans ships with Ubuntu (the CI runner) and this session; any TrueType file works.
+    FONT = FONT
+
+    def run_(self, *extra):
+        src = self.save("in.png", np.full((500, 400, 3), 220))
+        out = os.path.join(self.dir.name, "out.jpg")
+        with contextlib.redirect_stdout(io.StringIO()) as buf:
+            headline.main(["--in", src, "--out", out, *extra])
+        return out, buf.getvalue()
+
+    def test_the_words_are_set_inside_the_area(self):
+        out, msg = self.run_("--font", self.FONT, "--headline", "Ten flavours, one cake.", "--subline", "Every slice differs.", "--area", "0.5,0.2,0.95,0.5")
+        a = np.asarray(Image.open(out).convert("L"))
+        ys, xs = np.where(a < 100)
+        self.assertTrue(len(xs) > 0, "no text was drawn")
+        self.assertGreaterEqual(xs.min(), 0.5 * 400 - 2)
+        self.assertLessEqual(xs.max(), 0.95 * 400 + 2)
+        self.assertGreaterEqual(ys.min(), 0.2 * 500 - 2)
+        self.assertLessEqual(ys.max(), 0.5 * 500 + 2)
+        self.assertIn("text top 20.0%", msg)
+
+    def test_the_engine_3_lockup_checks_size_and_clear_space(self):
+        # Owner, 18-11-2026: big stacked type, and clear air between the words and the food.
+        words = ["--font", self.FONT, "--case", "upper", "--headline", "The only | pie chart | I like.", "--area", "0.07,0.05,0.93,0.45"]
+        out, msg = self.run_(*words, "--min-head", "0.07", "--product-top", "0.6")
+        self.assertIn("headline", msg)
+        self.assertIn("under --min-head", exit_message(self.run_, *words, "--min-head", "0.3"))
+        self.assertIn("above the product top", exit_message(self.run_, *words, "--product-top", "0.44"))  # text ends at 41.8%
+        self.assertIn("--product-top more than 0", exit_message(self.run_, *words, "--product-top", "0"))
+        # The check measures the drawn ink: a descender under the last baseline counts (review on #112).
+        low = ["--font", self.FONT, "--case", "upper", "--headline", "Ça | quip", "--area", "0.07,0.05,0.93,0.45"]
+        _, msg = self.run_(*low)
+        bottom = float(re.search(r"bottom ([0-9.]+)%", msg).group(1)) / 100  # the last baseline
+        self.assertIn("above the product top", exit_message(self.run_, *low, "--product-top", f"{bottom + 0.045:.3f}"))
+
+    def test_a_missing_font_stops_with_a_clear_message(self):
+        self.assertIn("font file not found", exit_message(self.run_, "--font", "/no/such.ttf", "--headline", "Hi", "--area", "0,0,1,1"))
+
+    def test_an_area_outside_the_picture_is_refused(self):
+        self.assertIn("is not inside the picture", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi", "--area", "0.5,0.2,1.2,0.5"))
+
+    def test_words_that_cannot_fit_stop_with_a_clear_message(self):
+        self.assertIn("do not fit", exit_message(self.run_, "--font", self.FONT, "--headline", "Supercalifragilisticexpialidocious", "--area", "0.9,0.1,0.95,0.12"))
+
+    def family_run(self, *extra):
+        # The kit font comes from a cache; a fetch would fail (no network in the tests).
+        cache = os.path.join(self.dir.name, "fonts")
+        os.makedirs(cache, exist_ok=True)
+        shutil.copy(self.FONT, os.path.join(cache, "dejavu-sans-600.ttf"))
+        old, headline.GOOGLE_CSS = headline.GOOGLE_CSS, "file:///no/such/{family}-{wght}.css"
+        try:
+            return self.run_("--cache", cache, "--wght", "600", "--headline", "Ten flavours.", "--area", "0.1,0.2,0.9,0.5", *extra)
+        finally:
+            headline.GOOGLE_CSS = old
+
+    def test_the_kit_font_family_is_used_by_name(self):
+        out, msg = self.family_run("--family", "DejaVu Sans")
+        self.assertIn("headline", msg)
+        self.assertNotIn("FALLBACK", msg)
+
+    def test_a_family_that_cannot_be_found_stops_with_a_clear_message(self):
+        self.assertIn("is not on Google Fonts", exit_message(self.family_run, "--family", "No Such Brand Font"))
+
+    def test_non_latin_words_are_refused(self):
+        self.assertIn("only Latin-script", exit_message(self.run_, "--font", self.FONT, "--headline", "十种口味", "--area", "0,0,1,1"))
+        self.assertIsNone(headline.non_latin("Crème brûlée, 1º lugar"))
+
+    def test_a_negative_gap_is_refused(self):
+        self.assertIn("--gap must be 0 or more", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi", "--area", "0,0,1,1", "--gap", "-1"))
+
+    def test_a_missing_picture_stops_with_a_clear_message(self):
+        out = os.path.join(self.dir.name, "o.jpg")
+        self.assertIn("cannot read the picture", exit_message(headline.main, ["--in", "/no/such.jpg", "--out", out, "--font", self.FONT, "--headline", "Hi", "--area", "0,0,1,1"]))
+
+    def test_the_fallback_family_is_used_and_named(self):
+        out, msg = self.family_run("--family", "No Such Brand Font", "--fallback", "DejaVu Sans")
+        self.assertIn("FALLBACK: the headline font 'No Such Brand Font'", msg)
+
+    def test_capitals_forced_breaks_and_an_accent_word(self):
+        out, msg = self.run_("--font", self.FONT, "--headline", "Wait, there’s | ten?", "--case", "upper", "--leading", "0.97", "--align", "center",
+                             "--accent", "ten?", "--accent-color", "FA363A", "--area", "0.05,0.2,0.95,0.6")
+        self.assertNotIn("in 1 line(s)", msg)  # the " | " forces a break
+        a = np.asarray(Image.open(out).convert("RGB")).astype(int)
+        red = (a[..., 0] > 180) & (a[..., 1] < 110) & (a[..., 2] < 110)
+        self.assertTrue(red.any(), "the accent word was not set in the accent colour")
+        ys, _ = np.where(red)
+        dark = (a.sum(2) < 150)
+        dys, _ = np.where(dark)
+        self.assertGreater(ys.min(), dys.min(), "the accent word belongs on the second line")
+        self.assertIn("text top 20.0%", msg)
+
+    def test_a_stub_line_is_avoided_when_a_smaller_size_fixes_it(self):
+        self.assertTrue(headline.stub(["10 FLAVOURS", "FOR", "S$58.90."]))
+        self.assertFalse(headline.stub(["CHOOSING", "IS THE", "HARD PART."]))
+        self.assertFalse(headline.stub(["HI"]))
+        out, msg = self.run_("--font", self.FONT, "--headline", "Ten flavours | for S$58.90.", "--case", "upper", "--area", "0.5,0.2,0.95,0.6")
+        self.assertIn("in 2 line(s)", msg)
+
+    def test_an_accent_needs_a_colour_and_a_word_of_the_headline(self):
+        self.assertIn("--accent needs --accent-color", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi there", "--area", "0,0,1,1", "--accent", "hi"))
+        self.assertIn("not in the headline", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi there", "--area", "0,0,1,1", "--accent", "bye", "--accent-color", "FF0000"))
+
+    def test_a_bad_accent_colour_is_refused(self):
+        self.assertIn("--accent-color must be a hex colour", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi there", "--area", "0,0,1,1", "--accent", "hi", "--accent-color", "FF00000"))
+
+    def test_an_accented_capital_stays_inside_the_area(self):
+        out, msg = self.run_("--font", self.FONT, "--headline", "Élan", "--case", "upper", "--area", "0.1,0.3,0.9,0.5")
+        a = np.asarray(Image.open(out).convert("L"))
+        ys, _ = np.where(a < 100)
+        self.assertGreaterEqual(ys.min(), 0.3 * 500 - 2)
+
+    def test_breathing_space_margins_and_the_logo_gap(self):
+        # Owner, 20-11-2026 (Allies engine 3 test): the logo size changed from ad to ad, and the words sat too close to
+        # the logo and the product: "all the empty space needing breathing space".
+        words = ["--font", self.FONT, "--headline", "Hi there", "--area"]
+        self.assertIn("leaves less than 4% of the width", exit_message(self.run_, *words, "0.02,0.3,0.9,0.5"))
+        self.assertIn("leaves less than 4% of the width", exit_message(self.run_, *words, "0.1,0.3,0.98,0.5"))
+        self.assertIn("from the top, less than --min-margin", exit_message(self.run_, *words, "0.1,0.02,0.9,0.5"))
+        self.assertIn("--min-clear under 0.03", exit_message(self.run_, *words, "0.1,0.1,0.9,0.4", "--product-top", "0.6", "--min-clear", "0.02"))
+        logo = os.path.join(self.dir.name, "logo.png")
+        Image.new("RGBA", (100, 40), (0, 0, 0, 255)).save(logo)  # 0.25 of 400 px wide: 40 px high, its bottom at 12.5% of 500
+        self.assertIn("less than --min-margin", exit_message(self.run_, *words, "0.1,0.3,0.9,0.5", "--logo", logo, "--logo-top", "0.02"))
+        self.assertIn("gap between the logo bottom", exit_message(self.run_, *words, "0.1,0.14,0.9,0.5", "--logo", logo))
+        out, msg = self.run_(*words, "0.1,0.16,0.9,0.5", "--logo", logo)
+        self.assertIn("text top 16.0%", msg)
+        # Devin Review, PR 140: a logo 1% from the right edge, and words that run to the bottom edge, passed.
+        self.assertIn("less than --min-margin", exit_message(self.run_, *words, "0.1,0.3,0.9,0.5", "--logo", logo, "--logo-x", "0.74"))
+        self.assertIn("above the bottom edge", exit_message(self.run_, *words, "0.1,0.9,0.9,0.995"))
+        self.assertIn("only Latin-script", exit_message(self.run_, *words, "0.1,0.3,0.9,0.5", "--footnote", "专家评分"))
+        # --min-margin 0 turns the margin check off for a picture that needs words to the edge.
+        out, _ = self.run_(*words, "0,0,1,1", "--min-margin", "0")
+        self.assertTrue(os.path.isfile(out))
+
+    def test_the_footnote_sits_on_plain_backdrop_only(self):
+        def run(src, *extra):
+            out = os.path.join(self.dir.name, "out.jpg")
+            with contextlib.redirect_stdout(io.StringIO()):
+                headline.main(["--in", src, "--out", out, "--font", self.FONT, "--headline", "Hi there", "--area", "0.1,0.1,0.9,0.4",
+                               "--footnote", "Expert scored, 35 people.", "--color", "000000", *extra])
+            return out
+        plain = self.save("plain.png", np.full((1000, 800, 3), 220))
+        a = np.asarray(Image.open(run(plain)).convert("L"))
+        ys, xs = np.where(a[800:] < 150)
+        self.assertTrue(len(xs) > 0, "no footnote was drawn")
+        self.assertAlmostEqual((ys.min() + ys.max()) / 2 + 800, 945, delta=8)
+        self.assertGreaterEqual(xs.min(), 0.1 * 800 - 3)
+        # The real failure: the handle of a hand mirror crossed the top of the footnote (Allies, 20-11-2026).
+        handle = np.full((1000, 800, 3), 220)
+        handle[925:940, 60:380] = 120  # a bar across the left footnote place
+        self.assertIn("would sit on an object", exit_message(run, self.save("handle.png", handle)))
+        a = np.asarray(Image.open(run(self.save("handle2.png", handle), "--footnote-align", "right")).convert("L"))
+        ys, xs = np.where(a[940:] < 150)
+        self.assertLessEqual(xs.max(), 0.9 * 800 + 3)
+        self.assertIn("raise --footnote-y", exit_message(run, plain, "--footnote-y", "0.975"))
+
+    def test_the_words_sit_on_one_tone(self):
+        # The real failure (Cat & the Fiddle, engine 3, 21-11-2026): a white and brand-yellow (#FFC805) split down the middle
+        # of the backdrop cut "Chocolate" and "so". Grain as the photo finish adds it; the check must ignore that.
+        rng = np.random.default_rng(7)
+        grain = lambda: rng.integers(-10, 11, (1280, 1024, 1))
+        split = np.full((1280, 1024, 3), 255)
+        split[:, 512:] = (255, 200, 5)
+        split = self.save("split.png", np.clip(split + grain(), 0, 255))
+        words = ["--font", self.FONT, "--case", "upper", "--headline", "Chocolate | or fruit?", "--subline", "Why not both, so everyone wins."]
+
+        def run(src, area, sub="Why not both, so everyone wins."):
+            out = os.path.join(self.dir.name, "out.jpg")
+            with contextlib.redirect_stdout(io.StringIO()):
+                headline.main(["--in", src, "--out", out, *words[:-1], sub, "--area", area])
+            return out
+
+        msg = exit_message(run, split, "0.07,0.08,0.93,0.33")
+        self.assertRegex(msg, r"edge runs down through the words at (49\.\d|50\.\d)%")
+        self.assertTrue(os.path.isfile(run(split, "0.06,0.08,0.46,0.33")))  # every word on the white half
+        self.assertTrue(os.path.isfile(run(split, "0.54,0.08,0.94,0.33")))  # every word on the yellow half
+        # A horizontal split between the lines: the headline on white, the subline on yellow.
+        band = np.full((1280, 1024, 3), 255)
+        band[200:] = (255, 200, 5)
+        self.assertIn("edge runs across the words", exit_message(run, self.save("band.png", band), "0.07,0.08,0.93,0.33"))
+        # Devin Review, PR 145: a split just beside the words passes; a split that runs only under a short subline fails.
+        ink = np.asarray(Image.open(run(self.save("white.png", np.full((1280, 1024, 3), 255)), "0.07,0.08,0.93,0.33")).convert("L")) < 128
+        cols, rows = np.where(ink.any(0))[0], np.where(ink.any(1))[0]
+        beside = np.full((1280, 1024, 3), 255)
+        beside[:, cols.max() + 12:] = (255, 200, 5)  # 12 px right of the last ink, past the glyph box
+        self.assertTrue(os.path.isfile(run(self.save("beside.png", beside), "0.07,0.08,0.93,0.33")))
+        # A short subline under a wide headline: the edge spans the subline but under 60% of the whole block.
+        ink = np.asarray(Image.open(run(self.save("white2.png", np.full((1280, 1024, 3), 255)), "0.07,0.08,0.93,0.33", "So.")).convert("L")) < 128
+        rows = np.where(ink.any(1))[0]
+        sub_top = rows[np.where(np.diff(rows) > 1)[0][-1] + 1]  # the first ink row of the last line: the subline
+        sub_right = int(np.where(ink[sub_top:].any(0))[0].max())
+        self.assertLess(sub_right + 40 - 72, 0.6 * (int(np.where(ink.any(0))[0].max()) - 72))  # the whole block check alone misses it
+        short = np.full((1280, 1024, 3), 255)
+        short[sub_top + 6:, : sub_right + 40] = (255, 200, 5)  # the block ends past the line
+        self.assertIn("edge runs across the words", exit_message(run, self.save("short.png", short), "0.07,0.08,0.93,0.33", "So."))
+        # Devin Review, PR 145: a band that starts 2 px under the subline's last ink is beside the words, not through them.
+        under = np.full((1280, 1024, 3), 255)
+        under[rows.max() + 3:, : sub_right + 40] = (255, 200, 5)
+        self.assertTrue(os.path.isfile(run(self.save("under.png", under), "0.07,0.08,0.93,0.33", "So.")))
+        # A smooth light fall-off of 70 levels across the picture is one tone, not an edge.
+        ramp = np.repeat(np.linspace(200, 130, 1024)[None, :, None], 1280, 0).repeat(3, 2)
+        self.assertTrue(os.path.isfile(run(self.save("ramp.png", np.clip(ramp + grain(), 0, 255)), "0.07,0.08,0.93,0.33")))
+
+    def test_the_logo_preview_is_drawn_at_the_top_centre(self):
+        logo = os.path.join(self.dir.name, "logo.png")
+        Image.new("RGBA", (100, 40), (0, 0, 0, 255)).save(logo)
+        out, msg = self.run_("--font", self.FONT, "--headline", "Hi", "--area", "0.1,0.3,0.9,0.5", "--logo", logo)
+        a = np.asarray(Image.open(out).convert("L"))
+        self.assertLess(int(a[int(500 * 0.045) + 5, 200]), 60)  # the logo's middle
+        self.assertGreater(int(a[int(500 * 0.045) + 5, 20]), 180)  # the backdrop beside it
+        self.assertNotIn("WARNING", msg)
+
+    def test_a_small_trade_mark_does_not_pull_the_centred_logo_left(self):
+        # A wordmark with a small TM at its right top (the IRVINS logo): the wordmark, not the whole file, is centred.
+        logo = os.path.join(self.dir.name, "logo.png")
+        mark = Image.new("RGBA", (220, 60), (0, 0, 0, 0))
+        mark.paste((0, 0, 0, 255), (0, 0, 200, 60))   # the wordmark
+        mark.paste((0, 0, 0, 255), (208, 0, 220, 10))  # the TM: small, short, set apart
+        mark.save(logo)
+        out, _ = self.run_("--font", self.FONT, "--headline", "Hi", "--area", "0.1,0.3,0.9,0.5", "--logo", logo, "--logo-width", "0.55")
+        a = np.asarray(Image.open(out).convert("L"))
+        cols = np.where(a[int(500 * 0.045) + 12] < 60)[0]                # a row through the wordmark only, under the TM
+        self.assertLess(abs((cols.min() + cols.max()) / 2 - 200), 2, "the wordmark is centred")
+        # A trailing full stop sits low: it is part of the wordmark, so the whole file is centred.
+        mark = Image.new("RGBA", (220, 60), (0, 0, 0, 0))
+        mark.paste((0, 0, 0, 255), (0, 0, 200, 60))
+        mark.paste((0, 0, 0, 255), (208, 50, 220, 60))
+        mark.save(logo)
+        out, _ = self.run_("--font", self.FONT, "--headline", "Hi", "--area", "0.1,0.3,0.9,0.5", "--logo", logo, "--logo-width", "0.55")
+        a = np.asarray(Image.open(out).convert("L"))
+        cols = np.where(a[int(500 * 0.045) + 55] < 60)[0]                # a row through the wordmark and the full stop
+        self.assertLess(abs((cols.min() + cols.max()) / 2 - 200), 2, "the logo with its full stop is centred")
+
+    def test_the_logo_can_head_a_text_column(self):
+        logo = os.path.join(self.dir.name, "logo.png")
+        Image.new("RGBA", (100, 40), (0, 0, 0, 255)).save(logo)
+        out, msg = self.run_("--font", self.FONT, "--headline", "Hi", "--area", "0.5,0.3,0.9,0.5", "--logo", logo, "--logo-x", "0.5", "--logo-width", "0.3")
+        a = np.asarray(Image.open(out).convert("L"))
+        y = int(500 * 0.045) + 5
+        self.assertLess(int(a[y, int(400 * 0.55)]), 60)  # inside the logo, right of the centre
+        self.assertGreater(int(a[y, int(400 * 0.45)]), 200)  # left of it stays clear
+        self.assertIn("--logo-x must", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi", "--area", "0.5,0.3,0.9,0.5", "--logo", logo, "--logo-x", "0.9"))
+
+    def test_a_logo_that_reaches_the_text_is_refused_before_drawing(self):
+        logo = os.path.join(self.dir.name, "logo.png")
+        Image.new("RGBA", (100, 100), (0, 0, 0, 255)).save(logo)
+        msg = exit_message(self.run_, "--font", self.FONT, "--headline", "Hi", "--area", "0.1,0.1,0.9,0.5", "--logo", logo, "--logo-width", "0.5")
+        self.assertIn("the logo bottom", msg)
+
+    def test_a_leading_out_of_range_is_refused(self):
+        self.assertIn("--leading must be", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi", "--area", "0,0,1,1", "--leading", "0.3"))
 
 
 class PhotoFinish(Tmp):

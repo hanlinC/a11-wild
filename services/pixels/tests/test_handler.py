@@ -197,5 +197,167 @@ class Handler(unittest.TestCase):
             handler.work({"tool": "skeleton", "resultKey": "batches/b1/x.json"}, self.store)
 
 
+FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+
+def stage(size=(1024, 1280), tone=(236, 226, 205)):
+    a = np.empty((size[1], size[0], 3), np.uint8)
+    a[:] = tone
+    return Image.fromarray(a)
+
+
+@unittest.skipUnless(os.path.isfile(FONT), "needs DejaVu Sans (on the Ubuntu CI runner)")
+class Words(unittest.TestCase):
+    def setUp(self):
+        self.store = MemoryStore()
+        self.store.add("batches/b1/drafts/d1.png", stage())
+        with open(FONT, "rb") as file:
+            self.store.files["brands/br1/fonts/dejavu-700.ttf"] = file.read()
+        logo = np.zeros((60, 240, 4), np.uint8)
+        logo[10:50, 10:230] = (20, 20, 20, 255)
+        self.store.add("brands/br1/logo.png", Image.fromarray(logo, "RGBA"))
+
+    def job(self, **input):
+        event = {"jobId": "j1", "batchId": "b1", "tool": "headline", "input": input, "resultKey": "jobs/b1/j1.json", "outKey": "batches/b1/typesets/j1.jpg"}
+        return handler.work(event, self.store)
+
+    def words(self, **more):
+        return self.job(**{"renderKey": "batches/b1/drafts/d1.png", "fontKey": "brands/br1/fonts/dejavu-700.ttf", "headline": "Ten flavours, | one cake.", "subline": "Every slice differs.", "area": [0.08, 0.2, 0.92, 0.5], "case": "upper", **more})
+
+    def test_the_words_and_the_logo_are_set_on_the_picture(self):
+        answer = self.words(logoKey="brands/br1/logo.png", logoWidth=0.2, logoTop=0.05)
+        self.assertTrue(answer["ok"], answer)
+        picture = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        dark = picture.sum(axis=2) < 200
+        self.assertTrue(dark[int(0.2 * 1280):int(0.5 * 1280)].any())  # the words
+        self.assertTrue(dark[int(0.05 * 1280):int(0.12 * 1280)].any())  # the logo
+        self.assertFalse(dark[int(0.6 * 1280):].any())  # nothing below the area
+        self.assertIn("headline", answer["line"])
+
+    def test_a_logo_on_a_plain_backdrop_loses_the_backdrop_and_takes_one_colour(self):
+        flat = np.full((60, 240, 3), 255, np.uint8)
+        flat[10:50, 10:230] = (20, 20, 20)
+        self.store.add("brands/br1/flat.jpg", Image.fromarray(flat), fmt="JPEG")
+        self.store.add("batches/b1/drafts/d1.png", stage(tone=(30, 30, 40)))
+        answer = self.words(logoKey="brands/br1/flat.jpg", logoColour="FFFFFF", colour="FFFFFF", logoWidth=0.2, logoTop=0.05)
+        self.assertTrue(answer["ok"], answer)
+        band = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)[int(0.05 * 1280):int(0.09 * 1280)]
+        light = band.sum(axis=2) > 600
+        self.assertTrue(light.any())  # the logo's ink, now light
+        self.assertLess(light.mean(), 0.2)  # and no white box round it
+
+    def test_words_that_run_over_a_sharp_edge_are_refused(self):
+        split = np.asarray(stage()).copy()
+        split[:, 512:] = (20, 20, 20)
+        self.store.add("batches/b1/drafts/d1.png", Image.fromarray(split))
+        answer = self.words()
+        self.assertFalse(answer["ok"])
+        self.assertIn("one tone", answer["error"])
+
+    def test_a_file_that_is_no_font_is_refused(self):
+        self.store.files["brands/br1/fonts/bad.ttf"] = b"<html>not a font</html>"
+        answer = self.words(fontKey="brands/br1/fonts/bad.ttf")
+        self.assertEqual(answer["error"], "The font file is not a TrueType, OpenType, WOFF or WOFF2 font.")
+        answer = self.words(fontKey="brands/br1/logo.png")
+        self.assertEqual(answer["error"], "The job names no font file.")
+
+    def test_the_words_must_fit_and_be_given(self):
+        self.assertIn("do not fit", self.words(area=[0.4, 0.4, 0.45, 0.42])["error"])
+        self.assertIn("headline needs words", self.words(headline=" ")["error"])
+        self.assertIn("align is one of", self.words(align="justify")["error"])
+
+
+class Repairs(unittest.TestCase):
+    def setUp(self):
+        self.store = MemoryStore()
+        self.store.add("products/p/pack.png", packshot())
+
+    def job(self, tool, **input):
+        event = {"jobId": "j1", "batchId": "b1", "tool": tool, "input": input, "resultKey": "jobs/b1/j1.json", "outKey": "batches/b1/pixels/j1.jpg"}
+        return handler.work(event, self.store)
+
+    def test_a_plan_product_takes_another_real_photo_of_the_product(self):
+        slice_ = np.full((300, 300, 3), 255, np.uint8)
+        slice_[60:240, 40:260] = (200, 150, 40)
+        self.store.add("products/p/food.png", Image.fromarray(slice_))
+        plan = {"size": [1024, 1280], "bg": "#E83C28", "products": [{"cx": 0.3, "base": 0.8, "height": 0.3}, {"cx": 0.7, "base": 0.8, "height": 0.2, "photoKey": "products/p/food.png"}]}
+        answer = self.job("skeleton", packKey="products/p/pack.png", plan=plan)
+        self.assertTrue(answer["ok"], answer)
+        picture = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        blue = picture[..., 2] > 120
+        yellow = (picture[..., 0] > 170) & (picture[..., 1] > 120) & (picture[..., 2] < 90)
+        self.assertTrue(blue[:, :512].any() and not blue[:, 512:].any())
+        self.assertTrue(yellow[:, 512:].any() and not yellow[:, :512].any())
+
+    def test_a_plan_photo_outside_the_picture_folders_is_not_read(self):
+        self.store.files["jobs/b1/other.json"] = b"{}"
+        plan = {"products": [{"cx": 0.5, "base": 0.8, "height": 0.3, "photoKey": "jobs/b1/other.json"}]}
+        self.assertFalse(self.job("skeleton", packKey="products/p/pack.png", plan=plan)["ok"])
+
+    def test_a_row_of_packs_gets_food_that_differs_from_pack_to_pack(self):
+        rng = np.random.default_rng(3)
+        jar = np.full((400, 400, 3), 255, np.uint8)
+        jar[50:350, 50:350] = (20, 40, 160)
+        jar[120:220, 60:340] = rng.integers(80, 220, (100, 280, 3))  # the food window
+        self.store.add("products/p/jar.png", Image.fromarray(jar))
+        plan = {"size": [1024, 1280], "bg": "#E83C28", "products": [{"cx": 0.3, "base": 0.8, "height": 0.3}, {"cx": 0.7, "base": 0.8, "height": 0.3}]}
+        answer = self.job("skeleton", packKey="products/p/jar.png", plan=plan, vary={"regions": [[60, 120, 340, 220]], "seed": 5})
+        self.assertTrue(answer["ok"], answer)
+        picture = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        left, right = picture[:, :512], picture[:, 512:]
+        self.assertGreater(np.abs(left - right).mean(), 1.0)  # not the same kernels twice
+        self.assertFalse(self.job("skeleton", packKey="products/p/jar.png", plan=plan, vary={"regions": []})["ok"])
+
+    def test_food_grade_moves_the_food_toward_the_real_close_up(self):
+        rng = np.random.default_rng(1)
+        pale = np.full((1280, 1024, 3), 235, np.uint8)
+        pale[400:800, 300:700] = np.clip(rng.normal((200, 170, 120), 12, (400, 400, 3)), 0, 255)
+        golden = np.clip(rng.normal((205, 140, 50), 14, (300, 300, 3)), 0, 255).astype(np.uint8)
+        self.store.add("batches/b1/drafts/d1.png", Image.fromarray(pale))
+        self.store.add("products/p/food.png", Image.fromarray(golden))
+        answer = self.job("food_grade", renderKey="batches/b1/drafts/d1.png", foodKey="products/p/food.png", refBox=[20, 20, 280, 280], regions=[[300, 400, 700, 800]])
+        self.assertTrue(answer["ok"], answer)
+        after = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        self.assertLess(after[450:750, 350:650, 2].mean(), 110)  # less blue: warmer
+        self.assertTrue(np.abs(after[:300] - 235).max() <= 3)  # the backdrop stays
+        self.assertIn("never pushed past", self.job("food_grade", renderKey="batches/b1/drafts/d1.png", foodKey="products/p/food.png", refBox=[20, 20, 280, 280], regions=[[300, 400, 700, 800]], strength=1.6)["error"])
+
+    def test_relight_shades_the_side_away_from_the_light(self):
+        self.store.add("batches/b1/drafts/d1.png", render(200, 600))
+        answer = self.job("relight", renderKey="batches/b1/drafts/d1.png", box=[412, 612, 500, 1100], light="left", floor=[232, 60, 40])
+        self.assertTrue(answer["ok"], answer)
+        after = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        self.assertGreater(after[800, 440].sum(), after[800, 590].sum())
+        self.assertIn("left or right", self.job("relight", renderKey="batches/b1/drafts/d1.png", box=[412, 612, 500, 1100], light="up")["error"])
+
+    def test_box_print_refuses_a_typeset_block_and_a_render_without_the_printed_face(self):
+        self.store.add("batches/b1/finals/f1.png", stage())
+        typeset = self.job("box_print", packKey="products/p/pack.png", renderKey="batches/b1/finals/f1.png", face=[50, 50, 150, 350], blocks=[{"box": [60, 100, 140, 130], "typeset": {"text": "X"}}])
+        self.assertIn("Leave typeset out", typeset["error"])
+        plain = self.job("box_print", packKey="products/p/pack.png", renderKey="batches/b1/finals/f1.png", face=[50, 50, 150, 350], blocks=[{"box": [60, 100, 140, 130]}])
+        self.assertFalse(plain["ok"])
+        self.assertRegex(plain["error"], "features|matches")
+
+    def test_an_open_pack_keeps_the_real_photo_below_the_cut(self):
+        square = np.full((400, 400, 3), 255, np.uint8)
+        square[100:380, 120:280] = (20, 40, 160)
+        square[60:100, 150:250] = (200, 30, 30)  # the cap
+        self.store.add("products/p/square.png", Image.fromarray(square))
+        padded = self.job("pack_pad", packKey="products/p/square.png")
+        self.assertTrue(padded["ok"], padded)
+        pad = self.store.picture(padded["imageKey"]).convert("RGB")
+        self.assertEqual(pad.size, (400, 500))
+        self.store.add("batches/b1/pack_pads/pad.png", pad)
+        edit = np.asarray(pad).copy()
+        edit[110:150, 150:250] = (180, 180, 190)  # the model took the cap off: an open neck
+        edit[300:] = 0  # and spoiled the label below
+        self.store.add("batches/b1/drafts/edit.png", Image.fromarray(edit))
+        answer = self.job("pack_open", paddedKey="batches/b1/pack_pads/pad.png", renderKey="batches/b1/drafts/edit.png", realFrom=200, strip=[130, 139])
+        self.assertTrue(answer["ok"], answer)
+        opened = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        self.assertTrue(np.abs(opened[320:420, 130:270] - np.asarray(pad).astype(int)[320:420, 130:270]).max() <= 12)  # the real label, not the model's
+        self.assertIn("realFrom", self.job("pack_open", paddedKey="batches/b1/pack_pads/pad.png", renderKey="batches/b1/drafts/edit.png", strip=[130, 139])["error"])
+
+
 if __name__ == "__main__":
     unittest.main()
