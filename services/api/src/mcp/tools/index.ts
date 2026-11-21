@@ -12,6 +12,7 @@ import { CriticStore } from "../../critic/store.js";
 import { FactStore } from "../../facts/store.js";
 import { FalClient } from "../../fal/client.js";
 import { ImageStore } from "../../images/store.js";
+import { MetaStore } from "../../meta/store.js";
 import { Importer } from "../../import/ingest.js";
 import { ParallelClient } from "../../parallel/client.js";
 import { PickStore } from "../../picks/store.js";
@@ -40,6 +41,7 @@ import { coreTools } from "./core.js";
 import { criticTools } from "./critic.js";
 import { factTools } from "./facts.js";
 import { importTools } from "./import.js";
+import { metaTools } from "./meta.js";
 import { pixelTools } from "./pixels.js";
 import { renderTools } from "./render.js";
 import { spendTools } from "./spend.js";
@@ -84,6 +86,7 @@ export function studioTools(parts: StudioParts) {
   const criticStore = new CriticStore(table, now);
   const copy = new CopyStore(table, now);
   const references = new References(table, now);
+  const meta = new MetaStore(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
   const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore });
@@ -91,7 +94,7 @@ export function studioTools(parts: StudioParts) {
   const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
   const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, copy, runner: parts.pixelRunner, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done, copy };
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done, copy, meta };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -101,6 +104,7 @@ export function studioTools(parts: StudioParts) {
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy }),
     ...copyTools({ batches, brands, facts, copy }),
+    ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...criticTools({ critic, calibration }),
     ...renderTools({ render }),
     ...pixelTools({ pixels }),
