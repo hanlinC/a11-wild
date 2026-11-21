@@ -11,7 +11,15 @@ const WHY = "It reads at once, and only this brand could run it.";
 const TTF = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0, 0, 0, 0]);
 const FONT_CSS = "https://fonts.googleapis.com/css2?family=Archivo:wght@800";
 const FONT_FILE = "https://fonts.gstatic.com/s/archivo/v19/archivo-800.ttf";
-const net = () => fakeNet({ [FONT_CSS]: { body: `@font-face { font-family: 'Archivo'; src: url(${FONT_FILE}) format('truetype'); }` }, [FONT_FILE]: { body: TTF } });
+const SUB_CSS = "https://fonts.googleapis.com/css2?family=Inter:wght@500";
+const SUB_FILE = "https://fonts.gstatic.com/s/inter/v20/inter-500.ttf";
+const net = () =>
+  fakeNet({
+    [FONT_CSS]: { body: `@font-face { font-family: 'Archivo'; src: url(${FONT_FILE}) format('truetype'); }` },
+    [FONT_FILE]: { body: TTF },
+    [SUB_CSS]: { body: `@font-face { font-family: 'Inter'; src: url(${SUB_FILE}) format('truetype'); }` },
+    [SUB_FILE]: { body: TTF },
+  });
 
 let studio: Studio;
 let batchId: string;
@@ -244,6 +252,21 @@ describe("a v2 batch: the type", () => {
     const event = studio.pixels.events.find((entry) => entry.tool === "headline");
     expect(event?.input).toMatchObject({ headline: "ONCE YOU START.", subline: "You cannot stop.", fontKey: `brands/${brandId}/fonts/archivo-800.ttf`, logoKey: "brands/b/logo.png", colour: "FFFFFF" });
     expect(event?.outKey).toMatch(new RegExp(`^batches/${batchId}/`));
+  });
+
+  it("sets the subline in the brand's second face when the brand has one", async () => {
+    // Found live (22-11-2026): a brand with a display face for its headline and another face for its small words.
+    const ideas = await wordedBatch();
+    const second = await callTool(studio, "font_save", { brandId, family: "Inter", weight: 500 });
+    expect(second.ok ? "" : second.error).toBe("");
+    const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
+    const set = await typeSet(draft, { subFamily: "Inter" });
+    expect(set.ok ? "" : set.error).toBe("");
+    expect(studio.pixels.events.findLast((entry) => entry.tool === "headline")?.input).toMatchObject({
+      fontKey: `brands/${brandId}/fonts/archivo-800.ttf`,
+      subFontKey: `brands/${brandId}/fonts/inter-500.ttf`,
+    });
+    expect(await typeSet(draft, { subFamily: "Papyrus" })).toMatchObject({ ok: false, error: expect.stringMatching(/no font file of "Papyrus".*font_save/) });
   });
 
   it("refuses to set words without a saved font file, on a v1 batch, and on an idea without approved words", async () => {

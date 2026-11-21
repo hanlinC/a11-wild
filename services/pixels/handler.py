@@ -12,6 +12,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 import types
@@ -361,6 +362,31 @@ def words(value, name, limit, needed=False):
     return value
 
 
+# The script names its own command-line flags. A client of the studio sets the tool's fields, and two limits it cannot set at all.
+TYPE_FIELDS = {
+    "--min-logo-gap": "the least gap",
+    "--min-margin": "the least margin",
+    "--min-clear": "the least clear space",
+    "--min-head": "minHead",
+    "--product-top": "productTop",
+    "--logo-width": "logoWidth",
+    "--logo-top": "logoTop",
+    "--logo-x": "logoX",
+    "--footnote-align": "footnoteAlign",
+    "--footnote-y": "footnoteY",
+    "--accent-color": "accentColour",
+    "--sub-ratio": "subRatio",
+    "--color": "colour",
+}
+
+
+def tool_words(line):
+    """A refusal of the headline script, in the words of the tool's fields."""
+    for flag, field in TYPE_FIELDS.items():
+        line = line.replace(flag, field)
+    return re.sub(r"--([a-z]+)", r"\1", line)
+
+
 def set_type(job):
     """The approved words and the real logo, set in the brand's own font. The words come from the API, which read them from the
     owner's approval: an agent cannot type them here."""
@@ -391,7 +417,10 @@ def set_type(job):
         argv += ["--footnote", words(given["footnote"], "footnote", 200)]
     if given.get("logoKey") is not None:
         argv += ["--logo", logo_png(job, job.fetch("logoKey"))]
-    code, line = run(headline.main, argv)
+    try:
+        code, line = run(headline.main, argv)
+    except Refused as stop:
+        raise Refused(tool_words(str(stop))) from None
     if code not in (0, None):
         raise Refused(line or "The words were not set.")
     return {"line": line}, out

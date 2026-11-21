@@ -6,12 +6,13 @@ import os
 import unittest
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location("handler", os.path.join(HERE, "handler.py"))
 handler = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(handler)
+headline = handler.headline
 
 STAGE = (232, 60, 40)
 
@@ -260,6 +261,27 @@ class Words(unittest.TestCase):
         self.assertEqual(answer["error"], "The font file is not a TrueType, OpenType, WOFF or WOFF2 font.")
         answer = self.words(fontKey="brands/br1/logo.png")
         self.assertEqual(answer["error"], "The job names no font file.")
+
+    def test_a_subline_of_two_lines_leaves_no_word_alone_on_the_last(self):
+        # Found live (22-11-2026): "Free delivery when you take / three."
+        draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
+        font = ImageFont.truetype(FONT, 40)
+        words = "Free delivery when you take three.".split()
+        greedy = headline.wrap(draw, words, font, draw.textlength("Free delivery when you take", font=font) + 2)
+        self.assertEqual(greedy, ["Free delivery when you take", "three."])
+        self.assertEqual(headline.even(draw, words, font, greedy), ["Free delivery when", "you take three."])
+        # A break the writer forced stays, and so does one line.
+        forced = "Free delivery | when you take three.".split()
+        self.assertEqual(headline.even(draw, forced, font, ["Free delivery", "when you take three."]), ["Free delivery", "when you take three."])
+        self.assertEqual(headline.even(draw, words[:2], font, ["Free delivery"]), ["Free delivery"])
+
+    def test_a_refusal_names_the_fields_of_the_tool_not_the_flags_of_the_script(self):
+        # Found live (22-11-2026): "... is under --min-logo-gap 3%", a flag that a client of the studio cannot set.
+        answer = self.words(logoKey="brands/br1/logo.png", logoWidth=0.2, logoTop=0.15)
+        self.assertFalse(answer["ok"])
+        self.assertIn("under the least gap 3%", answer["error"])
+        self.assertNotIn("--", answer["error"])
+        self.assertNotIn("--", self.words(productTop=0.5, minHead=0.4)["error"])
 
     def test_the_words_must_fit_and_be_given(self):
         self.assertIn("do not fit", self.words(area=[0.4, 0.4, 0.45, 0.42])["error"])

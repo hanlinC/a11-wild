@@ -129,16 +129,16 @@ export class PixelService {
     };
   }
 
-  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[] }): Promise<PixelView> {
+  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[]; pack?: number }): Promise<PixelView> {
     const image = await this.rendered(input.batchId, input.imageId);
     const { batchId: _batchId, imageId: _imageId, box: around, ...rest } = input;
     // `box` in a job is the pack's box in the pack photo, so the box round the drawn pack goes as `around`.
     return this.start("pack_check", input.batchId, { ...rest, ...(around ? { around } : {}), ...(await this.packOf(input.batchId, image)), renderKey: image.key }, { imageId: image.id });
   }
 
-  async capCheck(input: { batchId: string; imageId: string; box: number[]; split: number }): Promise<PixelView> {
+  async capCheck(input: { batchId: string; imageId: string; box: number[]; split: number; pack?: number }): Promise<PixelView> {
     const image = await this.rendered(input.batchId, input.imageId);
-    return this.start("cap_check", input.batchId, { box: input.box, split: input.split, renderKey: image.key }, { imageId: image.id });
+    return this.start("cap_check", input.batchId, { box: input.box, split: input.split, ...(input.pack ? { pack: input.pack } : {}), renderKey: image.key }, { imageId: image.id });
   }
 
   /** What the skeleton of a picture was made with, through its draft when the picture is a final or a repair. */
@@ -240,7 +240,7 @@ export class PixelService {
    * Sets the approved words and the real logo on a draft or a final, in the brand's own font. The words come from the owner's
    * approval and never from the caller, so a picture cannot carry words he did not approve.
    */
-  async typeSet(input: { batchId: string; imageId: string; family?: string; weight: number; subWeight?: number; logo: boolean; layout: Record<string, unknown> }): Promise<PixelView> {
+  async typeSet(input: { batchId: string; imageId: string; family?: string; weight: number; subFamily?: string; subWeight?: number; logo: boolean; layout: Record<string, unknown> }): Promise<PixelView> {
     const { batches, brands, images, copy } = this.deps;
     const batch = await batches.get(input.batchId);
     if (!hasWords(batch.kind)) throw new Refusal("R16: a v1 picture carries the brand logo and no words. Only a batch with words (v2) has its words set.");
@@ -259,7 +259,11 @@ export class PixelService {
     if (!font) {
       throw new Refusal(`The studio holds no font file ${family ? `of "${family}" ` : ""}for this brand. Save the brand's own font with font_save (the headline weight and the subline weight). The words are never set in another family without the owner's yes.`);
     }
-    const sub = input.subWeight ? fontOf(brand.fontFiles, font.family, input.subWeight) : undefined;
+    // A brand that sets its small words in a second face of its own: the subline takes that one.
+    const sub = input.subFamily || input.subWeight ? fontOf(brand.fontFiles, input.subFamily ?? font.family, input.subWeight ?? input.weight) : undefined;
+    if (input.subFamily && !sub) {
+      throw new Refusal(`The studio holds no font file of "${input.subFamily}" for this brand. Save it with font_save, or leave subFamily out and the subline takes the headline font.`);
+    }
     if (input.logo && !brand.logo) throw new Refusal("This brand has no saved logo. Save one with brand_save, or send logo false and tell the owner the ad has no logo yet.");
     return this.start(
       "headline",
@@ -308,8 +312,9 @@ export class PixelService {
           const { key, kind, ideaId, fromId, rootId } = job.out;
           await images.add({ id: job.id, batchId, kind, key, ...(ideaId ? { ideaId } : {}), ...(fromId ? { fromId } : {}), ...(rootId ? { rootId } : {}) });
         } else if (job.imageId) {
-          // D11 is the product drawn wrong: the pack's shape, and where the cap sits.
-          await checks.measure(batchId, job.imageId, job.tool, result.passed === true ? null : { code: "D11", note: line }, job.createdAt);
+          // D11 is the product drawn wrong: the pack's shape, and where the cap sits. Each pack of a picture keeps its own result.
+          const pack = typeof job.input.pack === "number" ? job.input.pack : 1;
+          await checks.measure(batchId, job.imageId, job.tool, result.passed === true ? null : { code: "D11", note: pack > 1 ? `Pack ${pack}: ${line}` : line }, job.createdAt, pack);
         }
         const ended = await jobs.end(job, { status: "done", line, ...(job.out ? { madeId: job.id } : { passed: result.passed === true }) });
         job = ended ?? (await jobs.get(batchId, jobId));

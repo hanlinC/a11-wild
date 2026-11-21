@@ -118,6 +118,23 @@ describe("pack_check and cap_check", () => {
     expect((await studio.services.checks.get(batchId, imageId))!.items).toEqual([{ code: "D11", note: "cap centre 5.5 px right", tool: "cap_check" }]);
   });
 
+  it("keeps the D11 of one pack when another pack of the same picture passes", async () => {
+    // Found live (22-11-2026): three pouches in one picture, the middle one 10% too wide, and a pass on its neighbour cleared it.
+    let pass = false;
+    await start((event) => (event.tool === "pack_check" ? { ok: true, passed: pass, line: pass ? "PASS at 2%" : "difference -10.2%; FAIL at 2%" } : { ok: true }));
+    const imageId = await draft();
+    await run("pack_check", { imageId, at: [512, 900], bg: "E83C28", pack: 2 });
+    pass = true;
+    await run("pack_check", { imageId, at: [200, 900], bg: "E83C28" });
+    await run("pack_check", { imageId, at: [820, 900], bg: "E83C28", pack: 3 });
+    const { checks } = studio.services;
+    expect((await checks.get(batchId, imageId))!.items).toEqual([{ code: "D11", note: "Pack 2: difference -10.2%; FAIL at 2%", tool: "pack_check" }]);
+    expect(await checks.measuredBy(batchId, imageId)).toEqual(["pack_check"]);
+    // Only a pass on the same pack clears it.
+    await run("pack_check", { imageId, at: [512, 900], bg: "E83C28", pack: 2 });
+    expect((await checks.get(batchId, imageId))!.items).toEqual([]);
+  });
+
   it("keeps a tool's D11 when the agent's look is saved at the same moment", async () => {
     const imageId = await draft();
     const { checks } = studio.services;

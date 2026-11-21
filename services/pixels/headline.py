@@ -163,6 +163,15 @@ def wrap(draw, words, font, width):
     return lines
 
 
+def even(draw, words, font, lines):
+    """Two wrapped lines, broken again where they come out nearest in width: a greedy wrap can leave one word alone
+    on the last line (found live, 22-11-2026: "... WHEN YOU TAKE / THREE."). A break the writer forced with "|" stays."""
+    if len(lines) != 2 or "|" in words:
+        return lines
+    best = min(range(1, len(words)), key=lambda i: abs(draw.textlength(" ".join(words[:i]), font=font) - draw.textlength(" ".join(words[i:]), font=font)))
+    return [" ".join(words[:best]), " ".join(words[best:])]
+
+
 def cap_height(font, line="H"):
     """Height above the baseline of the tallest glyph of the line (at least a capital H), in pixels: an accented
     capital such as É reaches higher than H, so the block is measured from the real top of its first line."""
@@ -199,6 +208,7 @@ def _layout(draw, path, sub_path, headline, subline, box_w, box_h, wght, sub_wgh
             sl = wrap(draw, subline.split(), sf, box_w)
             if not sl or len(sl) > 2:
                 continue
+            sl = even(draw, subline.split(), sf, sl)
             sh = int(sf.size * 1.2)
             total += int(size * gap) + sh * len(sl)
         if total <= box_h:

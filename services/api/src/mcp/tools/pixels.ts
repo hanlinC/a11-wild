@@ -7,6 +7,13 @@ const px = z.number().int().min(0).max(4096);
 const fraction = z.number().min(0).max(1);
 const colour = z.string().regex(/^#?[0-9a-fA-F]{6}$/, "A colour as RRGGBB.");
 const box = z.tuple([px, px, px, px]);
+const packNumber = z
+  .number()
+  .int()
+  .min(1)
+  .max(12)
+  .default(1)
+  .describe("Which pack this is when the picture shows more than one: 1 for the first from the left, 2 for the next. Measure every pack. Each pack keeps its own result, so a pass on one never clears a fail on another.");
 const imageId = id.describe("A draft, a final, or a reprint or swap of one, of this batch.");
 
 const cutout = z
@@ -51,7 +58,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
     defineTool({
       name: "skeleton_make",
       description:
-        "Makes a skeleton: the real pack, cut from the product's pack photo, on a blank 4:5 canvas at its true proportions. Free. Use it before every draft of a product that has a pack photo, and give its picture id to render_submit as fromId: a model keeps what is already in its picture, so the pack's shape is right by construction. Each draft of an idea needs its own skeleton, with another place, scale or crop. Give either one pack (height, cx, base, count) or a plan with each pack's place, side and small turn, and flat shapes for a surface. Only a skeleton made from a plan can be reprinted later. The pack photo needs a plain backdrop or its own transparency. The reply is a job: pixel_status gives the picture.",
+        "Makes a skeleton: the real pack, cut from the product's pack photo, on a blank 4:5 canvas at its true proportions. Free. Use it before every draft of a product that has a pack photo, and give its picture id to render_submit as fromId: a model keeps what is already in its picture, so the pack's shape is right by construction. Each draft of an idea needs its own skeleton, with another place, scale or crop. Give either one pack (height, cx, base, count) or a plan with each pack's place, side and small turn, and flat shapes for a surface. Leave clear stage round each thing, a third of a pack's width or more: the model draws things a little larger than the skeleton, and a pack that touches its neighbour or its food cannot be measured alone. Only a skeleton made from a plan can be reprinted later. The pack photo needs a plain backdrop or its own transparency. The reply is a job: pixel_status gives the picture.",
       input: {
         batchId: id,
         ideaId: id,
@@ -86,14 +93,14 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
     defineTool({
       name: "pack_check",
       description:
-        "Measures whether the pack in a picture is as tall and as wide as the real pack, within 2%. Free. Run it on every draft and every final of a product with a pack photo: the batch does not move on without it. The pack needs a plain stage of one colour round it; when it stands on something, give a box that ends at its base. A fail is saved on the picture as D11, and only a later pass of this tool on the same picture clears it. The reply is a job: pixel_status gives the measure.",
+        "Measures whether the pack in a picture is as tall and as wide as the real pack, within 2%. Free. Run it on every draft and every final of a product with a pack photo: the batch does not move on without it. The pack needs a plain stage of one colour round it; when it stands on something, give a box that ends at its base. A fail is saved on the picture as D11, and only a later pass of this tool on the same pack of the same picture clears it. A picture with more than one pack: measure each, with its pack number. The reply is a job: pixel_status gives the measure.",
       input: {
         batchId: id,
         imageId,
         at: z.tuple([px, px]).describe("X,Y of a point inside the pack, in pixels of the picture."),
         bg: colour.describe("The stage colour as RRGGBB."),
         sideways: z.boolean().default(false).describe("The pack lies on its side."),
-        box: box.optional().describe("X0,Y0,X1,Y1 in pixels, for a pack that stands on something: a box round the pack with plain stage on its other sides, ending at the pack's base. The measure then stops at the base, so set it within a few pixels."),
+        box: box.optional().describe("X0,Y0,X1,Y1 in pixels, for a pack that stands on something: a box round the pack with plain stage on its other sides, ending at the pack's base. The measure then stops at the base, so set it within a few pixels."),        pack: packNumber,
       },
       writes: true,
       handler: ({ box: around, ...input }) => pixels.packCheck({ ...input, ...(around ? { box: around } : {}) }),
@@ -101,12 +108,12 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
     defineTool({
       name: "cap_check",
       description:
-        "Measures whether the cap, lid or neck of a bottle or jar sits on the centre of its body, within 1% of the body width. Free. Run it on every draft and every final of a bottle or a jar: a final is a new picture, so measure it again. The bottle must stand on a plain stage that is lighter than it. A fail is saved on the picture as D11. The reply is a job: pixel_status gives the measure.",
+        "Measures whether the cap, lid or neck of a bottle or jar sits on the centre of its body, within 1% of the body width. Free. Run it on every draft and every final of a bottle or a jar: a final is a new picture, so measure it again. The bottle must stand on a plain stage that is lighter than it. A fail is saved on the picture as D11, and only a later pass on the same bottle clears it. A picture with more than one bottle: measure each, with its pack number. The reply is a job: pixel_status gives the measure.",
       input: {
         batchId: id,
         imageId,
         box: box.describe("X0,Y0,X1,Y1 in pixels: the bottle with some plain stage on both sides, ending at its base above any contact shadow."),
-        split: px.describe("Y in pixels: the first row below the cap and the neck (the top of any shoulder)."),
+        split: px.describe("Y in pixels: the first row below the cap and the neck (the top of any shoulder)."),        pack: packNumber,
       },
       writes: true,
       handler: (input) => pixels.capCheck(input),
@@ -180,6 +187,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         area: z.tuple([fraction, fraction, fraction, fraction]).describe("x0,y0,x1,y1 of the text block, as shares of the picture. Keep 4% or more to each edge."),
         family: z.string().min(1).max(60).optional().describe("The font family, one saved with font_save. Default: the brand kit's first font."),
         weight: z.number().int().min(100).max(1000).default(800).describe("The headline weight. The studio uses the nearest saved file."),
+        subFamily: z.string().min(1).max(60).optional().describe("The font family of the subline, one saved with font_save, when the brand sets its small words in a second face. Default: the headline family."),
         subWeight: z.number().int().min(300).max(1000).optional().describe("The subline weight: one lighter than the headline, never Light."),
         colour: colour.default("000000").describe("The colour of the words as RRGGBB, from the brand palette."),
         align: z.enum(["left", "right", "center"]).default("left"),
@@ -202,12 +210,13 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
       },
       writes: true,
       needsRules: true,
-      handler: ({ batchId, imageId, family, weight, subWeight, logo, accent, accentColour, logoX, logoColour, productTop, footnoteAlign, footnoteY, logoWidth, logoTop, ...layout }) =>
+      handler: ({ batchId, imageId, family, weight, subFamily, subWeight, logo, accent, accentColour, logoX, logoColour, productTop, footnoteAlign, footnoteY, logoWidth, logoTop, ...layout }) =>
         pixels.typeSet({
           batchId,
           imageId,
           ...(family ? { family } : {}),
           weight,
+          ...(subFamily ? { subFamily } : {}),
           ...(subWeight ? { subWeight } : {}),
           logo,
           layout: {

@@ -12,7 +12,7 @@ interface SeenRecord extends Item {
   savedAt: string;
 }
 
-/** What one pixel tool measured in one picture: its item, or null for a pass. Each tool has its own row, so a save by the agent or by another tool cannot overwrite it. */
+/** What one pixel tool measured on one pack of one picture: its item, or null for a pass. Each tool and each pack has its own row, so a save by the agent, by another tool, or a pass on another pack cannot overwrite it. */
 interface MeasureRecord extends Item {
   imageId: string;
   tool: string;
@@ -22,7 +22,8 @@ interface MeasureRecord extends Item {
   savedAt: string;
 }
 
-const measureSk = (imageId: string, tool: string) => `MEASURE#${imageId}#${tool}`;
+/** The first pack keeps the key a picture with one pack always had. */
+const measureSk = (imageId: string, tool: string, pack = 1) => `MEASURE#${imageId}#${tool}${pack > 1 ? `#${pack}` : ""}`;
 
 function view(imageId: string, seen: SeenRecord | undefined, measured: MeasureRecord[]): ImageChecks {
   return {
@@ -60,11 +61,12 @@ export class CheckStore {
     return (await this.get(batchId, imageId))!;
   }
 
-  /** Saves what a pixel tool measured: its item when the picture failed, or a pass that clears that tool's earlier item. `at` is when the job was sent. */
-  async measure(batchId: string, imageId: string, tool: string, failed: Omit<CheckItem, "tool"> | null, at = this.now().toISOString()): Promise<ImageChecks> {
-    const before = await this.table.get<MeasureRecord>(pk(batchId), measureSk(imageId, tool));
+  /** Saves what a pixel tool measured on one pack: its item when that pack failed, or a pass that clears that tool's earlier item on the same pack. `at` is when the job was sent. */
+  async measure(batchId: string, imageId: string, tool: string, failed: Omit<CheckItem, "tool"> | null, at = this.now().toISOString(), pack = 1): Promise<ImageChecks> {
+    const key = measureSk(imageId, tool, pack);
+    const before = await this.table.get<MeasureRecord>(pk(batchId), key);
     if (!before || before.at <= at) {
-      await this.table.put({ pk: pk(batchId), sk: measureSk(imageId, tool), imageId, tool, item: failed ? { ...failed, tool } : null, at, savedAt: this.now().toISOString() });
+      await this.table.put({ pk: pk(batchId), sk: key, imageId, tool, item: failed ? { ...failed, tool } : null, at, savedAt: this.now().toISOString() });
     }
     return (await this.get(batchId, imageId))!;
   }
@@ -75,7 +77,7 @@ export class CheckStore {
 
   /** The tools that have measured this picture, whatever they found. */
   async measuredBy(batchId: string, imageId: string): Promise<string[]> {
-    return (await this.rows(batchId)).measured.filter((entry) => entry.imageId === imageId).map((entry) => entry.tool);
+    return [...new Set((await this.rows(batchId)).measured.filter((entry) => entry.imageId === imageId).map((entry) => entry.tool))];
   }
 
   async all(batchId: string): Promise<Map<string, ImageChecks>> {
