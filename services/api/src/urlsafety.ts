@@ -30,11 +30,11 @@ export function isPublicHost(hostname: string): boolean {
   return true;
 }
 
-/** True for an https address on a public host name. */
+/** True for an https address on a public host name, on the usual https port, with no sign-in in it. */
 export function isPublicHttpsUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && isPublicHost(parsed.hostname) && !parsed.username && !parsed.password;
+    return parsed.protocol === "https:" && parsed.port === "" && isPublicHost(parsed.hostname) && !parsed.username && !parsed.password;
   } catch {
     return false;
   }

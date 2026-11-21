@@ -33,6 +33,8 @@ describe("public hosts", () => {
     expect(isPublicHttpsUrl("http://example.com/a")).toBe(false);
     expect(isPublicHttpsUrl("https://user:pw@example.com/")).toBe(false);
     expect(isPublicHttpsUrl("file:///etc/passwd")).toBe(false);
+    expect(isPublicHttpsUrl("https://example.com:8443/a")).toBe(false);
+    expect(isPublicHttpsUrl("https://example.com:443/a")).toBe(true);
     expect(isPublicHttpsUrl("not a url")).toBe(false);
   });
 });
