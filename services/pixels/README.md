@@ -12,7 +12,16 @@ the private picture store, writes the new picture and a result there, and can re
 | `cap_check` | `cap_check.py` | On every draft and final of a bottle or jar: does the cap sit on the centre of the body (1%)? |
 | `photo_finish` | `photo_finish.py` | On every final: the real-camera finish, the same for the same seed. |
 | `food_crop` | `food_crop.py` | On every picture with food: the food beside the brand's own photo, to judge D2. |
+| `headline` | `headline.py` | On every draft and final of an ad with words: the approved words and the real logo, in the brand's own font file. |
+| `food_grade` | `food_grade.py` | When real food looks pale: its colour moves toward a real close-up. Texture and shape stay. |
+| `relight` | `product_lock.py` | After a swap: the pasted pack takes the scene's light and a contact shadow. |
+| `box_print` | `box_print.py` | On a boxed product whose print the model smeared: the real print back, at the box's angle. |
+| `pack_pad`, `pack_open` | `product_lock.py` | The open-neck flow for a cap-off product. No studio tool calls them yet: it comes with v3. |
 
-The four scripts come from a11-adgen and keep their command lines, so each still runs alone.
+A plan product of `skeleton` can be another real photo of the product (the API gives its key as `photoKey`), and `vary`
+gives each pack of a row its own arrangement of the real food.
+
+The scripts come from a11-adgen and keep their command lines, so each still runs alone. A font is read only from a
+`fonts/` folder of the private store, up to 5 MB, and only when its first bytes are a font's.
 
 Test: `python3 -m unittest discover -s services/pixels/tests` (needs `pip install -r services/pixels/requirements.txt`).
