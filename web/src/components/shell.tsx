@@ -63,7 +63,8 @@ export function Shell() {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-3">
-            <span className="hidden text-caption text-muted-foreground sm:inline">
+            {/* A long address is cut, never the sections: the bar gives the sections its room first. */}
+            <span className="hidden max-w-56 truncate text-caption text-muted-foreground lg:inline" title={`${me.email} · ${me.role}`}>
               {me.email} · {me.role}
             </span>
             <Button variant="tertiary" size="compact" loading={leaving} onClick={signOut}>
