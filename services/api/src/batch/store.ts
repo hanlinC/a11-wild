@@ -52,6 +52,22 @@ export class BatchStore {
     await this.table.put({ pk: `${PK}#${batchId}`, sk: "BURST", ideas, savedAt: this.now().toISOString(), savedBy: by });
   }
 
+  /**
+   * Adds to the set only while it still has `after` ideas, so that two calls at the same moment
+   * cannot write over each other. Returns false when another call has added to it first.
+   */
+  async extendBurst(batchId: string, ideas: Idea[], by: string, after: number): Promise<boolean> {
+    const round = `BURST#AFTER#${after}`;
+    if (!(await this.table.put({ pk: `${PK}#${batchId}`, sk: round, by, at: this.now().toISOString() }, { ifNotExists: true }))) return false;
+    try {
+      await this.saveBurst(batchId, ideas, by);
+    } catch (error) {
+      await this.table.delete(`${PK}#${batchId}`, round);
+      throw error;
+    }
+    return true;
+  }
+
   async burst(batchId: string): Promise<Idea[]> {
     const item = await this.table.get<Item & { ideas: Idea[] }>(`${PK}#${batchId}`, "BURST");
     return item?.ideas ?? [];

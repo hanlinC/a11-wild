@@ -92,6 +92,21 @@ describe("the concepts of a concept ad", () => {
   it("refuses an insight the brief does not have", () => refused(concepts(6, (n) => (n === 1 ? { insightId: "insight-9" } : {})), /the brief has no such insight/));
   it("refuses a number no fact proves", () => refused(concepts(6, (n) => (n === 2 ? { subline: "40% less salt." } : {})), /40/));
   it("refuses an offer on a top-of-funnel concept", () => refused(concepts(6, (n) => (n === 3 ? { stage: "tof", headline: "Now S$30 for six" } : {})), /top-of-funnel/));
+  it("keeps the set whole when two calls add concepts at the same moment", async () => {
+    const { batchId } = await v3AtTruth(studio);
+    await callTool(studio, "brief_save", { ...rules, batchId, ...brief() });
+    await callTool(studio, "concepts_save", { ...rules, batchId, concepts: concepts() });
+    const { batches } = studio.services;
+    const before = await batches.burst(batchId);
+    // Both calls read the same six concepts, and each means to write its own seventh.
+    const seventh = (title: string) => batches.extendBurst(batchId, [...before, { ...before[0]!, id: "idea-7", title }], "owner@example.com", before.length);
+    expect(await Promise.all([seventh("First"), seventh("Second")])).toEqual([true, false]);
+    expect((await batches.burst(batchId)).map((idea) => idea.title).slice(-1)).toEqual(["First"]);
+    // The call that lost reads the set again and adds to it.
+    const more = await callTool(studio, "concepts_save", { ...rules, batchId, concepts: [concept(8, { territory: "Desk at four", insightId: "insight-4" })] });
+    expect(more.value.concepts).toHaveLength(8);
+  });
+
   it("refuses a shown item with no real photo", () => refused(concepts(6, (n) => (n === 4 ? { shows: ["pack-1", "prop-1"] } : {})), /shows prop-1, and this product has no such photo/));
   it("refuses a subline given as a fact with no fact", () => refused(concepts(6, (n) => (n === 5 ? { sublineBasis: { kind: "fact" } } : {})), /its subline is a fact/));
   it("refuses more than five elements", () => refused(concepts(6, (n) => (n === 6 ? { elements: ["a", "b", "c", "d", "e", "f"] } : {})), /has 6 elements/));

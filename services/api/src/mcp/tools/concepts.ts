@@ -175,7 +175,9 @@ export function conceptTools({ batches, brands, facts, reads, briefs, conceptPic
         const faults = conceptFaults(all, brief.insights, await facts.list(product.id), photoNames(product.photos), before.length > 0 ? CONCEPTS_KEPT_MAX : CONCEPTS_MAX).slice(0, 12);
         if (faults.length > 0) throw new Refusal(`The concepts are not saved. ${faults.join(" ")}`);
         const saved: Idea[] = [...before, ...added.map((idea, index) => ({ id: `idea-${before.length + index + 1}`, ...idea }))];
-        await batches.saveBurst(batchId, saved, context.user.email);
+        if (!(await batches.extendBurst(batchId, saved, context.user.email, before.length))) {
+          throw new Refusal("The concepts are not saved: another call added concepts to this batch at the same moment. Read the set again (batch_get) and send these once more.");
+        }
         // The ideas of the batch are the three concepts the owner picks from this set.
         if (before.length === 0) await batches.saveIdeas(batchId, [], context.user.email);
         const moved = await batches.move(batch, "ideas", "concepts_save");
