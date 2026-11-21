@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { useMe } from "@/lib/session";
@@ -19,6 +19,13 @@ const NAV = [
 export function Shell() {
   const me = useMe();
   const [leaving, setLeaving] = useState(false);
+  const nav = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+
+  // On a phone the bar may hold the open section out of sight, after a reload for one: bring it in.
+  useEffect(() => {
+    nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [pathname]);
 
   async function signOut() {
     setLeaving(true);
@@ -38,7 +45,7 @@ export function Shell() {
             a11 <span className="text-muted-foreground">wild</span>
           </span>
           {/* On a phone the sections scroll sideways inside the bar; the page itself never does. */}
-          <nav aria-label="Sections" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
+          <nav ref={nav} aria-label="Sections" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
