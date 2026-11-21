@@ -31,7 +31,7 @@ The first real engine 3 batch of a11-adgen failed the owner's bar for five reaso
 ### Requirements
 
 **Kind and state**
-- R1. `batch_create` accepts `kind: "v3"`. The states of a v3 batch: `briefed`, `concepts`, `roughed`, `reviewed`, `chosen`, `worded`, `directed`, then the states of v2 from `priced`.
+- R1. `batch_create` accepts `kind: "v3"`. A v3 batch has three states of its own: `briefed` (the brief is saved), `reviewed` (the critic's review of the concepts is saved) and `directed` (each picked concept has its direction). Its path: `truth`, `briefed`, `ideas` (the concepts), `reviewed`, `judged` (the owner's concept pick), `worded`, `directed`, then the states of v2 from `priced`. Roughs are no state: a batch may have none.
 - R2. Scope is packaged products (food, drink, packaged wellness and beauty). Services, restaurant plates and 9:16 stay parked.
 
 **Brief**
@@ -107,7 +107,7 @@ The first real engine 3 batch of a11-adgen failed the owner's bar for five reaso
 ### Key Technical Decisions
 
 - KTD1. Concepts are `Idea` items with an optional `concept` part (R5 fields), so the copy store, the board, picks, finals, Meta text and the pack keep one id and one path. `ideas/checks.ts` gets the v3 checks.
-- KTD2. The state machine takes the kind, as for v2. `worded` and all later states are shared with v2.
+- KTD2. The state machine takes the kind, as for v2. v3 adds `briefed`, `reviewed` and `directed`; in a v3 batch `judged` means the owner's concept pick. `worded` and all later states are shared with v2. `batch_create` refuses v3 until the last unit of PR9 is in, so no batch can stop at a step that has no tool.
 - KTD3. The brief is one item under the batch (`BRIEF`), with insight ids that the server makes.
 - KTD4. `rough` is an `ImageKind`. `RenderService` counts roughs for each concept and each batch inside the same conditional step as the spend reservation.
 - KTD5. The concept review is its own item (`CREVIEW#<ticket>`), made by a client in the critic role, as the rank is. Unlike the draft rank, its notes are shown to the owner: he asked for them (18-11-2026). The rank of drafts stays hidden until he picks.
@@ -140,7 +140,7 @@ The first real engine 3 batch of a11-adgen failed the owner's bar for five reaso
 
 ### U29. v3 kind, states and rules by role
 - Files: `packages/shared/src/index.ts`, `services/api/src/batch/state.ts`, `services/api/src/mcp/tools/batch.ts`, `services/api/src/houserules.ts`, `docs/decisions.md`.
-- Tests: `batch_create` takes v3; a v3 batch cannot reach `worded` before `chosen`, nor `priced` before `directed`; v1 and v2 paths are unchanged; `rules_get` gives the v3 rules for each role.
+- Tests: `batch_create` takes v3; a v3 batch cannot reach `ideas` before `briefed`, `worded` before the owner's concept pick, nor `priced` before `directed`; v1 and v2 paths are unchanged; `rules_get` gives the v3 rules for each role.
 
 ### U30. Brief
 - Files: `services/api/src/brief/store.ts`, `services/api/src/mcp/tools/brief.ts`, `packages/shared/src/index.ts`.
