@@ -36,7 +36,7 @@ describe("render_submit", () => {
   });
 
   it("sends a draft at low quality and 1024 by 1280, with the picture rules added and the key in the header only", async () => {
-    const sent = await draft({ references: ["products/p/food.jpg"] });
+    const sent = await draft({ references: ["food-1"] });
     expect(sent.value).toMatchObject({ kind: "draft", status: "queued", usd: 0.019, note: expect.stringMatching(/goes alone/) });
     const [call] = studio.fal.submits();
     expect(call?.url).toBe("https://queue.fal.run/openai/gpt-image-2.5/sunburst/edit");
@@ -94,7 +94,9 @@ describe("render_submit", () => {
   });
 
   it("takes only the product's photos and the brand's logo as other references", async () => {
-    expect(await draft({ references: ["products/other/secret.jpg"] })).toEqual(refused(/not a photo of this product/));
+    expect(await draft({ references: ["products/other/secret.jpg"] })).toMatchObject({ ok: false });
+    expect(await draft({ references: ["food-2"] })).toEqual(refused(/no food photo 2/));
+    expect(await draft({ references: ["logo"] })).toEqual(refused(/brand has no logo/));
     expect(studio.fal.calls).toEqual([]);
   });
 

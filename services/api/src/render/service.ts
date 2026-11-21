@@ -33,7 +33,8 @@ export interface RenderRequest {
   /** A draft's skeleton, or the picked draft of a final. */
   fromId?: string;
   /** Other pictures the model sees: keys of the product's photos or the brand's logo. */
-  referenceKeys: string[];
+  /** Names of the product's photos and the brand's logo: "logo", "pack-1", "food-2". Never a key. */
+  references: string[];
 }
 
 export interface RenderView extends Render {
@@ -147,10 +148,13 @@ export class RenderService {
       if (mine.length >= FINALS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has had ${FINALS_PER_IDEA} finals. Tell the owner before more are made.`);
     }
 
-    const allowed = new Set([...product.photos.map((photo) => photo.key), ...(brand.logo ? [brand.logo.key] : [])]);
-    const stray = input.referenceKeys.find((key) => !allowed.has(key));
-    if (stray) throw new Refusal(`${stray} is not a photo of this product or the brand's logo. A reference picture is one of those.`);
-    const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...input.referenceKeys])];
+    const named = input.references.map((name) => {
+      const [kind, number] = name.split("-");
+      const picture = kind === "logo" ? brand.logo : product.photos.filter((photo) => photo.kind === kind)[Number(number) - 1];
+      if (!picture) throw new Refusal(`This ${kind === "logo" ? "brand has no logo" : `product has no ${kind} photo ${number}`}. A reference picture is the brand's logo ("logo") or one of this product's photos ("pack-1", "food-1").`);
+      return picture.key;
+    });
+    const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...named])];
     if (keys.length > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
 
     batch = await this.passGate(batch, input.kind, sent);

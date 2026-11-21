@@ -16,16 +16,16 @@ export function renderTools({ render }: { render: RenderService }): ToolDefiniti
         prompt: z.string().min(20).max(4000).describe("The scene, in plain words: camera, light, surface, props. No words to paint."),
         fromId: id.optional().describe("The skeleton of a draft, or the picked draft of a final."),
         references: z
-          .array(z.string().min(1).max(300))
+          .array(z.string().regex(/^(logo|(pack|food)-\d{1,2})$/))
           .max(REFERENCES_MAX)
           .default([])
-          .describe("Keys of other pictures the model sees: this product's photos or the brand's logo."),
+          .describe('Other pictures the model sees, by name: "logo" for the brand\'s logo, "pack-1" for the product\'s first pack photo, "food-2" for its second food photo.'),
       },
       writes: true,
       paid: true,
       needsRules: true,
       handler: ({ batchId, ideaId, kind, prompt, fromId, references }) =>
-        render.submit({ batchId, ideaId, kind, prompt, ...(fromId ? { fromId } : {}), referenceKeys: references }),
+        render.submit({ batchId, ideaId, kind, prompt, ...(fromId ? { fromId } : {}), references }),
     }),
     defineTool({
       name: "render_status",
