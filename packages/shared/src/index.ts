@@ -263,3 +263,39 @@ export interface TastePage {
   log: TasteEntry[];
   swipe: SwipeItem[];
 }
+
+/** What a picture of a batch is: the skeleton a draft is built round, a draft, a final, or what a pixel tool made from one. */
+export type ImageKind = "skeleton" | "draft" | "final" | "reprint" | "swap" | "finish" | "food_crop";
+
+/** A picture that a batch owns. It lives in the private picture store. */
+export interface BatchImage {
+  id: string;
+  batchId: string;
+  kind: ImageKind;
+  key: string;
+  ideaId?: string;
+  /** The picture this one was made from: a draft's skeleton, a final's draft. */
+  fromId?: string;
+  createdAt: string;
+}
+
+export type RenderKind = "draft" | "final";
+
+/** One request to the picture model, from the moment it is sent. */
+export interface Render {
+  id: string;
+  batchId: string;
+  ideaId: string;
+  kind: RenderKind;
+  status: "queued" | "done" | "failed";
+  prompt: string;
+  /** A draft's skeleton, or the picked draft of a final. */
+  fromId?: string;
+  /** The price held for it in the ledger, in US dollars. */
+  usd: number;
+  /** The picture it made. */
+  imageId?: string;
+  error?: string;
+  createdAt: string;
+  updatedAt: string;
+}

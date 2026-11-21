@@ -14,6 +14,7 @@ import { studioTools } from "../../src/mcp/tools/index.js";
 import type { WaitingClient } from "../../src/notify.js";
 import type { Net } from "../../src/urlsafety.js";
 import { fakeNet } from "./net.js";
+import { fakeFal } from "./fal.js";
 import { fakeParallel, type ParallelCall, testKeys } from "./parallel.js";
 import { MemoryPictures } from "./pictures.js";
 import { FakeCognito } from "./fake-cognito.js";
@@ -58,6 +59,8 @@ export interface StudioOptions {
   net?: Net;
   /** What Parallel answers. */
   parallel?: Parameters<typeof fakeParallel>[0];
+  /** What fal answers. With none, every render is taken and is done at its first read. */
+  fal?: Parameters<typeof fakeFal>[0];
 }
 
 export async function createStudio(options: StudioOptions = {}) {
@@ -89,6 +92,7 @@ export async function createStudio(options: StudioOptions = {}) {
   const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, now, notifier);
   const pictures = new MemoryPictures();
   const parallel = fakeParallel(options.parallel ?? ((_call: ParallelCall) => ({ status: 500 })));
+  const fal = fakeFal(options.fal);
   const { tools, services } = studioTools({
     config,
     table,
@@ -97,6 +101,7 @@ export async function createStudio(options: StudioOptions = {}) {
     pictures,
     net: options.net ?? fakeNet({}),
     parallelFetch: parallel.fetchFn,
+    falFetch: fal.fetchFn,
   });
   const spend = { ledger: services.ledger, gate: services.gate };
   const deps: Deps = {
@@ -130,6 +135,7 @@ export async function createStudio(options: StudioOptions = {}) {
     services,
     pictures,
     parallelCalls: parallel.calls,
+    fal,
     tokenRequests,
     tokenEndpoint,
   };

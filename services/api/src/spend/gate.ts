@@ -100,6 +100,12 @@ export class SpendGate {
     );
   }
 
+  /** The estimate of a stage as it stands, or nothing before its first item gave a price. */
+  async peek(batchId: string, stage: GateStage): Promise<GateState | undefined> {
+    const item = await this.table.get<GateItem>(...key(batchId, stage));
+    return item ? this.view(item) : undefined;
+  }
+
   /** Passes when the rest of the stage may be sent. Throws a GateError that says what is missing. */
   async check(batchId: string, stage: GateStage): Promise<GateState> {
     const item = await this.table.get<GateItem>(...key(batchId, stage));

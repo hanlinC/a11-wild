@@ -18,6 +18,9 @@ const TYPES: { type: string; ext: string; is: (b: Uint8Array) => boolean }[] = [
   },
 ];
 
+/** The type of a picture the studio keeps, read from its first bytes, or nothing when it is no such picture. */
+export const pictureType = (body: Uint8Array): { type: string; ext: string } | undefined => TYPES.find((candidate) => candidate.is(body));
+
 export interface StoredPicture {
   key: string;
   type: string;
@@ -29,8 +32,8 @@ export interface StoredPicture {
 /** The private picture store. A picture is read only through a short-lived link made for a signed-in reader. */
 export interface Pictures {
   put(key: string, body: Uint8Array, type: string): Promise<void>;
-  /** A link that opens the picture for a few minutes. */
-  viewUrl(key: string): Promise<string>;
+  /** A link that opens the picture for a few minutes, or for `seconds`. */
+  viewUrl(key: string, seconds?: number): Promise<string>;
 }
 
 export class S3Pictures implements Pictures {
@@ -43,8 +46,8 @@ export class S3Pictures implements Pictures {
     await this.s3.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: type }));
   }
 
-  viewUrl(key: string): Promise<string> {
-    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: VIEW_SECONDS });
+  viewUrl(key: string, seconds = VIEW_SECONDS): Promise<string> {
+    return getSignedUrl(this.s3, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: seconds });
   }
 }
 
