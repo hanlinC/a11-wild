@@ -345,6 +345,16 @@ export interface ConceptReviews {
   at: string;
 }
 
+/** The owner's pick of three concepts, with what he said of each, and of any concept he passed on. */
+export interface ConceptPick {
+  picks: { ideaId: string; ownerSaid: string }[];
+  passes: { ideaId: string; ownerSaid: string }[];
+  /** What he was told when he picked: a soft gate never stops him. */
+  warnings: string[];
+  by: string;
+  at: string;
+}
+
 export const SUBLINE_BASES = ["fact", "second_beat", "none"] as const;
 export type SublineBasis = (typeof SUBLINE_BASES)[number];
 

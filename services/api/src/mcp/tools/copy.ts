@@ -11,7 +11,7 @@ const id = z.string().min(1).max(64);
 const line = (max: number) => z.string().min(1).max(max);
 
 /** The states in which the owner can still change the words: before any final is made. */
-const OPEN_FOR_WORDS = ["judged", "worded", "priced", "waiting_spend", "drafting", "checked", "waiting_pick"];
+const OPEN_FOR_WORDS = ["judged", "worded", "directed", "priced", "waiting_spend", "drafting", "checked", "waiting_pick"];
 
 export function copyTools({ batches, brands, facts, copy }: { batches: BatchStore; brands: BrandStore; facts: FactStore; copy: CopyStore }): ToolDefinition[] {
   return [

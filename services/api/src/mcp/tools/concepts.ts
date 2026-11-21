@@ -5,6 +5,7 @@ import { requireMove, stepAfter } from "../../batch/state.js";
 import type { BatchStore } from "../../batch/store.js";
 import type { BrandStore } from "../../brand/store.js";
 import type { BriefStore } from "../../brief/store.js";
+import { CONCEPTS_PICKED, type ConceptPicks } from "../../concepts/pick.js";
 import type { FactStore } from "../../facts/store.js";
 import { conceptFaults, CONCEPTS_MAX, CONCEPTS_MIN, ELEMENTS_MAX, INSIGHTS_MIN, photoNames, TERRITORIES_MAX, TERRITORIES_MIN } from "../../ideas/checks.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
@@ -15,6 +16,7 @@ export interface ConceptToolDeps {
   facts: FactStore;
   reads: BatchReads;
   briefs: BriefStore;
+  conceptPicks: ConceptPicks;
 }
 
 /** The most concepts one batch keeps, with every round of more concepts counted. */
@@ -30,7 +32,7 @@ const usable = (insight: Pick<Insight, "basis">) => insight.basis !== "hypothesi
 
 const NOT_V3 = "Only a batch of concept ads (v3) has a brief and concepts. A v1 or v2 batch saves its ideas with ideas_save.";
 
-export function conceptTools({ batches, brands, facts, reads, briefs }: ConceptToolDeps): ToolDefinition[] {
+export function conceptTools({ batches, brands, facts, reads, briefs, conceptPicks }: ConceptToolDeps): ToolDefinition[] {
   return [
     defineTool({
       name: "brief_save",
@@ -183,6 +185,18 @@ export function conceptTools({ batches, brands, facts, reads, briefs }: ConceptT
           nextStep: `make a rough of each concept worth one (render_submit with kind "rough"), then ${stepAfter(moved)}`,
         };
       },
+    }),
+    defineTool({
+      name: "concept_pick",
+      description: `Saves the owner's pick of ${CONCEPTS_PICKED} concepts of a v3 batch, after the critic's review. Only the owner picks: show him every concept with its rough, its words and the critic's notes (the concept board in the dashboard, or each rough in the chat), and wait for his answer. The ${CONCEPTS_PICKED} can be of any funnel stage. Save what he said of each pick in his own words, and of a concept he passed on when he said why. Never pick for him, and never call it with words he did not say. The critic's review is advice: a pick it did not recommend is saved with a warning. He can pick again until he approves the words.`,
+      input: {
+        batchId: id,
+        picks: z.array(z.strictObject({ ideaId: id, ownerSaid: line(1000).describe("What he said of this concept, in his own words.") })).length(CONCEPTS_PICKED),
+        passes: z.array(z.strictObject({ ideaId: id, ownerSaid: line(1000).describe("Why he passed on it, in his own words.") })).max(CONCEPTS_KEPT_MAX).optional().describe("Only a concept he said something about."),
+      },
+      writes: true,
+      needsRules: true,
+      handler: ({ batchId, picks, passes }, context) => conceptPicks.save(batchId, { picks, ...(passes ? { passes } : {}) }, context.user),
     }),
   ];
 }
