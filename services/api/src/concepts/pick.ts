@@ -1,4 +1,4 @@
-import type { ConceptPick, Idea, Role } from "@a11-wild/shared";
+import { CONCEPT_SCORES, type ConceptPick, type ConceptReview, type Idea, type Role } from "@a11-wild/shared";
 import { requireMove } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
@@ -10,6 +10,10 @@ import type { TasteLog } from "../taste/log.js";
 
 /** The number of concepts the owner picks. They can be of any funnel stage. */
 export const CONCEPTS_PICKED = 3;
+
+/** A score under this is a soft gate: the pick is saved, and the owner is told. */
+const SCORE_MIN = 4;
+const low = (review: ConceptReview) => CONCEPT_SCORES.filter((score) => review.scores[score] < SCORE_MIN);
 
 const SK = "CONCEPT_PICK";
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log.";
@@ -67,6 +71,8 @@ export class ConceptPicks {
       return [
         ...(review && review.roughs.length === 0 ? [`${idea.id} has no rough: he picked it from its words.`] : []),
         ...(review && !review.recommend ? [`The critic did not recommend ${idea.id}: ${review.note}`] : []),
+        ...(review && !review.pointTest.passed ? [`${idea.id} fails the point test: ${review.pointTest.note}`] : []),
+        ...(review && low(review).length > 0 ? [`The critic scored ${idea.id} under ${SCORE_MIN} of 5 for ${low(review).join(", ")}.`] : []),
         ...(guess ? [`${idea.id} stands on a hypothesis, not on what a buyer said.`] : []),
       ];
     });
