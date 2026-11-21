@@ -6,6 +6,7 @@ import { Alerts } from "./constructs/alerts.js";
 import { Api } from "./constructs/api.js";
 import { Auth } from "./constructs/auth.js";
 import { Data } from "./constructs/data.js";
+import { Pixels } from "./constructs/pixels.js";
 import { Web } from "./constructs/web.js";
 
 /** The functions read this parameter at start. Its name is fixed so that they need no reference to it. */
@@ -30,6 +31,7 @@ export class StudioStack extends Stack {
       keysPrefix: KEYS_PREFIX,
       buildId: props.buildId,
     });
+    new Pixels(this, "Pixels", { pictures: data.pictures, caller: api.apiFunction });
     const web = new Web(this, "Web", { apiOriginDomainName: api.originDomainName, picturesDomainName: data.pictures.bucketRegionalDomainName });
     const auth = new Auth(this, "Auth", { publicOrigin: web.publicOrigin });
     const alerts = new Alerts(this, "Alerts");

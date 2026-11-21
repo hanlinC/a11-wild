@@ -82,13 +82,39 @@ describe("studio stack", () => {
     const keyReaders = holds("parameter/a11-wild/keys/*");
     expect(keyReaders).toHaveLength(1);
     expect(keyReaders[0]).toMatch(/ApiFunction/);
-    expect(holds("DataPictures")).toEqual(keyReaders);
+    expect(holds("DataPictures").filter((id) => !/Pixels/.test(id))).toEqual(keyReaders);
 
     const functions = Object.entries(template.findResources("AWS::Lambda::Function"));
     const withKeys = functions.filter(([, fn]) => fn.Properties.Environment?.Variables?.KEYS_PREFIX !== undefined);
     expect(withKeys.map(([id]) => id)).toEqual([expect.stringMatching(/ApiFunction/)]);
     // The key's place is named, never the key.
     expect(withKeys[0]?.[1].Properties.Environment.Variables.KEYS_PREFIX).toBe("/a11-wild/keys");
+  });
+
+  it("gives the pixel function pictures only: no table, no key, no parameter, and only the API function starts it", () => {
+    const policies = Object.entries(template.findResources("AWS::IAM::Policy"));
+    const own = policies.filter(([id]) => /PixelsPixelFunction/.test(id));
+    expect(own).toHaveLength(1);
+    const statements = own[0]![1].Properties.PolicyDocument.Statement as Statement[];
+    expect(statements.map((statement) => asList(statement.Action))).toEqual([["s3:GetObject"], ["s3:PutObject"]]);
+    const text = JSON.stringify(statements);
+    expect(text).toContain("/brands/*");
+    expect(text).toContain("/batches/*");
+    expect(text).toContain("/jobs/*");
+    // Brand pictures are read, never written.
+    const writes = statements.filter((statement) => asList(statement.Action).some((action) => action.startsWith("s3:PutObject")));
+    expect(JSON.stringify(writes)).not.toContain("/brands/*");
+
+    const functions = Object.entries(template.findResources("AWS::Lambda::Function"));
+    const pixel = functions.find(([id]) => /PixelsPixelFunction/.test(id))!;
+    expect(Object.keys(pixel[1].Properties.Environment.Variables)).toEqual(["PICTURES_BUCKET"]);
+    expect(pixel[1].Properties.PackageType).toBe("Image");
+
+    const invokers = policies.filter(([, policy]) => JSON.stringify(policy).includes("lambda:InvokeFunction"));
+    expect(invokers.map(([id]) => id)).toEqual([expect.stringMatching(/ApiFunction/)]);
+    const invoke = (invokers[0]![1].Properties.PolicyDocument.Statement as Statement[]).find((statement) => asList(statement.Action).includes("lambda:InvokeFunction"))!;
+    expect(JSON.stringify(invoke.Resource)).toContain("PixelsPixelFunction");
+    template.resourcePropertiesCountIs("AWS::Lambda::EventInvokeConfig", { MaximumRetryAttempts: 0 }, 1);
   });
 
   it("lets only the API function publish a notice to the owner, to an address that is in no file", () => {
