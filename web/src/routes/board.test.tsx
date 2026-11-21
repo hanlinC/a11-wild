@@ -140,7 +140,7 @@ describe("Pick board", () => {
 
   it("shows where the blind critic put each draft, once the owner has picked", async () => {
     const drafts = [draft("idea-1", 1), draft("idea-1", 2), draft("idea-1", 3)];
-    const rank = { ideaId: "idea-1", at, order: [{ imageId: "idea-1-d3", reason: "The calmest of the three." }, { imageId: "idea-1-d1", reason: "The wave pulls the eye away." }, { imageId: "idea-1-d2", reason: "The pouch is too wide." }] };
+    const rank = { ideaId: "idea-1", at, order: [{ imageId: "idea-1-d3", shownId: "idea-1-d3", reason: "The calmest of the three." }, { imageId: "idea-1-d1", shownId: "idea-1-d1", reason: "The wave pulls the eye away." }, { imageId: "idea-1-d2", shownId: "idea-1-d2", reason: "The pouch is too wide." }] };
     show(board({ ideas: [{ idea: idea(1), drafts, pick: { ideaId: "idea-1", imageId: "idea-1-d1", ownerSaid: "the wave", at, by: "owner@example.com" }, rank, finals: [] }] }));
     const third = (await screen.findByAltText("Rock 1, draft 3")).closest("li")!;
     expect(within(third).getByText("The blind critic put it first: The calmest of the three.")).toBeInTheDocument();

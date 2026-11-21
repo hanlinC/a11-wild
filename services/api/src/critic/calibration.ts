@@ -28,9 +28,10 @@ export class Calibration {
     for (const batch of await batches.list()) {
       const [made, ranks] = await Promise.all([picks.all(batch.id), critic.ranks(batch.id)]);
       for (const pick of made) {
-        // A pick counts only beside a rank that was made before it.
+        // Only his first choice counts: after it he sees the critic's order. It counts beside a rank made before it, of the same picture.
+        const blind = pick.first ?? pick;
         const rank = ranks.get(pick.ideaId);
-        const place = pick.imageId && rank && rank.at < pick.at ? rank.order.findIndex((entry) => entry.imageId === pick.imageId) + 1 : 0;
+        const place = blind.imageId && rank && rank.at < blind.at ? rank.order.findIndex((entry) => entry.imageId === blind.imageId && entry.shownId === blind.shownId) + 1 : 0;
         if (place < 1) continue;
         ranked += 1;
         byPlace[place] = (byPlace[place] ?? 0) + 1;

@@ -334,9 +334,13 @@ export interface Pick {
   ideaId: string;
   /** The picked draft's picture, or null when the owner passed on all of the idea's drafts. */
   imageId: string | null;
+  /** The picture he looked at when he picked: the draft, or its newest repair. */
+  shownId?: string;
   ownerSaid: string;
   at: string;
   by: string;
+  /** His first choice for this idea, when a later one replaced it. Only the first is made before he sees the critic's rank. */
+  first?: { imageId: string | null; shownId?: string; at: string };
 }
 
 export interface BoardDraft {
@@ -396,7 +400,8 @@ export interface Board {
 /** The blind critic's order of one idea's drafts, best first, with a reason for each place. */
 export interface CriticRank {
   ideaId: string;
-  order: { imageId: string; reason: string }[];
+  /** shownId is the picture the critic looked at: the draft, or its newest repair. The server sets it. */
+  order: { imageId: string; shownId: string; reason: string }[];
   at: string;
 }
 

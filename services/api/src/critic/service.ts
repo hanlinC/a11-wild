@@ -58,7 +58,8 @@ export class CriticService {
     if (open.length === 0) {
       throw new Refusal(`No idea of this batch can be ranked now. An idea is ranked when its ${DRAFTS_PER_IDEA} drafts are finished and the owner has not chosen for it yet.`);
     }
-    return { ...draftsPacket(common, open), ...(await critic.issue(batchId, { step, ideaIds: open.map(({ idea }) => idea.id), stamp })) };
+    const shown = Object.fromEntries(open.flatMap(({ drafts }) => drafts.map((draft) => [draft.imageId, draft.shownId])));
+    return { ...draftsPacket(common, open), ...(await critic.issue(batchId, { step, ideaIds: open.map(({ idea }) => idea.id), stamp, shown })) };
   }
 
   /** The ticket of this batch and this step, checked against the ideas as they are now. It is not spent yet. */
@@ -96,20 +97,26 @@ export class CriticService {
   }
 
   /** The critic's order of each idea's drafts. It is refused for an idea the owner has already chosen for. */
-  async rank(batchId: string, ticket: string, ranks: Omit<CriticRank, "at">[]) {
+  async rank(batchId: string, ticket: string, ranks: { ideaId: string; order: { imageId: string; reason: string }[] }[]) {
     const { batches, board, critic } = this.deps;
     const batch = await batches.get(batchId);
     if (!RANKING.includes(batch.state)) requireMove(batch.state, "checked", "critic_rank");
-    await this.ticket(batchId, ticket, "drafts", ranks.map((rank) => rank.ideaId));
+    const { shown = {} } = await this.ticket(batchId, ticket, "drafts", ranks.map((rank) => rank.ideaId));
     const open = rankable(await board.board(batchId), DRAFTS_PER_IDEA);
+    const saved: Omit<CriticRank, "at">[] = [];
     for (const rank of ranks) {
       const entry = open.find(({ idea }) => idea.id === rank.ideaId);
       if (!entry) throw new Refusal(`The drafts of ${rank.ideaId} cannot be ranked now: the owner has chosen for it, or its drafts changed. Start a fresh helper and call critic_open again.`);
       const drafts = entry.drafts.map((draft) => draft.imageId);
       if (!same(rank.order.map((place) => place.imageId), drafts)) throw new Refusal(`Put every draft of ${rank.ideaId} in the order once, and no other picture: ${drafts.join(", ")}.`);
+      // The rank is of the pictures the packet showed. A draft repaired since then is another picture.
+      if (entry.drafts.some((draft) => shown[draft.imageId] !== draft.shownId)) {
+        throw new Refusal(`A draft of ${rank.ideaId} was repaired after your packet was made, so you looked at a picture that no longer counts. Start a fresh helper and call critic_open again.`);
+      }
+      saved.push({ ideaId: rank.ideaId, order: rank.order.map((place) => ({ imageId: place.imageId, shownId: shown[place.imageId] as string, reason: place.reason })) });
     }
     if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
-    for (const rank of ranks) await critic.saveRank(batchId, rank);
+    for (const rank of saved) await critic.saveRank(batchId, rank);
     const { batch: after, missing } = await board.progress(batch);
     return {
       saved: ranks.map((rank) => rank.ideaId),

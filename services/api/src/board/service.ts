@@ -154,7 +154,11 @@ export class BoardService implements FinalRule {
         const mine = drafts.get(idea.id) ?? [];
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);
         for (const image of mine) missing.push(...(await this.needs(batch.id, countedOf(image, all), hasPack, found)));
-        if (!ranks.has(idea.id)) missing.push(`the blind critic's rank of the drafts of ${idea.id} (a fresh helper: critic_open with step "drafts", then critic_rank)`);
+        // A rank counts while it is of the pictures that count now: a repair made after it needs a new rank.
+        const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
+        if (!mine.every((image) => judged.get(image.id) === countedOf(image, all).id)) {
+          missing.push(`the blind critic's rank of the drafts of ${idea.id} as they are now (a fresh helper: critic_open with step "drafts", then critic_rank)`);
+        }
       }
       if (missing.length === 0) batch = await batches.move(batch, "checked", "checks_save");
     } else if (batch.state === "finals" || batch.state === "finished" || batch.state === "done") {
@@ -218,7 +222,7 @@ export class BoardService implements FinalRule {
     const draft = input.imageId ? entry.drafts.find(({ image }) => image.id === input.imageId) : undefined;
     if (input.imageId && !draft) throw new Refusal(`Picture ${input.imageId} is not a draft of ${input.ideaId}.`);
 
-    const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ownerSaid, by: user.email });
+    const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: draft.shown.id } : {}), ownerSaid, by: user.email });
     await tasteLog.add({
       kind: draft ? "pick" : "pass",
       ownerSaid,

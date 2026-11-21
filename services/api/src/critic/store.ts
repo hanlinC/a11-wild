@@ -18,6 +18,8 @@ export interface Ticket {
   ideaIds: string[];
   /** A mark of the ideas as they were when the packet was made. A judgement of other ideas is not theirs. */
   stamp: string;
+  /** The pictures a drafts packet showed, by draft. A repair made later shows another picture. */
+  shown?: Record<string, string>;
   until: string;
 }
 
@@ -45,8 +47,8 @@ export class CriticStore {
   async read(batchId: string, ticket: string): Promise<Ticket | undefined> {
     const item = await this.table.get<Item & Ticket>(pk(batchId), ticketSk(ticket));
     if (!item || item.state !== OPEN || item.until <= this.now().toISOString()) return undefined;
-    const { step, ideaIds, stamp, until } = item;
-    return { step, ideaIds, stamp, until };
+    const { step, ideaIds, stamp, shown, until } = item;
+    return { step, ideaIds, stamp, ...(shown ? { shown } : {}), until };
   }
 
   /** Spends the ticket. False when another call spent it first. */

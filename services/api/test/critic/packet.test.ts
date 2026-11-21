@@ -92,7 +92,7 @@ describe("the blind rank of the drafts", () => {
     await studio.services.checks.measure(batchId, drafts["idea-1"]![0]!, "pack_check", { code: "D11", note: "The pouch is 5% wider than the packshot." });
     const packet = (await open("drafts")).value;
     expect(packet.ideas.map((entry: { drafts: unknown[] }) => entry.drafts.length)).toEqual([3, 3, 3]);
-    expect(packet.ideas[0].drafts[0]).toEqual({ imageId: drafts["idea-1"]![0], viewUrl: expect.any(String), measured: [{ code: "D11", note: "The pouch is 5% wider than the packshot.", tool: "pack_check" }] });
+    expect(packet.ideas[0].drafts[0]).toEqual({ imageId: drafts["idea-1"]![0], shownId: drafts["idea-1"]![0], viewUrl: expect.any(String), measured: [{ code: "D11", note: "The pouch is 5% wider than the packshot.", tool: "pack_check" }] });
     expect(JSON.stringify(packet)).not.toMatch(/A little busy|killTest/);
   });
 
@@ -130,6 +130,43 @@ describe("the blind rank of the drafts", () => {
     expect(JSON.stringify(packet)).not.toMatch(/"pick"|ownerSaid|it is calm|"order"|"rank"/);
     // A ticket from before his pick cannot rank the idea he has chosen for.
     expect(await callTool(studio, "critic_rank", { ...rules, batchId, ticket: early.ticket, ranks: ranks(early) })).toEqual(refused(/drafts of idea-1 cannot be ranked now: the owner has chosen/));
+  });
+
+  it("takes no rank of a draft that was repaired after the packet was made, and asks for a new rank after a later repair", async () => {
+    // A repair as product_swap saves it: a new picture that stands for the draft, and that is checked again.
+    const repair = async (ideaId: string, imageId: string) => {
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      return (await studio.services.images.add({ batchId, kind: "swap", key: `batches/${batchId}/swap-of-${imageId}.jpg`, ideaId, fromId: imageId, rootId: imageId })).id;
+    };
+    const check = (imageId: string) => callTool(studio, "checks_save", { ...rules, batchId, imageId, items: [] });
+    const early = (await open("drafts")).value;
+    const first = await repair("idea-1", drafts["idea-1"]![0]!);
+    // The critic looked at the picture from before the repair.
+    expect(await callTool(studio, "critic_rank", { ...rules, batchId, ticket: early.ticket, ranks: ranks(early) })).toEqual(refused(/A draft of idea-1 was repaired after your packet was made/));
+
+    // A rank of the pictures as they are is saved. The batch waits for the check of the repair.
+    const packet = (await open("drafts")).value;
+    expect(packet.ideas[0].drafts[0]).toMatchObject({ imageId: drafts["idea-1"]![0], shownId: first });
+    expect((await callTool(studio, "critic_rank", { ...rules, batchId, ticket: packet.ticket, ranks: ranks(packet) })).value).toMatchObject({ state: "drafting" });
+    // A draft repaired after its rank needs a new rank before the batch moves on.
+    const second = await repair("idea-2", drafts["idea-2"]![0]!);
+    await check(first);
+    expect((await check(second)).value).toMatchObject({ state: "drafting", stillMissing: [expect.stringMatching(/rank of the drafts of idea-2 as they are now/)] });
+    expect((await rankDrafts(studio, batchId)).value).toMatchObject({ state: "checked" });
+  });
+
+  it("counts only the owner's first choice, which he made before he saw the critic's order", async () => {
+    await rankDrafts(studio, batchId);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    // His first choice was the critic's third place. He then saw the order and changed to its first place.
+    await pick("idea-1", drafts["idea-1"]![2]!);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const changed = (await pick("idea-1", drafts["idea-1"]![0]!)).value.pick;
+    expect(changed).toMatchObject({ imageId: drafts["idea-1"]![0], first: { imageId: drafts["idea-1"]![2] } });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    expect((await pick("idea-1", drafts["idea-1"]![1]!)).value.pick.first).toMatchObject({ imageId: drafts["idea-1"]![2] });
+    const report = (await callTool(studio, "calibration_report", {})).value;
+    expect(report.picks).toMatchObject({ firstPlace: { k: 0, n: 1 }, byPlace: { "3": 1 } });
   });
 
   it("counts how often the owner picked the critic's first place", async () => {
