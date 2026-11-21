@@ -97,13 +97,16 @@ export class DoneGate {
     let { batch } = await board.progress(await batches.get(batchId));
     const report = await this.report(batch);
     const failed = report.conditions.filter((condition) => !condition.passed);
-    if (failed.length === 0 && batch.state === "finished") batch = await batches.move(batch, "done", "batch_done");
+    // A test batch is never done: its words and its picks are not the owner's.
+    if (failed.length === 0 && batch.state === "finished" && !batch.test) batch = await batches.move(batch, "done", "batch_done");
     const done = batch.state === "done";
     return {
       ...report,
       batch,
       done,
-      nextStep: done
+      nextStep: batch.test
+        ? `This is a test batch, so it is never marked done and its ads go to no one. ${failed.length === 0 ? "Every condition holds" : `Not met: ${failed.map((condition) => condition.name).join(", ")}`}.`
+        : done
         ? "The batch is done. Give the owner the strangerTest list: he runs that test himself."
         : failed.length > 0
           ? `The batch is not done. Not met: ${failed.map((condition) => condition.name).join(", ")}. Each one's evidence says what is missing.`

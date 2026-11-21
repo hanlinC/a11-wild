@@ -194,6 +194,8 @@ export interface Batch {
   id: string;
   /** The kind of ad the batch makes. The owner names it at the start. */
   kind: BatchKind;
+  /** A batch made to try the studio, set at its start and never after. The picks and the approvals in it are the tester's: they teach the studio nothing, and the batch is never a deliverable. */
+  test?: true;
   brandId: string;
   productId: string;
   /** `static_4x5` is the one picture the studio makes. Any other format gets a text spec. */

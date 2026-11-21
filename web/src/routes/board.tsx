@@ -42,6 +42,7 @@ export function Board() {
           {batch.state.replace("_", " ")}
         </Badge>
         <Badge color="gray">{KIND_NAMES[batch.kind]}</Badge>
+        {batch.test && <Badge color="amber">Test batch: not the owner's picks</Badge>}
         <Link to={`/brands/${brand.id}`} className="underline underline-offset-2">
           Brand, facts and photos
         </Link>

@@ -17,6 +17,8 @@ import type { TruthStore } from "../truth/store.js";
 /** The tool that measures a pack's shape. A product with a pack photo needs it on every draft and every final. */
 export const PACK_CHECK = "pack_check";
 
+const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log and not in the calibration.";
+
 /** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
 const PICKING: BatchState[] = ["checked", "waiting_pick", "finals"];
 
@@ -277,6 +279,8 @@ export class BoardService implements FinalRule {
     }
 
     const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: seenOf(draft).id } : {}), ownerSaid, by: user.email });
+    // A pick in a test batch is the tester's, not the owner's taste.
+    if (batch.test) return { pick, note: TEST_PICK };
     await tasteLog.add({
       kind: draft ? "pick" : "pass",
       ownerSaid,

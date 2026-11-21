@@ -26,6 +26,7 @@ export class Calibration {
     const byPlace: Record<string, number> = {};
     let ranked = 0;
     for (const batch of await batches.list()) {
+      if (batch.test) continue;
       const [made, ranks] = await Promise.all([picks.all(batch.id), critic.ranks(batch.id)]);
       for (const pick of made) {
         // Only his first choice counts: after it he sees the critic's order. It counts beside a rank made before it, of the same picture.

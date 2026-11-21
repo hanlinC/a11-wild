@@ -89,6 +89,11 @@ describe("Pick board", () => {
     await waitFor(() => expect(sent).toEqual([{ ideaId: "idea-1", imageId: "idea-1-d3", ownerSaid: "calm" }]));
   });
 
+  it("marks a test batch, so its picks are not read as the owner's", async () => {
+    show(board({ batch: { ...board().batch, test: true } }));
+    expect(await screen.findByText("Test batch: not the owner's picks")).toBeInTheDocument();
+  });
+
   it("shows an ad with words as it is delivered: the picture with the approved words, and the words as text", async () => {
     const withWords = { ...draft("idea-1", 1), words: { image: { ...draft("idea-1", 1).image, id: "idea-1-t1", kind: "typeset" as const }, viewUrl: "https://pictures.example/typeset-1.jpg", checks: { imageId: "idea-1-t1", looked: true, items: [{ code: "F3" as const, note: "The subline sits close to the pack." }], savedAt: at } } };
     const copy = { ideaId: "idea-1", headline: "ONCE YOU | START.", subline: "You cannot stop.", ownerSaid: "yes", version: 1, at, by: "owner@example.com" };

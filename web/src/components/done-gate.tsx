@@ -19,7 +19,7 @@ export function DoneGate({ board }: { board: Board }) {
       ) : (
         <Card>
           <p className="text-body">
-            {report.done ? "This batch is done." : report.conditions.every((condition) => condition.passed) ? "Every condition holds. Your agent can mark the batch done." : "This batch is not done yet."}
+            {board.batch.test ? "This is a test batch. It is never marked done, and its ads go to no one." : report.done ? "This batch is done." : report.conditions.every((condition) => condition.passed) ? "Every condition holds. Your agent can mark the batch done." : "This batch is not done yet."}
           </p>
           <ul className="mt-4 grid gap-3">
             {report.conditions.map((condition) => (
