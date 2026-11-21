@@ -57,7 +57,8 @@ describe("dashboard", () => {
     expect(await screen.findByRole("heading", { name: "Studio" })).toBeInTheDocument();
     expect(screen.getByText(/no batch yet/i)).toBeInTheDocument();
     expect(screen.getByText(`${window.location.origin}/mcp`)).toBeInTheDocument();
-    expect(screen.getAllByText("Not built yet")).toHaveLength(6);
+    expect(screen.getAllByText("Live")).toHaveLength(3);
+    expect(screen.getAllByText("Not built yet")).toHaveLength(3);
     expect(screen.getByText(/owner@example\.com/)).toBeInTheDocument();
     expect(await screen.findByText("Build abc123")).toBeInTheDocument();
   });
