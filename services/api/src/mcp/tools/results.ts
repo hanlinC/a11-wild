@@ -6,7 +6,15 @@ import type { ResultStore } from "../../results/store.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
 
 const id = z.string().min(1).max(64);
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A day is year-month-day, as 2026-11-23.");
+/** A day that exists: 2026-11-31 has the right shape and is no day. */
+const isDay = (text: string) => {
+  const date = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+};
+const day = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "A day is year-month-day, as 2026-11-23.")
+  .refine(isDay, "That day does not exist. Read the report again.");
 
 export function resultTools({ batches, packs, results, pictures }: { batches: BatchStore; packs: PackStore; results: ResultStore; pictures: Pictures }): ToolDefinition[] {
   return [
@@ -33,7 +41,7 @@ export function resultTools({ batches, packs, results, pictures }: { batches: Ba
         adName: z.string().min(1).max(120),
         from: day.describe("The first day of the report."),
         to: day.describe("The last day of the report."),
-        impressions: z.number().int().min(1),
+        impressions: z.number().int().min(0).describe("0 for an ad that was not delivered."),
         clicks: z.number().int().min(0),
         spend: z.number().min(0).optional().describe("What the ad spent in the period, in the account's currency."),
         baselineCtr: z.number().min(0).max(1).optional().describe("The client's usual CTR before these ads, as a share: 0.012 for 1.2%."),
@@ -57,7 +65,8 @@ export function resultTools({ batches, packs, results, pictures }: { batches: Ba
           adName,
           packVersion: version.version,
           ...numbers,
-          ctr: numbers.clicks / numbers.impressions,
+          // An ad that was never shown has no click rate; 0 keeps it beside the others.
+          ctr: numbers.impressions === 0 ? 0 : numbers.clicks / numbers.impressions,
           ...(spend !== undefined ? { spend } : {}),
           ...(baselineCtr !== undefined ? { baselineCtr } : {}),
           ...(uploadId ? { uploadId } : {}),

@@ -90,6 +90,16 @@ describe("results_save", () => {
     expect((await callTool(studio, "results_get", { batchId })).value.results).toEqual([]);
   });
 
+  it("keeps an ad that was not delivered, with a click rate of 0", async () => {
+    expect((await callTool(studio, "results_save", numbers({ impressions: 0, clicks: 0 }))).value.result).toMatchObject({ impressions: 0, clicks: 0, ctr: 0 });
+  });
+
+  it("refuses a day that does not exist", async () => {
+    expect((await callTool(studio, "results_save", numbers({ to: "2026-11-31" }))).ok).toBe(false);
+    expect((await callTool(studio, "results_save", numbers({ from: "2026-02-30", to: "2026-03-02" }))).ok).toBe(false);
+    expect((await callTool(studio, "results_get", { batchId })).value.results).toEqual([]);
+  });
+
   it("shows the files and the numbers on the dashboard's list of packs", async () => {
     await send({ name: "week-1.png", type: "image/png", bytes: 4000 });
     await callTool(studio, "results_save", numbers());
