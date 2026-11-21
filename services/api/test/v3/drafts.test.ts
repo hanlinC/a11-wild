@@ -228,7 +228,11 @@ describe("a draft that its checks reject", () => {
     expect((await direct([directionOf("idea-2", { risk: "low" }), ...kept])).ok).toBe(false);
     await look(await made("idea-2", 1), [{ code: "D2", note: "The crisps look like wax." }]);
     expect((await direct([directionOf("idea-2", { risk: "medium" }), ...kept])).ok).toBe(false);
-    expect((await direct([directionOf("idea-2", { risk: "low", look: "Only the pouch, from above." }), ...kept])).ok).toBe(true);
+    // The other concepts go back as direction_get gave them, with the fields the studio set.
+    const read = (await callTool(studio, "direction_get", { batchId })).value.direction.concepts as { ideaId: string; since: number }[];
+    const asRead = await direct([directionOf("idea-2", { risk: "low", look: "Only the pouch, from above." }), ...read.filter((concept) => concept.ideaId !== "idea-2").map((concept) => ({ ...concept, since: 99 }))]);
+    expect(asRead.ok ? "" : asRead.error).toBe("");
+    expect(asRead.value.direction.concepts.map((concept: { since: number }) => concept.since)).toEqual([asRead.value.direction.version, 1, 1]);
     expect((await studio.services.board.board(batchId)).ideas.find((entry) => entry.idea.id === "idea-4")!.drafts.map((draft) => draft.image.id)).toEqual([other]);
   });
 });

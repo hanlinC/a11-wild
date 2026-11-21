@@ -31,6 +31,7 @@ export function directionTools({ batches, copy, directions, drafts }: DirectionT
           .array(
             z.strictObject({
               ideaId: id,
+              since: z.number().int().optional().describe("As direction_get gave it. The studio sets it; what you send is not used."),
               why: line(600).describe("Why this look says the concept."),
               risk: z.enum(RISKS).describe("How hard the picture is for the model to make right: a held or opened product, a hand, a liquid and many items are high."),
               riskReason: line(400).optional().describe("Needed for high: why the concept is worth the risk, and what the lower-risk way is."),
@@ -39,6 +40,7 @@ export function directionTools({ batches, copy, directions, drafts }: DirectionT
               drafts: z
                 .array(
                   z.strictObject({
+                    number: z.number().int().optional().describe("As direction_get gave it. The drafts are numbered in the order sent."),
                     question: line(200).describe("The one question this draft asks the owner."),
                     axes: z.strictObject(Object.fromEntries(DRAFT_AXES.map((axis) => [axis, line(200)])) as Record<(typeof DRAFT_AXES)[number], z.ZodString>),
                   }),
@@ -70,10 +72,10 @@ export function directionTools({ batches, copy, directions, drafts }: DirectionT
         }
         const unreasoned = concepts.filter((concept) => concept.risk === "high" && !concept.riskReason?.trim()).map((concept) => concept.ideaId);
         if (unreasoned.length > 0) throw new Refusal(`${unreasoned.join(", ")}: a high risk needs its reason: why the concept is worth it, and what the lower-risk way is.`);
-        const numbered = concepts.map(({ riskReason, drafts, ...concept }) => ({
+        const numbered = concepts.map(({ riskReason, drafts, since: _since, ...concept }) => ({
           ...concept,
           ...(riskReason ? { riskReason } : {}),
-          drafts: drafts.map((draft, index) => ({ number: index + 1, ...draft })),
+          drafts: drafts.map((draft, index) => ({ ...draft, number: index + 1 })),
         }));
         const faults = numbered.flatMap(directionFaults);
         if (faults.length > 0) throw new Refusal(`The direction is not saved. ${faults.join(" ")}`);
