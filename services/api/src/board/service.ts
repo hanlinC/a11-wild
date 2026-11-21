@@ -355,11 +355,18 @@ export class BoardService implements FinalRule {
 
   /** Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not. */
   async rejection(batchId: string, imageId: string): Promise<string | undefined> {
-    const { images, checks } = this.deps;
-    const counted = countedOf(await images.get(batchId, imageId), await images.list(batchId));
-    const found = await checks.get(batchId, counted.id);
-    const defect = defectOf(found);
-    return defect ? `${defect.code} (${defect.note})` : rejected(found) ? "two F items or more" : undefined;
+    const { batches, images, checks, copy } = this.deps;
+    const all = await images.list(batchId);
+    const image = await images.get(batchId, imageId);
+    const counted = countedOf(image, all);
+    // A draft of an ad with words is judged with its words on: a composition that cannot hold them is rejected too.
+    const words = hasWords((await batches.get(batchId)).kind) ? typesetOf(counted, all, (await copy.list(batchId)).find((entry) => entry.ideaId === image.ideaId)) : undefined;
+    for (const found of [await checks.get(batchId, counted.id), words ? await checks.get(batchId, words.id) : undefined]) {
+      const defect = defectOf(found);
+      if (defect) return `${defect.code} (${defect.note})`;
+      if (rejected(found)) return "two F items or more";
+    }
+    return undefined;
   }
 
   /** A final is made only from the draft the owner picked, and never from a draft with a D item. */
