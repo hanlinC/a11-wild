@@ -10,13 +10,25 @@ import { Brands } from "@/routes/brands";
 import { Calibration } from "@/routes/calibration";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
+import { Pack } from "@/routes/pack";
+import { Packs } from "@/routes/packs";
 import { SignedOut } from "@/routes/signed-out";
 import { Spend } from "@/routes/spend";
 import { Taste } from "@/routes/taste";
 
 type Session = { state: "loading" } | { state: "signed-out"; failed: boolean } | { state: "signed-in"; me: Me };
 
+/** A client's pack opens with no sign-in: its link is the key. Everything else is the dashboard. */
 export function App() {
+  return (
+    <Routes>
+      <Route path="c/:token" element={<Pack />} />
+      <Route path="*" element={<Dashboard />} />
+    </Routes>
+  );
+}
+
+function Dashboard() {
   const [session, setSession] = useState<Session>({ state: "loading" });
 
   useEffect(() => {
@@ -43,6 +55,7 @@ export function App() {
           <Route path="brands/:brandId" element={<Brand />} />
           <Route path="batches/:batchId" element={<Board />} />
           <Route path="taste" element={<Taste />} />
+          <Route path="packs" element={<Packs />} />
           <Route path="calibration" element={<Calibration />} />
           <Route path="spend" element={<Spend />} />
           <Route path="connections" element={<Connections />} />

@@ -359,7 +359,7 @@ export interface PackSummary {
   pack: Omit<Pack, "tokenHash">;
   brand: { id: string; name: string };
   product: { id: string; name: string };
-  versions: (PackVersion & { ads: (PackAd & { viewUrl: string })[] })[];
+  versions: (Omit<PackVersion, "ads"> & { ads: (PackAd & { viewUrl: string })[] })[];
   uploads: (PackUpload & { downloadUrl: string })[];
   results: AdResult[];
 }

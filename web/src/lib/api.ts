@@ -1,4 +1,4 @@
-import type { BatchSummary, Board, BrandPage, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, Board, BrandPage, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -53,6 +53,19 @@ export const api = {
     }),
   done: (batchId: string) => request<DoneReport>(`/api/batches/${encodeURIComponent(batchId)}/done`),
   calibration: () => request<CalibrationPage>("/api/calibration"),
+  packs: async () => (await request<{ packs: PackSummary[] }>("/api/packs")).packs,
+  /** A client's pack, by the token of its private link. It needs no sign-in. */
+  pack: (token: string) => request<PackView>(`/api/pack/${encodeURIComponent(token)}`),
+  /** Sends one results file: the studio signs a link for this file, and the file goes straight to the store. */
+  sendResult: async (token: string, file: File, type: string) => {
+    const { putUrl } = await request<{ putUrl: string }>(`/api/pack/${encodeURIComponent(token)}/uploads`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: file.name, type, bytes: file.size }),
+    });
+    const sent = await fetch(putUrl, { method: "PUT", headers: { "content-type": type }, body: file, referrerPolicy: "no-referrer" });
+    if (!sent.ok) throw new ApiError(sent.status, "upload_failed", "The file did not arrive. Try again in a moment.");
+  },
   logout: () => post<{ redirect: string }>("/auth/logout"),
 };
 
