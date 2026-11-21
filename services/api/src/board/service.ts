@@ -1,4 +1,4 @@
-import type { Batch, BatchImage, Board, BoardDraft, CheckItem, ImageChecks, Pick, Role } from "@a11-wild/shared";
+import type { Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, Pick, Role } from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { type CheckStore, defectOf, rejected } from "../checks/store.js";
@@ -13,6 +13,9 @@ import type { TruthStore } from "../truth/store.js";
 
 /** The tool that measures a pack's shape. A product with a pack photo needs it on every draft and every final. */
 export const PACK_CHECK = "pack_check";
+
+/** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
+const PICKING: BatchState[] = ["checked", "waiting_pick", "finals"];
 
 interface Deps {
   batches: BatchStore;
@@ -78,6 +81,7 @@ export class BoardService implements FinalRule {
       );
     return {
       batch,
+      picking: PICKING.includes(batch.state) ? "open" : batch.state === "finished" || batch.state === "done" ? "closed" : "not_yet",
       brand: { id: brand.id, name: brand.name },
       product: { id: product.id, name: product.name },
       truthSheet: (await truth.get(batch.productId, batch.truthVersion)) ?? null,
@@ -186,7 +190,7 @@ export class BoardService implements FinalRule {
     if (!ownerSaid) throw new Refusal("A pick or a pass is saved with the owner's own words. Ask him why, and send what he said.");
     let batch = await batches.get(batchId);
     if (batch.state === "checked") batch = await batches.move(batch, "waiting_pick", "pick_save");
-    if (batch.state !== "waiting_pick" && batch.state !== "finals") {
+    if (!PICKING.includes(batch.state)) {
       throw new Refusal(`The owner picks when the board is ready. This batch is at "${batch.state}".`);
     }
     const board = await this.board(batchId);

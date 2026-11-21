@@ -57,6 +57,9 @@ describe("checks", () => {
     expect(one.value).toMatchObject({ state: "drafting", checks: { looked: true, items: [{ code: "F6" }] } });
     expect(one.value.stillMissing).toHaveLength(8);
     expect(await callTool(studio, "board_show", { batchId })).toEqual(refused(/board is not ready.*checks_save for picture/));
+    // The dashboard shows the drafts so far, and tells the owner that he cannot pick yet.
+    const early = await json(await studio.app.request(`/api/batches/${batchId}/board`, { headers: { cookie: await sessionCookie(studio) } }));
+    expect(early.picking).toBe("not_yet");
     for (const imageId of rest) await check(imageId);
     expect(await state()).toBe("checked");
   });
@@ -133,6 +136,7 @@ describe("pick board", () => {
     expect((await studio.app.request(path)).status).toBe(401);
     const board = await json(await studio.app.request(path, { headers: { cookie: await sessionCookie(studio) } }));
     expect(board.ideas[0].drafts[0].viewUrl).toContain("signed=1");
+    expect(board.picking).toBe("open");
 
     const post = (cookie: string, origin: string) =>
       studio.app.request(`/api/batches/${batchId}/picks`, {

@@ -1,4 +1,4 @@
-import type { BrandKit, BrandPage, BrandSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, BrandKit, BrandPage, BrandSummary, TastePage } from "@a11-wild/shared";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Deps } from "../app.js";
@@ -87,6 +87,16 @@ export function studioRoutes(
       if (error instanceof Refusal) return c.json({ error: "refused", message: error.message }, 400);
       throw error;
     }
+  });
+
+  routes.get("/api/batches", session, async (c) => {
+    const list = await Promise.all(
+      (await batches.list()).map(async (batch): Promise<BatchSummary> => {
+        const [brand, product] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId)]);
+        return { batch, brand: { id: brand.id, name: brand.name }, product: { id: product.id, name: product.name } };
+      }),
+    );
+    return c.json({ batches: list });
   });
 
   routes.get("/api/batches/:batchId/board", session, async (c) => {

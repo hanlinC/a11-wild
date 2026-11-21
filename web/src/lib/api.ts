@@ -1,4 +1,4 @@
-import type { Board, BrandPage, BrandSummary, CanonVersion, ClientRecord, Me, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, Board, BrandPage, BrandSummary, CanonVersion, ClientRecord, Me, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -43,6 +43,7 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ text, reason }),
     }),
+  batches: async () => (await request<{ batches: BatchSummary[] }>("/api/batches")).batches,
   board: (batchId: string) => request<Board>(`/api/batches/${encodeURIComponent(batchId)}/board`),
   pick: (batchId: string, pick: { ideaId: string; imageId: string | null; ownerSaid: string }) =>
     request<{ pick: Pick; note?: string }>(`/api/batches/${encodeURIComponent(batchId)}/picks`, {

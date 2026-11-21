@@ -28,7 +28,7 @@ export function Board() {
       </>
     );
   }
-  const { batch, brand, product, truthSheet, ideas } = board;
+  const { batch, picking, brand, product, truthSheet, ideas } = board;
   return (
     <>
       <PageHeader
@@ -68,16 +68,28 @@ export function Board() {
         </Card>
       </Section>
 
+      {picking === "open" ? null : (
+        <div className="mt-10">
+          <Banner status="info">
+            <BannerTitle>
+              {picking === "not_yet"
+                ? "Not ready for your pick yet. Your agent is still making or checking the drafts."
+                : "This batch is finished. Its picks are closed."}
+            </BannerTitle>
+          </Banner>
+        </div>
+      )}
+
       {ideas.length === 0 ? <Empty>No idea is saved for this batch yet.</Empty> : null}
       {ideas.map((entry, index) => (
-        <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} onSaved={reload} />
+        <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} canPick={picking === "open"} onSaved={reload} />
       ))}
     </>
   );
 }
 
-function IdeaSection({ batchId, entry, number, onSaved }: { batchId: string; entry: Entry; number: number; onSaved: () => Promise<void> }) {
-  const isOwner = useMe().role === "owner";
+function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: string; entry: Entry; number: number; canPick: boolean; onSaved: () => Promise<void> }) {
+  const picks = useMe().role === "owner" && canPick;
   const { idea, drafts, pick, finals } = entry;
   const [chosen, setChosen] = useState<string | null | undefined>();
   const [said, setSaid] = useState("");
@@ -112,7 +124,7 @@ function IdeaSection({ batchId, entry, number, onSaved }: { batchId: string; ent
             {drafts.map((draft) => (
               <li key={draft.image.id}>
                 <Draft draft={draft} label={`Draft ${draft.number}`} alt={`${idea.title}, draft ${draft.number}`} picked={pick?.imageId === draft.image.id} />
-                {isOwner ? (
+                {picks ? (
                   <Button type="button" variant={chosen === draft.image.id ? "primary" : "secondary"} size="compact" className="mt-2" onClick={() => setChosen(draft.image.id)}>
                     Pick draft {draft.number}
                   </Button>
@@ -124,7 +136,7 @@ function IdeaSection({ batchId, entry, number, onSaved }: { batchId: string; ent
 
         <PickLine pick={pick} drafts={drafts} />
 
-        {isOwner && drafts.length > 0 ? (
+        {picks && drafts.length > 0 ? (
           <form onSubmit={save} className="mt-4 grid gap-3">
             <div>
               <Button type="button" variant={chosen === null ? "primary" : "ghost"} size="compact" onClick={() => setChosen(null)}>

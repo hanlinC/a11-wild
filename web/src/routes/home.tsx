@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { Loading } from "@/components/loading";
 import { Card, Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { useLoad } from "@/lib/use-load";
+import { when } from "@/lib/when";
 
 /** The pipeline, in the order a batch moves through it. `ready` turns true as each part ships. */
 const STAGES = [
@@ -19,6 +22,7 @@ export function Home() {
   const mcpAddress = `${window.location.origin}/mcp`;
   const [buildId, setBuildId] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const { value: batches, error } = useLoad(api.batches);
 
   useEffect(() => {
     let current = true;
@@ -63,8 +67,31 @@ export function Home() {
         </Card>
       </Section>
 
-      <Section title="Batches">
-        <Empty>No batch yet. Your agent starts one when you give it a brand and a product.</Empty>
+      <Section title="Batches" count={batches?.length}>
+        {batches === undefined ? (
+          <Loading error={error} />
+        ) : batches.length === 0 ? (
+          <Empty>No batch yet. Your agent starts one when you give it a brand and a product.</Empty>
+        ) : (
+          <ul className="grid gap-3">
+            {batches.map(({ batch, brand, product }) => (
+              <li key={batch.id}>
+                <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <Link to={`/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
+                    {batch.label ?? "Batch"}
+                  </Link>
+                  <span className="text-body text-muted-foreground">
+                    {brand.name}: {product.name}
+                  </span>
+                  <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
+                    {batch.state.replace("_", " ")}
+                  </Badge>
+                  <span className="ml-auto text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <Section title="What the studio does">

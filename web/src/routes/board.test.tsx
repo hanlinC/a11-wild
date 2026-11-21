@@ -24,6 +24,7 @@ const idea = (n: number) => ({
 });
 const board = (overrides: Partial<BoardData> = {}): BoardData => ({
   batch: { id: "b1", brandId: "br1", productId: "p1", format: "static_4x5", state: "waiting_pick", truthVersion: 2, createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
+  picking: "open",
   brand: { id: "br1", name: "WonGi" },
   product: { id: "p1", name: "Seaweed crisps" },
   truthSheet: { productId: "p1", version: 2, shape: "A flat pouch with a zip top.", packaging: "Matt black pouch.", measures: [{ name: "pack height", value: 180, unit: "mm", status: "unverified" }], savedAt: at, savedBy: "owner@example.com" },
@@ -118,6 +119,21 @@ describe("Pick board", () => {
     expect(screen.getByText("Repaired")).toBeInTheDocument();
     expect(screen.getByAltText("Rock 1, final 1")).toHaveAttribute("src", "https://pictures.example/finish-1.jpg");
     expect(screen.getByText("Finished")).toBeInTheDocument();
+  });
+
+  it("gives the owner no way to pick before the drafts are all made and checked, and says so", async () => {
+    const page = board({ picking: "not_yet" });
+    show({ ...page, batch: { ...page.batch, state: "priced" } });
+    await screen.findByAltText("Rock 1, draft 1");
+    expect(screen.getByText(/Not ready for your pick yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pick draft|Pass on all/ })).not.toBeInTheDocument();
+  });
+
+  it("closes the picks of a finished batch", async () => {
+    show(board({ picking: "closed" }));
+    await screen.findByAltText("Rock 1, draft 1");
+    expect(screen.getByText(/Its picks are closed/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pick draft|Pass on all/ })).not.toBeInTheDocument();
   });
 
   it("gives a member no way to pick", async () => {

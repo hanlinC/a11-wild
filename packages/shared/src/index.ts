@@ -256,6 +256,13 @@ export interface BrandPage {
   batches: Batch[];
 }
 
+/** One batch in the dashboard's list, with the names of its brand and product. */
+export interface BatchSummary {
+  batch: Batch;
+  brand: { id: string; name: string };
+  product: { id: string; name: string };
+}
+
 /** What the dashboard's taste page shows. */
 export interface TastePage {
   canon: CanonVersion;
@@ -371,6 +378,8 @@ export interface PixelJob {
 /** What the owner sees to pick: each idea's drafts beside the product's truth sheet, with no rank. */
 export interface Board {
   batch: Batch;
+  /** Whether the owner can pick now: `not_yet` until every draft is made and checked, `closed` once the finals are finished. */
+  picking: "not_yet" | "open" | "closed";
   brand: { id: string; name: string };
   product: { id: string; name: string };
   truthSheet: TruthSheet | null;
