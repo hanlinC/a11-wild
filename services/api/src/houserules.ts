@@ -4,7 +4,7 @@
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-21.1";
+export const RULES_VERSION = "2026-11-22.1";
 
 export const RULE_ROLES = ["main", "critic"] as const;
 export type RuleRole = (typeof RULE_ROLES)[number];

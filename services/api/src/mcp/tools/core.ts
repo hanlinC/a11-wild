@@ -1,3 +1,4 @@
+import { CHECK_CODES } from "../../checks/codes.js";
 import { z } from "zod";
 import type { StudioStatus } from "@a11-wild/shared";
 import type { Config } from "../../config.js";
@@ -9,11 +10,11 @@ export function coreTools(config: Config): ToolDefinition[] {
     defineTool({
       name: "rules_get",
       description:
-        "FIRST, before any creative step: read the owner's house rules for your role. Free. Returns the rules and their version; tools that write creative work need that version as rulesVersion.",
+        "FIRST, before any creative step: read the owner's house rules for your role. Free. Returns the rules, their version, and the picture checks D1 to D11 and F1 to F8; tools that write creative work need that version as rulesVersion.",
       input: {
         role: z.enum(RULE_ROLES).describe('"main" for the agent that runs the batch, "critic" for the blind critic.'),
       },
-      handler: ({ role }) => ({ rulesVersion: RULES_VERSION, role, rules: rulesFor(role) }),
+      handler: ({ role }) => ({ rulesVersion: RULES_VERSION, role, rules: rulesFor(role), pictureChecks: CHECK_CODES }),
     }),
     defineTool({
       name: "whoami",

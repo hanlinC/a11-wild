@@ -299,3 +299,51 @@ export interface Render {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A defect (D) rejects a picture by itself. Two faults (F) do the same. */
+export type CheckCode = "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7" | "D8" | "D9" | "D10" | "D11" | "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8";
+
+export interface CheckItem {
+  code: CheckCode;
+  /** What is wrong in this picture, in a line. */
+  note: string;
+  /** The pixel tool that measured it. An item with a tool was measured, and no agent can remove it. */
+  tool?: string;
+}
+
+/** What was found in one draft or one final. No item means it was looked at and nothing was found. */
+export interface ImageChecks {
+  imageId: string;
+  items: CheckItem[];
+  /** True when the agent has saved its own look at the picture. Measured items can arrive before that. */
+  looked: boolean;
+  savedAt: string;
+}
+
+/** The owner's choice for one idea: one of its drafts, or none of them. */
+export interface Pick {
+  ideaId: string;
+  /** The picked draft's picture, or null when the owner passed on all of the idea's drafts. */
+  imageId: string | null;
+  ownerSaid: string;
+  at: string;
+  by: string;
+}
+
+export interface BoardDraft {
+  /** 1 to 3, in the order the drafts were sent. It is a name, not a rank. */
+  number: number;
+  image: BatchImage;
+  viewUrl: string;
+  /** The D and F items found in it, or null when it has not been checked yet. */
+  checks: ImageChecks | null;
+}
+
+/** What the owner sees to pick: each idea's drafts beside the product's truth sheet, with no rank. */
+export interface Board {
+  batch: Batch;
+  brand: { id: string; name: string };
+  product: { id: string; name: string };
+  truthSheet: TruthSheet | null;
+  ideas: { idea: Idea; drafts: BoardDraft[]; pick: Pick | null; finals: BoardDraft[] }[];
+}

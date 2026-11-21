@@ -1,14 +1,17 @@
 import { BatchReads } from "../../batch/reads.js";
 import { BatchStore } from "../../batch/store.js";
+import { BoardService } from "../../board/service.js";
 import { BrandStore } from "../../brand/store.js";
+import { CheckStore } from "../../checks/store.js";
 import type { Config } from "../../config.js";
 import { FactStore } from "../../facts/store.js";
 import { FalClient } from "../../fal/client.js";
 import { ImageStore } from "../../images/store.js";
 import { Importer } from "../../import/ingest.js";
 import { ParallelClient } from "../../parallel/client.js";
+import { PickStore } from "../../picks/store.js";
 import type { Pictures } from "../../pictures/store.js";
-import { type FinalRule, RenderService } from "../../render/service.js";
+import { RenderService } from "../../render/service.js";
 import { RenderStore } from "../../render/store.js";
 import type { ProviderKeys } from "../../secrets.js";
 import { SpendGate } from "../../spend/gate.js";
@@ -19,8 +22,9 @@ import { TasteLog } from "../../taste/log.js";
 import { SwipeFile } from "../../taste/swipe.js";
 import { TruthStore } from "../../truth/store.js";
 import type { Net } from "../../urlsafety.js";
-import { Refusal, type ToolDefinition } from "../registry.js";
+import type { ToolDefinition } from "../registry.js";
 import { batchTools } from "./batch.js";
+import { boardTools } from "./board.js";
 import { brandTools } from "./brand.js";
 import { coreTools } from "./core.js";
 import { factTools } from "./facts.js";
@@ -61,14 +65,11 @@ export function studioTools(parts: StudioParts) {
   const images = new ImageStore(table, now);
   const renders = new RenderStore(table, now);
   const fal = new FalClient(parts.keys, parts.falFetch);
-  // Until the picks and the checks exist, no draft can become a final.
-  const finals: FinalRule = {
-    allow: async () => {
-      throw new Refusal("A final is made only from a draft the owner picked, and the owner has picked none yet.");
-    },
-  };
-  const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render };
+  const checks = new CheckStore(table, now);
+  const picks = new PickStore(table, now);
+  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, tasteLog, pictures });
+  const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -78,6 +79,7 @@ export function studioTools(parts: StudioParts) {
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads }),
     ...renderTools({ render }),
+    ...boardTools({ board }),
   ];
   return { tools, services };
 }
