@@ -138,6 +138,14 @@ describe("render_status", () => {
     expect((await draft()).value.note).toMatch(/goes alone/);
   });
 
+  it("keeps the money spent when fal made the picture and the studio could not copy it", async () => {
+    await batchAtIdeas({ fal: (call) => (call.method === "GET" && call.url.includes("fal.media") ? { status: 404, json: {} } : undefined) });
+    const first = await draft();
+    const failed = await callTool(studio, "render_status", { batchId, renderId: first.value.id });
+    expect(failed.value).toMatchObject({ status: "failed", error: expect.stringMatching(/could not be copied/) });
+    expect(await studio.spend.ledger.summary(batchId)).toMatchObject({ batchUsd: 0.009, lines: [expect.objectContaining({ status: "spent" })] });
+  });
+
   it("leaves the render queued while fal is busy, and copies the picture once when two reads meet", async () => {
     let busy = true;
     await batchAtIdeas({ fal: (call) => (busy && call.url.endsWith("/status") ? { status: 503 } : undefined) });

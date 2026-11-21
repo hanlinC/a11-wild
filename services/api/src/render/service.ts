@@ -196,7 +196,8 @@ export class RenderService {
     if (result.state === "queued") return this.view(render, result.note ?? "fal is still making it; read again in a few seconds.");
 
     if (result.state === "failed") {
-      if (await renders.end(render, { status: "failed", error: result.error })) await ledger.release(render.reservation);
+      // Only a sure refusal gives the money back. A picture that fal made and the studio could not copy was still billed.
+      if (await renders.end(render, { status: "failed", error: result.error })) await (result.refund ? ledger.release(render.reservation) : ledger.settle(render.reservation));
       return this.view(await renders.get(batchId, renderId));
     }
 

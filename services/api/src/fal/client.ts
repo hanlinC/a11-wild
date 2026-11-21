@@ -37,7 +37,8 @@ export interface FalJob {
 
 export type FalState =
   | { state: "queued"; note?: string }
-  | { state: "failed"; error: string }
+  /** `refund` is set only when fal surely made no picture. Any other failure may still be billed, so its money stays spent. */
+  | { state: "failed"; error: string; refund?: true }
   | { state: "done"; body: Uint8Array; type: string; ext: string };
 
 /** The queue gets the key, so only its exact host passes. */
@@ -140,7 +141,7 @@ export class FalClient {
         await result.body?.cancel();
         return transient(result.status)
           ? { state: "queued", note: `fal is busy (status ${result.status}); read again.` }
-          : { state: "failed", error: `fal did not make the picture (status ${result.status}). The prompt or a reference picture may be one the model refuses.` };
+          : { state: "failed", refund: true, error: `fal did not make the picture (status ${result.status}). The prompt or a reference picture may be one the model refuses.` };
       }
       const data = (await result.json().catch(() => undefined)) as { images?: { url?: unknown }[] } | undefined;
       const url = data?.images?.[0]?.url;
