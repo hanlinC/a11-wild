@@ -64,7 +64,7 @@ export class ParallelClient {
     private readonly keys: ProviderKeys,
     private readonly ledger: SpendLedger,
     private readonly fetchFn: typeof fetch = (input, init) => fetch(input, init),
-    /** Holds a batch's research at each US$1 until the owner says yes. */
+    /** Holds research at each US$1 until the owner says yes: by batch, or by month when it belongs to no batch. */
     private readonly gate?: SpendGate,
     private readonly timeoutMs = 25_000,
   ) {}
@@ -102,7 +102,7 @@ export class ParallelClient {
   ): Promise<T> {
     // Read the key first: with no key there is nothing to send, so nothing to reserve.
     await this.keys.get("parallel");
-    if (batchId && this.gate) await this.gate.research(batchId, await this.ledger.batchMicro(batchId, "parallel"), toMicro(usd));
+    if (this.gate) await this.gate.research(batchId, await this.ledger.batchMicro(batchId, "parallel"), toMicro(usd));
     return this.ledger.paid({ service: "parallel", kind, ref, usd, ...(batchId ? { batchId } : {}) }, async () => ({
       value: await call(),
     }));

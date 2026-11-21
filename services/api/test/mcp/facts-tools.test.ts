@@ -91,10 +91,19 @@ describe("fact tools", () => {
     expect(held).toEqual({ ok: false, error: expect.stringMatching(/waits for the owner's yes.*US\$0\.975.*up to US\$2\.00.*Nothing was sent/) });
     expect(studio.parallelCalls).toHaveLength(calls);
     expect((await studio.spend.ledger.summary("b1")).batchUsd).toBe(0.975);
-    // Another batch, and research for no batch, are not held by this one.
+    // Another batch is not held by this one.
     expect((await callTool(studio, "research_start", { ...ask, batchId: "b2" })).ok).toBe(true);
 
     expect((await callTool(studio, "spend_approve", { batchId: "b1", stage: "research" })).value).toMatchObject({ estimateUsd: 2, approvedBy: "owner@example.com" });
+    expect((await callTool(studio, "research_start", ask)).ok).toBe(true);
+  });
+
+  it("holds research that belongs to no batch the same way, on the month's total", async () => {
+    const ask = { question: "How tall is the WonGi seaweed crisps pack, in mm?", processor: "core" };
+    for (let sent = 0; sent < 39; sent++) expect((await callTool(studio, "research_start", ask)).ok).toBe(true);
+    expect(await callTool(studio, "research_start", ask)).toEqual({ ok: false, error: expect.stringMatching(/research outside a batch has used US\$0\.975.*no batchId.*Nothing was sent/) });
+    expect(await callTool(studio, "spend_approve", { stage: "drafts" })).toEqual({ ok: false, error: expect.stringMatching(/needs the batch id/) });
+    expect((await callTool(studio, "spend_approve", { stage: "research" })).value).toMatchObject({ estimateUsd: 2 });
     expect((await callTool(studio, "research_start", ask)).ok).toBe(true);
   });
 

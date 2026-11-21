@@ -60,11 +60,12 @@ export class SpendGate {
   }
 
   /** Records the owner's yes for the estimate shown. Nobody else can give it. */
-  async approve(batchId: string, stage: GateStage, user: { email: string; role: Role }): Promise<GateState> {
+  async approve(batchId: string | undefined, stage: GateStage, user: { email: string; role: Role }): Promise<GateState> {
     if (user.role !== "owner") throw new GateError("Only the owner can approve spend.");
-    const [pk, sk] = key(batchId, stage);
+    if (!batchId && stage !== "research") throw new GateError(`A yes for ${stage} needs the batch id. Only research can belong to no batch.`);
+    const [pk, sk] = key(batchId ?? this.noBatch(), stage);
     const item = await this.table.get<GateItem>(pk, sk);
-    if (!item) throw new GateError(`There is no estimate for the ${stage} of this batch yet, so there is nothing to approve.`);
+    if (!item) throw new GateError(`There is no estimate for the ${stage} of ${batchId ? "this batch" : "this month's research outside a batch"} yet, so there is nothing to approve.`);
     const approved: GateItem = {
       ...item,
       approvedMicro: item.estimateMicro,
@@ -75,20 +76,27 @@ export class SpendGate {
     return this.view(approved);
   }
 
+  /** Where research that belongs to no batch is counted: one place for each month. */
+  private noBatch(): string {
+    return `no-batch-${this.now().toISOString().slice(0, 7)}`;
+  }
+
   /**
    * The same rule for research, which has no count to estimate from: a batch's research goes on
    * freely while its total stays under US$1, and each further US$1 waits for the owner's yes.
+   * Research that belongs to no batch is held the same way, on its total for the month.
    */
-  async research(batchId: string, usedMicro: number, nextMicro: number): Promise<void> {
-    const [pk, sk] = key(batchId, "research");
+  async research(batchId: string | undefined, usedMicro: number, nextMicro: number): Promise<void> {
+    const [pk, sk] = key(batchId ?? this.noBatch(), "research");
     const item = await this.table.get<GateItem>(pk, sk);
     const step = toMicro(ASK_FROM_USD);
     const allowed = Math.max(step, item?.approvedMicro ?? 0);
     if (usedMicro + nextMicro < allowed) return;
     const asked = allowed + step;
     if (item?.estimateMicro !== asked) await this.table.put({ ...item, pk, sk, count: 0, estimateMicro: asked });
+    const whose = batchId ? "This batch's research" : "This month's research outside a batch";
     throw new GateError(
-      `This batch waits for the owner's yes: its research has used ${showUsd(usedMicro)}, and this call needs about ${showUsd(nextMicro)}. The batch may spend under ${showUsd(allowed)} on research so far. Show the owner these amounts. His yes lets research go on up to ${showUsd(asked)}. Only the owner can approve (spend_approve with stage "research"). Nothing was sent.`,
+      `This waits for the owner's yes. ${whose} has used ${showUsd(usedMicro)}, and this call needs about ${showUsd(nextMicro)}. It may spend under ${showUsd(allowed)} so far. Show the owner these amounts. His yes lets it go on up to ${showUsd(asked)}. Only the owner can approve (spend_approve with stage "research"${batchId ? "" : " and no batchId"}). Nothing was sent.`,
     );
   }
 

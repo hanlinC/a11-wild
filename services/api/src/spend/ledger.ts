@@ -146,8 +146,11 @@ export class SpendLedger {
     }
   }
 
-  /** What a batch has spent or still holds in reserve with one service this month, in micro-dollars. */
-  async batchMicro(batchId: string, service: SpendService): Promise<number> {
+  /**
+   * What a batch has spent or still holds in reserve with one service this month, in micro-dollars.
+   * With no batch id, the same for the calls that belong to no batch.
+   */
+  async batchMicro(batchId: string | undefined, service: SpendService): Promise<number> {
     const items = await this.table.query<LineItem>(monthKey(this.month()));
     return items
       .filter((item) => item.sk.startsWith("LINE#") && item.batchId === batchId && item.service === service && item.status !== "released")
