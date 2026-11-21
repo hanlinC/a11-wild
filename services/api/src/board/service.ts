@@ -1,7 +1,7 @@
 import type { Batch, BatchImage, Board, BoardDraft, CheckItem, ImageChecks, Pick, Role } from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
-import { type CheckStore, defectOf } from "../checks/store.js";
+import { type CheckStore, defectOf, rejected } from "../checks/store.js";
 import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { PickStore } from "../picks/store.js";
@@ -115,23 +115,30 @@ export class BoardService implements FinalRule {
         for (const image of mine) missing.push(...(await this.needs(batch.id, countedOf(image, all), hasPack, found)));
       }
       if (missing.length === 0) batch = await batches.move(batch, "checked", "checks_save");
-    } else if (batch.state === "finals") {
+    } else if (batch.state === "finals" || batch.state === "finished") {
       const finals = await this.sent(batch.id, "final");
-      for (const pick of (await picks.all(batch.id)).filter((made) => made.imageId)) {
-        // The newest final of an idea is the one that counts: an earlier one was made again because it failed.
-        const made = finals.get(pick.ideaId)?.at(-1);
-        if (!made) {
-          missing.push(`a finished final of ${pick.ideaId}`);
+      const made = await picks.all(batch.id);
+      for (const idea of await batches.ideas(batch.id)) {
+        const pick = made.find((entry) => entry.ideaId === idea.id);
+        if (!pick) missing.push(`the owner's pick, or his pass, for ${idea.id}`);
+        if (!pick?.imageId) continue;
+        // The newest final of the picked draft is the one that counts: an earlier one was made again because it failed, and a final of a draft he no longer picks does not count.
+        const newest = finals.get(idea.id)?.filter((final) => final.fromId === pick.imageId).at(-1);
+        if (!newest) {
+          missing.push(`a finished final of ${idea.id}, from the picked draft ${pick.imageId}`);
           continue;
         }
         // A repair of a final stands for it, and is checked again as a new picture.
-        const final = countedOf(made, all);
+        const final = countedOf(newest, all);
         missing.push(...(await this.needs(batch.id, final, hasPack, found)));
         const defect = defectOf(found.get(final.id));
-        if (defect) missing.push(`a final of ${pick.ideaId} with no D item (the newest has ${defect.code})`);
+        if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
+        else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
         else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
       }
-      if (missing.length === 0) batch = await batches.move(batch, "finished", "checks_save");
+      if (missing.length === 0 && batch.state === "finals") batch = await batches.move(batch, "finished", "checks_save");
+      // A finished batch whose final got a D item, or a repair that is not checked yet, is not finished any more.
+      else if (missing.length > 0 && batch.state === "finished") batch = await batches.move(batch, "finals", "checks_save");
     }
     return { batch, missing };
   }
@@ -217,6 +224,9 @@ export class BoardService implements FinalRule {
     }
     // A repaired draft stands for the picked one, with its own checks.
     const source = countedOf(draft, await this.deps.images.list(batch.id));
+    const hasPack = (await this.deps.brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
+    const unchecked = await this.needs(batch.id, source, hasPack, await this.deps.checks.all(batch.id));
+    if (unchecked.length > 0) throw new Refusal(`R35: the repair of this draft is not checked yet, so it cannot become a final. Still missing: ${unchecked.join("; ")}.`);
     const defect = defectOf(await this.deps.checks.get(batch.id, source.id));
     if (defect) throw new Refusal(`R35: this draft has ${defect.code} (${defect.note}), so it cannot become a final. Repair it with product_swap or product_reprint and check the repair, or tell the owner.`);
     return { finals: made.filter((entry) => entry.imageId).length, source };

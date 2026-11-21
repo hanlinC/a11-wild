@@ -180,7 +180,7 @@ describe("finals", () => {
     const first = await render("idea-1", "final", drafts["idea-1"]![0]);
     expect(first.value.note).toMatch(/2 finals come to about US\$0\.15, under US\$1/);
     const bad = await check(first.value.image.id, [{ code: "D10", note: "The pack keeps its studio highlight." }]);
-    expect(bad.value).toMatchObject({ state: "finals", stillMissing: expect.arrayContaining(["a finished final of idea-3"]) });
+    expect(bad.value).toMatchObject({ state: "finals", stillMissing: expect.arrayContaining([expect.stringMatching(/^a finished final of idea-3, from the picked draft/)]) });
 
     const third = await render("idea-3", "final", drafts["idea-3"]![2]);
     await check(third.value.image.id);
@@ -194,10 +194,41 @@ describe("finals", () => {
       stillMissing: [`photo_finish for picture ${again.value.image.id}`, `photo_finish for picture ${third.value.image.id}`],
     });
     const finish = async (imageId: string) => {
-      const job = await callTool(studio, "photo_finish", { batchId, imageId });
+      const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId });
       return (await callTool(studio, "pixel_status", { batchId, jobId: job.value.id })).value;
     };
     expect((await finish(again.value.image.id)).state).toBe("finals");
     expect((await finish(third.value.image.id)).state).toBe("finished");
+
+    // A D item found after the end takes the batch back to its finals.
+    expect((await check(third.value.image.id, [{ code: "D2", note: "The fish skin has no curry leaf." }])).value).toMatchObject({ state: "finals" });
+    expect((await check(third.value.image.id)).value).toMatchObject({ state: "finished" });
+  });
+
+  const finished = async (ideaId: string, draftId: string, items: object[] = []) => {
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const final = await render(ideaId, "final", draftId);
+    await check(final.value.image.id, items);
+    const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final.value.image.id });
+    return (await callTool(studio, "pixel_status", { batchId, jobId: job.value.id })).value;
+  };
+
+  it("does not finish while an idea has no pick and no pass", async () => {
+    await pick("idea-1", drafts["idea-1"]![0]!);
+    await pick("idea-2", null, "none");
+    expect(await finished("idea-1", drafts["idea-1"]![0]!)).toMatchObject({ state: "finals", stillMissing: ["the owner's pick, or his pass, for idea-3"] });
+    await pick("idea-3", null, "none of these");
+    expect((await check(drafts["idea-1"]![1]!)).value.state).toBe("finished");
+  });
+
+  it("does not finish on a final with two F items, or on the final of a draft he no longer picks", async () => {
+    await pick("idea-1", drafts["idea-1"]![0]!);
+    await pick("idea-2", null, "none");
+    await pick("idea-3", null, "none");
+    const faults = [{ code: "F1", note: "The rope sags too far." }, { code: "F2", note: "The plinth edge is soft." }];
+    expect(await finished("idea-1", drafts["idea-1"]![0]!, faults)).toMatchObject({ state: "finals", stillMissing: ["a final of idea-1 with fewer than two F items"] });
+    await pick("idea-1", drafts["idea-1"]![1]!, "the second one after all");
+    expect((await check(drafts["idea-1"]![1]!)).value).toMatchObject({ state: "finals", stillMissing: [expect.stringMatching(/a finished final of idea-1, from the picked draft/)] });
+    expect((await finished("idea-1", drafts["idea-1"]![1]!)).state).toBe("finished");
   });
 });

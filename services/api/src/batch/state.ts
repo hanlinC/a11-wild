@@ -30,7 +30,8 @@ const NEXT: Record<BatchState, BatchState[]> = {
   checked: ["waiting_pick"],
   waiting_pick: ["finals"],
   finals: ["finished"],
-  finished: ["done"],
+  // A finished batch goes back to its finals when one of them gets a D item or a repair after the fact.
+  finished: ["done", "finals"],
   done: [],
   spec_only: [],
 };

@@ -25,7 +25,8 @@ async function start(pixels?: (event: PixelEvent) => ReturnType<NonNullable<Para
 const status = async (jobId: string) => (await callTool(studio, "pixel_status", { batchId, jobId })).value;
 /** Runs a pixel tool to its end. */
 async function run(tool: string, args: object) {
-  const sent = await callTool(studio, tool, { batchId, ...args });
+  const creative = ["product_reprint", "product_swap", "photo_finish"].includes(tool);
+  const sent = await callTool(studio, tool, { batchId, ...(creative ? rules : {}), ...args });
   if (!sent.ok) return sent;
   return { ok: true as const, value: await status(sent.value.id) };
 }
@@ -172,6 +173,11 @@ describe("repairs, the finish and the food crop", () => {
     expect(shown.shown.id).toBe(repair.id);
     // The repair has no check yet: the old picture's D11 is not carried over, and nor is a pass.
     expect(shown.checks).toBeNull();
+    // Nor does a final come from it before it is checked.
+    const { services } = studio;
+    await services.picks.save(batchId, { ideaId: "idea-1", imageId, ownerSaid: "this one", by: "owner@example.com" });
+    const allow = async () => services.board.allow(await services.batches.get(batchId), "idea-1", await services.images.get(batchId, imageId));
+    await expect(allow()).rejects.toThrow(/R35: the repair of this draft is not checked yet/);
     const looked = await callTool(studio, "checks_save", { ...rules, batchId, imageId: repair.id, items: [] });
     expect(looked.value.checks).toMatchObject({ imageId: repair.id, items: [], looked: true });
     expect(await studio.services.checks.measuredBy(batchId, repair.id)).toEqual([]);

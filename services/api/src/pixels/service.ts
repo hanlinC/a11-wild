@@ -221,7 +221,7 @@ export class PixelService {
       const image = await images.get(batchId, job.madeId);
       view.image = { ...image, viewUrl: await pictures.viewUrl(image.key) };
     }
-    if (job.status === "done" && (job.tool === "pack_check" || job.tool === "cap_check" || job.tool === "photo_finish")) {
+    if (job.status === "done" && job.tool !== "skeleton" && job.tool !== "food_crop") {
       const { batch, missing } = await board.progress(await batches.get(batchId));
       view.state = batch.state;
       if (missing.length > 0) view.stillMissing = missing;

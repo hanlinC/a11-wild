@@ -99,6 +99,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         face: box.describe("x0,y0,x1,y1 of the printed face in the pack photo: below the cap and the top folds, inside the edges."),
       },
       writes: true,
+      needsRules: true,
       handler: (input) => pixels.reprint(input),
     }),
     defineTool({
@@ -115,6 +116,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         bandTop: px.optional().describe("With lowerOnly: y of the label's top band in the pack photo."),
       },
       writes: true,
+      needsRules: true,
       handler: ({ scale, cx, bandTop, ...input }) =>
         pixels.swap({ ...input, ...(scale !== undefined ? { scale } : {}), ...(cx !== undefined ? { cx } : {}), ...(bandTop !== undefined ? { bandTop } : {}) }),
     }),
@@ -130,6 +132,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         keep: z.array(colour).max(6).default([]).describe("Brand colours as RRGGBB that tone and halation leave exact."),
       },
       writes: true,
+      needsRules: true,
       handler: (input) => pixels.finish(input),
     }),
     defineTool({
