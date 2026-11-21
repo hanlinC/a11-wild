@@ -194,6 +194,12 @@ describe("studio stack", () => {
     expect(csp).toMatch(/connect-src 'self' https:\/\/",\{"Fn::GetAtt":\["DataPictures[A-Z0-9]+","RegionalDomainName"\]\},"; frame-ancestors/);
   });
 
+  it("tells search engines to keep no page of the site, a client's pack page included", () => {
+    template.hasResourceProperties("AWS::CloudFront::ResponseHeadersPolicy", {
+      ResponseHeadersPolicyConfig: { CustomHeadersConfig: { Items: [{ Header: "X-Robots-Tag", Value: "noindex, nofollow", Override: true }] } },
+    });
+  });
+
   it("opens the pictures bucket to a signed upload from a page, and to nothing else from a page", () => {
     template.hasResourceProperties("AWS::S3::Bucket", {
       CorsConfiguration: { CorsRules: [{ AllowedMethods: ["PUT"], AllowedOrigins: ["*"], AllowedHeaders: ["content-type"], MaxAge: 300 }] },
