@@ -8,8 +8,8 @@ const STAGES = ["tof", "mof", "bof"] as const;
  * A batch whose three ideas each have the owner's pick, put there through the stores:
  * the steps before it have their own tests. The words on the pictures are approved.
  */
-export async function pickedBatch(studio: Studio, kind: BatchKind = "v2", create: { test?: true } = {}) {
-  const { brand, product } = await savedProduct(studio);
+export async function pickedBatch(studio: Studio, kind: BatchKind = "v2", create: { test?: true } = {}, of?: Awaited<ReturnType<typeof savedProduct>>) {
+  const { brand, product } = of ?? (await savedProduct(studio));
   const made = await studio.services.batches.create({ kind, brandId: brand.id, productId: product.id, format: "static_4x5", createdBy: "owner@example.com", ...create });
   const batch = { ...made, state: "finals" as const };
   await studio.table.put({ pk: "BATCH", sk: batch.id, ...batch });
