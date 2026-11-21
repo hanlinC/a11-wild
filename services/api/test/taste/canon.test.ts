@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { CanonStore } from "../../src/taste/canon.js";
+import { savedProduct } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { MemoryTable } from "../helpers/memory-table.js";
 
@@ -65,18 +66,30 @@ describe("taste canon", () => {
   });
 
   it("records each read of the taste on the batch it was read for", async () => {
-    expect(await studio.services.reads.missing("b1", "v1")).toEqual(["canon_get", "taste_log", "swipe_search"]);
-    await callTool(studio, "canon_get", { batchId: "b1" });
-    expect(await studio.services.reads.missing("b1", "v1")).toEqual(["taste_log", "swipe_search"]);
-    await callTool(studio, "taste_log", { batchId: "b1" });
-    await callTool(studio, "swipe_search", { batchId: "b1" });
-    expect(await studio.services.reads.missing("b1", "v1")).toEqual([]);
+    const { brand, product } = await savedProduct(studio);
+    const made = await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id });
+    const b1 = made.value.batch.id as string;
+    expect(await studio.services.reads.missing(b1, "v1")).toEqual(["canon_get", "taste_log", "swipe_search"]);
+    await callTool(studio, "canon_get", { batchId: b1 });
+    expect(await studio.services.reads.missing(b1, "v1")).toEqual(["taste_log", "swipe_search"]);
+    await callTool(studio, "taste_log", { batchId: b1 });
+    await callTool(studio, "swipe_search", { batchId: b1 });
+    expect(await studio.services.reads.missing(b1, "v1")).toEqual([]);
     expect(await studio.services.reads.missing("b2", "v1")).toHaveLength(3);
   });
 
-  it("does not count a read of an old version as reading the canon", async () => {
+  it("does not count a read of an old version, or of a batch that does not exist, as reading the canon", async () => {
+    const { batchId } = await batchAtTruthUnread();
     await callTool(studio, "canon_save", { text: "One clever object.", reason: "First canon." });
-    await callTool(studio, "canon_get", { batchId: "b1", version: 1 });
-    expect(await studio.services.reads.missing("b1", "v1")).toContain("canon_get");
+    await callTool(studio, "canon_get", { batchId, version: 1 });
+    expect(await studio.services.reads.missing(batchId, "v1")).toContain("canon_get");
+    expect(await callTool(studio, "canon_get", { batchId: "nothing" })).toMatchObject({ ok: false });
+    expect(await studio.services.reads.missing("nothing", "v1")).toContain("canon_get");
   });
 });
+
+async function batchAtTruthUnread() {
+  const { brand, product } = await savedProduct(studio);
+  const made = await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id });
+  return { batchId: made.value.batch.id as string };
+}

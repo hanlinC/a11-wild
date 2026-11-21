@@ -9,8 +9,11 @@ export const scopeName = (scope: CanonScope) => (scope.kind === "owner" ? "the o
 export const sameScope = (a: CanonScope, b: CanonScope) => a.kind === b.kind && (a.kind !== "brand" || a.brandId === b.brandId);
 /** A scope as it is stored: a brand's scope names its brand, and no other scope carries one. */
 export function scopeOf(input: { kind: CanonScope["kind"]; brandId?: string | undefined } | undefined): CanonScope {
-  if (!input || input.kind === "owner") return OWNER_TASTE;
-  if (input.kind !== "brand") return { kind: input.kind };
+  if (!input) return OWNER_TASTE;
+  if (input.kind !== "brand") {
+    if (input.brandId) throw new Refusal("Only the scope of a brand names a brand. Leave brandId out, or use the kind brand.");
+    return input.kind === "owner" ? OWNER_TASTE : { kind: input.kind };
+  }
   if (!input.brandId) throw new Refusal("The scope of a brand names the brand (brandId).");
   return { kind: "brand", brandId: input.brandId };
 }
