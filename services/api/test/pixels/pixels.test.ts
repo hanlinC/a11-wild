@@ -199,6 +199,13 @@ describe("repairs, the finish and the food crop", () => {
   });
 });
 
+describe("the board before the drafts", () => {
+  it("is not shown to an agent while the drafts are not all sent", async () => {
+    await draft();
+    expect(await callTool(studio, "board_show", { batchId })).toEqual(refused(/board is not ready: the batch is at "priced"/));
+  });
+});
+
 describe("a studio with no pixel function", () => {
   it("says so", async () => {
     await start();
