@@ -1,10 +1,12 @@
-import type { ApprovedCopy, Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, ImageKind, Pick as OwnerPick, Role } from "@a11-wild/shared";
+import { type ApprovedCopy, type Batch, type BatchImage, type BatchState, type Board, type BoardDraft, type CheckItem, type Direction, FINAL_POINTS, type FinalPoints, type ImageChecks, type ImageKind, type Pick as OwnerPick, type Role } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
+import { failedPoints, type PointStore } from "../checks/points.js";
 import { type CheckStore, defectOf, rejected } from "../checks/store.js";
 import type { CopyStore } from "../copy/store.js";
 import type { CriticStore } from "../critic/store.js";
+import type { DirectionStore } from "../direction/store.js";
 import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { PickStore } from "../picks/store.js";
@@ -34,6 +36,8 @@ interface Deps {
   tasteLog: TasteLog;
   pictures: Pictures;
   copy: CopyStore;
+  points: PointStore;
+  directions: DirectionStore;
 }
 
 /** The kinds of picture that repair a draft or a final and then stand for it. */
@@ -83,6 +87,20 @@ export class BoardService implements FinalRule {
     return byIdea;
   }
 
+  /** For each draft of a concept ad: its number and the question it asks, from the version of the direction it was made for. */
+  private async questions(batchId: string): Promise<Map<string, { number: number; question: string }>> {
+    const { renders, directions } = this.deps;
+    const asked = new Map<string, { number: number; question: string }>();
+    const versions = new Map<number, Direction | undefined>();
+    for (const render of await renders.list(batchId)) {
+      if (render.kind !== "draft" || !render.imageId || render.draft === undefined || render.directionVersion === undefined) continue;
+      if (!versions.has(render.directionVersion)) versions.set(render.directionVersion, await directions.version(batchId, render.directionVersion));
+      const plan = versions.get(render.directionVersion)?.concepts.find((concept) => concept.ideaId === render.ideaId)?.drafts.find((draft) => draft.number === render.draft);
+      if (plan) asked.set(render.imageId, { number: plan.number, question: plan.question });
+    }
+    return asked;
+  }
+
   async board(batchId: string): Promise<Board> {
     const { batches, brands, truth, checks, picks, critic, pictures } = this.deps;
     const batch = await batches.get(batchId);
@@ -98,15 +116,18 @@ export class BoardService implements FinalRule {
     ]);
     const all = await this.deps.images.list(batchId);
     const approved = hasWords(batch.kind) ? await this.deps.copy.list(batchId) : [];
+    const asked = batch.kind === "v3" ? await this.questions(batchId) : new Map<string, { number: number; question: string }>();
     const shown = (list: BatchImage[] = []): Promise<BoardDraft[]> =>
       Promise.all(
-        list.map(async (image, index) => {
+        // A concept's drafts stand in the order of the direction, each with its question.
+        [...list].sort((a, b) => (asked.get(a.id)?.number ?? 0) - (asked.get(b.id)?.number ?? 0)).map(async (image, index) => {
           const counted = countedOf(image, all);
           const finish = finishOf(counted, all);
           // The words go on a draft as it counts now, and on a final after its real-camera finish.
           const words = typesetOf(image.kind === "final" ? (finish ?? counted) : counted, all, approved.find((copy) => copy.ideaId === image.ideaId));
           return {
-            number: index + 1,
+            number: asked.get(image.id)?.number ?? index + 1,
+            ...(asked.has(image.id) ? { question: asked.get(image.id)!.question } : {}),
             image,
             shown: counted,
             viewUrl: await pictures.viewUrl(counted.key),
@@ -183,6 +204,13 @@ export class BoardService implements FinalRule {
         const finish = finishOf(final, all) as BatchImage;
         const set = hasWords(batch.kind) ? typesetOf(finish, all, approved.find((copy) => copy.ideaId === idea.id)) : undefined;
         if (hasWords(batch.kind)) missing.push(...this.wordNeeds(final, set, found, "finished final"));
+        // A concept ad is delivered only after the eight-point look at the picture the owner would send.
+        if (missing.length === 0 && batch.kind === "v3" && set) {
+          const seen = await this.deps.points.get(batch.id, set.id);
+          const failed = seen ? failedPoints(seen) : [];
+          if (!seen) missing.push(`final_points_save for picture ${set.id}: the eight points of the final of ${idea.id}, at full size and at phone size`);
+          else if (failed.length > 0) missing.push(`a final of ${idea.id} that passes every point (the newest fails ${failed.join(", ")})`);
+        }
         if (missing.length === 0) entry.delivered = set ?? finish;
       }
     }
@@ -300,6 +328,29 @@ export class BoardService implements FinalRule {
     });
     const defect = defectOf(draft?.checks ?? undefined) ?? defectOf(draft?.words?.checks ?? undefined);
     return { pick, ...(defect ? { note: `The picked draft has ${defect.code} (${defect.note}), so no final can be made from it. Tell the owner.` } : {}) };
+  }
+
+  /** Saves the eight-point look at the final of a concept ad as the owner would send it. A failed point keeps it out of a pack. */
+  async savePoints(batchId: string, input: Pick<FinalPoints, "imageId" | "points">, by: string) {
+    const { batches, images, points } = this.deps;
+    const batch = await batches.get(batchId);
+    if (batch.kind !== "v3") throw new Refusal("Only a final of a concept ad (v3) has the eight points.");
+    const image = await images.get(batchId, input.imageId);
+    const root = image.rootId ? await images.get(batchId, image.rootId) : undefined;
+    if (image.kind !== "typeset" || root?.kind !== "final" || !root.ideaId) {
+      throw new Refusal(`Picture ${input.imageId} is not a finished final with its words. The eight points are for the picture the owner would send: the final after photo_finish and type_set.`);
+    }
+    const failed = FINAL_POINTS.filter((point) => !input.points[point].passed);
+    const bare = failed.filter((point) => !input.points[point].note.trim());
+    if (bare.length > 0) throw new Refusal(`Say what is wrong for each failed point: ${bare.join(", ")}.`);
+    const saved = await points.save(batchId, { ...input, ideaId: root.ideaId, by });
+    const { batch: after, missing } = await this.progress(batch);
+    return {
+      points: saved,
+      state: after.state,
+      ...(failed.length > 0 ? { note: `This final fails ${failed.join(", ")}, so it is not delivered. Make the final again, or tell the owner.` } : {}),
+      ...(missing.length > 0 ? { stillMissing: missing } : {}),
+    };
   }
 
   /** Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not. */

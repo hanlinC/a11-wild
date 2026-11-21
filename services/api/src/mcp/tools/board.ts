@@ -1,12 +1,28 @@
 import { z } from "zod";
+import { FINAL_POINTS } from "@a11-wild/shared";
 import type { BoardService } from "../../board/service.js";
 import { CHECK_CODE_LIST } from "../../checks/codes.js";
 import { defineTool, type ToolDefinition } from "../registry.js";
 
 const id = z.string().min(1).max(64);
 
+const point = z.strictObject({ passed: z.boolean(), note: z.string().max(400).describe("What you saw. Needed when the point fails.") });
+
 export function boardTools({ board }: { board: BoardService }): ToolDefinition[] {
   return [
+    defineTool({
+      name: "final_points_save",
+      description:
+        "Saves your eight-point look at the final of a concept ad (v3) as the owner would send it: after photo_finish and type_set. Free. Look at the picture twice, at full size and at phone size (about 320 wide), and judge each point: concept (the picture and the headline still say the one thing, and the headline points at something seen), productTruth (shape, print, size and colour as the real product), brandIdentity (the real logo, the brand's colour and font), copyAccuracy (the words are the approved ones, readable at phone size, and each claim is a saved fact), food (real food, or none), composition (one focal point, room for the words, the lockup of the direction), craft (light, shadow, edges, no pasted look), renderChecklist (no D item and fewer than two F items). A final with a failed point is not delivered and never enters a pack.",
+      input: {
+        batchId: id,
+        imageId: id.describe("The picture with the words set on the finished final: the id type_set gave."),
+        points: z.strictObject(Object.fromEntries(FINAL_POINTS.map((name) => [name, point])) as Record<(typeof FINAL_POINTS)[number], typeof point>),
+      },
+      writes: true,
+      needsRules: true,
+      handler: ({ batchId, imageId, points }, context) => board.savePoints(batchId, { imageId, points }, context.user.email),
+    }),
     defineTool({
       name: "checks_save",
       description:

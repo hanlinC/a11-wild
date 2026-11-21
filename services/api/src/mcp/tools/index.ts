@@ -5,6 +5,7 @@ import { BoardService } from "../../board/service.js";
 import { BrandStore } from "../../brand/store.js";
 import { CheckStore } from "../../checks/store.js";
 import { BriefStore } from "../../brief/store.js";
+import { PointStore } from "../../checks/points.js";
 import { DirectionStore } from "../../direction/store.js";
 import { CopyStore } from "../../copy/store.js";
 import type { Config } from "../../config.js";
@@ -100,7 +101,7 @@ export function studioTools(parts: StudioParts) {
   const directions = new DirectionStore(table, now);
   const references = new References(table, now);
   const meta = new MetaStore(table, now);
-  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
+  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy, points: new PointStore(table, now), directions });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
   const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore, images, pictures, renders, briefs });
   const conceptPicks = new ConceptPicks({ table, now, batches, brands, briefs, critic, tasteLog });

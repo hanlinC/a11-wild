@@ -355,6 +355,20 @@ export interface ConceptPick {
   at: string;
 }
 
+/** The eight points of a finished final of a concept ad. One that fails keeps the final out of a pack. */
+export const FINAL_POINTS = ["concept", "productTruth", "brandIdentity", "copyAccuracy", "food", "composition", "craft", "renderChecklist"] as const;
+export type FinalPoint = (typeof FINAL_POINTS)[number];
+
+/** The agent's look at one finished final with its words, at full size and at phone size. */
+export interface FinalPoints {
+  /** The picture the owner would send: the final after its finish, with its words. */
+  imageId: string;
+  ideaId: string;
+  points: Record<FinalPoint, { passed: boolean; note: string }>;
+  by: string;
+  at: string;
+}
+
 /** What one draft of a concept changes against the other two. Each is a few plain words. */
 export const DRAFT_AXES = ["composition", "productPosition", "scale", "camera", "light", "environment", "negativeSpace", "staging"] as const;
 export type DraftAxis = (typeof DRAFT_AXES)[number];
@@ -722,8 +736,10 @@ export interface Pick {
 }
 
 export interface BoardDraft {
-  /** 1 to 3, in the order the drafts were sent. It is a name, not a rank. */
+  /** 1 to 3, in the order the drafts were sent; for a concept ad, the draft's number in the direction. It is a name, not a rank. */
   number: number;
+  /** A draft of a concept ad: the one question the direction says this draft asks the owner. */
+  question?: string;
   /** The picture as the model made it. A pick names this one. */
   image: BatchImage;
   /** The picture that counts: the newest repair of it (a reprint or a swap), or the picture itself. */
