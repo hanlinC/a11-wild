@@ -191,12 +191,11 @@ export class RenderService {
         }
         directionVersion = direction.version;
         rough = (await images.list(batch.id, "rough")).filter((image) => image.ideaId === idea.id).at(-1);
-        if (!input.fromId) {
-          // A reference render: the model draws the product from its real photos, so each one is sent.
-          const unsent = (idea.shows ?? []).filter((name) => !input.references.includes(name));
-          if (unsent.length > 0) {
-            throw new Refusal(`Real photos first: concept ${idea.id} shows ${unsent.join(", ")}. Give the real photo of each one in references, or build the draft round a skeleton that holds the real pack (skeleton_make).`);
-          }
+        // Real photos first: the model sees the real photo of each thing the concept shows, round a skeleton or not.
+        const unsent = (idea.shows ?? []).filter((name) => !input.references.includes(name));
+        if (unsent.length > 0) throw new Refusal(`Real photos first: concept ${idea.id} shows ${unsent.join(", ")}. Give the real photo of each one in references.`);
+        if (!rough && !input.fromId) {
+          throw new Refusal(`Concept ${idea.id} has no rough, so its draft starts from a plan of the real photos. Build one (skeleton_make, with the real photo of each thing it shows) and give its id as fromId.`);
         }
       } else if (input.draft !== undefined) {
         throw new Refusal("Only a draft of a concept ad (v3) has a number from its direction.");
