@@ -82,4 +82,12 @@ describe("meta_approve", () => {
     expect(ads).toMatchObject([{ ideaId: "idea-1", approvedVersion: 1, versions: [{ version: 1 }, { version: 2 }] }]);
     expect((await studio.services.meta.approved(batchId, "idea-1"))?.version).toBe(1);
   });
+  it("gives two saves at one moment a version each: neither text is lost", async () => {
+    const store = studio.services.meta;
+    const one = [variant({ headline: "Skin first" }), second];
+    const two = [variant({ headline: "Curled and crisp" }), second];
+    const saved = await Promise.all([one, two].map((variants) => store.save(batchId, { ideaId: "idea-1", variants: variants as never, by: "owner@example.com" })));
+    expect(saved.map((text) => text.version).sort()).toEqual([1, 2]);
+    expect((await store.versions(batchId, "idea-1")).map((text) => text.variants[0].headline).sort()).toEqual(["Curled and crisp", "Skin first"]);
+  });
 });

@@ -35,11 +35,13 @@ export class MetaStore {
 
   /** Saves text as a new version. The same text as the newest version is that version. */
   async save(batchId: string, text: Pick<MetaText, "ideaId" | "variants" | "by">): Promise<MetaText> {
-    const newest = (await this.versions(batchId, text.ideaId)).at(-1);
-    if (newest && same(newest.variants, text.variants)) return newest;
-    const saved: MetaText = { ...text, version: (newest?.version ?? 0) + 1, at: this.now().toISOString() };
-    await this.table.put({ pk: pk(batchId), sk: sk(text.ideaId, saved.version), ...saved });
-    return saved;
+    // Two saves at one moment both get a version: the second finds the number taken and takes the next.
+    for (;;) {
+      const newest = (await this.versions(batchId, text.ideaId)).at(-1);
+      if (newest && same(newest.variants, text.variants)) return newest;
+      const saved: MetaText = { ...text, version: (newest?.version ?? 0) + 1, at: this.now().toISOString() };
+      if (await this.table.put({ pk: pk(batchId), sk: sk(text.ideaId, saved.version), ...saved }, { ifNotExists: true })) return saved;
+    }
   }
 
   /** Saves the owner's yes to one version. Undefined when there is no such version. */
