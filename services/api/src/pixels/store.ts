@@ -35,12 +35,17 @@ export class JobStore {
     return record<StoredJob>(item);
   }
 
-  /** Ends a job. Returns nothing when another read had already ended it. */
+  /**
+   * Ends a job. The first read here saves its result in the end mark; every write of the job takes its
+   * result from that mark, so a second read cannot replace the first one's. Returns nothing when the job had already ended.
+   */
   async end(job: StoredJob, result: Partial<Pick<StoredJob, "line" | "passed" | "madeId" | "error">> & { status: "done" | "failed" }): Promise<StoredJob | undefined> {
-    const first = await this.table.put({ pk: pk(job.batchId), sk: `ENDED#${job.id}` }, { ifNotExists: true });
+    const mark = { pk: pk(job.batchId), sk: `ENDED#${job.id}` };
+    const first = await this.table.put({ ...mark, result, updatedAt: this.now().toISOString() }, { ifNotExists: true });
     // A read that set the mark and then stopped left the job queued: this one writes its end.
     if (!first && (await this.get(job.batchId, job.id)).status !== "queued") return undefined;
-    const ended: StoredJob = { ...job, ...result, updatedAt: this.now().toISOString() };
+    const saved = await this.table.get<Item & { result?: typeof result; updatedAt?: string }>(mark.pk, mark.sk);
+    const ended: StoredJob = { ...job, ...(saved?.result ?? result), updatedAt: saved?.updatedAt ?? this.now().toISOString() };
     await this.table.put({ pk: pk(job.batchId), sk: sk(job.id), ...ended });
     return first ? ended : undefined;
   }

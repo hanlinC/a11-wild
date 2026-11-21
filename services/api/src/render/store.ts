@@ -49,14 +49,17 @@ export class RenderStore {
   }
 
   /**
-   * Ends a queued render, once. Two reads at the same moment both see fal's result; only the one
-   * that gets here first returns true, so the ledger is settled or released a single time.
+   * Ends a queued render, once. Two reads at the same moment can both see fal's result; the first one
+   * here saves its result in the end mark and returns true, so the ledger is settled or released a single time.
+   * Every write of the render takes its result from that mark, so a second read cannot replace the first one's.
    */
   async end(render: StoredRender, result: { status: "done"; imageId: string } | { status: "failed"; error: string }): Promise<boolean> {
-    const first = await this.table.put({ pk: pk(render.batchId), sk: `ENDED#${render.id}` }, { ifNotExists: true });
+    const mark = { pk: pk(render.batchId), sk: `ENDED#${render.id}` };
+    const first = await this.table.put({ ...mark, result, updatedAt: this.now().toISOString() }, { ifNotExists: true });
     // A read that set the mark and then stopped left the render queued: this one writes its end, and leaves the ledger alone.
     if (!first && (await this.get(render.batchId, render.id)).status !== "queued") return false;
-    await this.table.put({ pk: pk(render.batchId), sk: sk(render.id), ...render, ...result, updatedAt: this.now().toISOString() });
+    const ended = await this.table.get<Item & { result?: typeof result; updatedAt?: string }>(mark.pk, mark.sk);
+    await this.table.put({ pk: pk(render.batchId), sk: sk(render.id), ...render, ...(ended?.result ?? result), updatedAt: ended?.updatedAt ?? this.now().toISOString() });
     return first;
   }
 }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { RenderStore } from "../../src/render/store.js";
 import { RULES_VERSION } from "../../src/houserules.js";
 import { batchAtTruth, idea } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
@@ -157,6 +158,17 @@ describe("render_status", () => {
     expect((await callTool(studio, "render_list", { batchId })).value.renders).toHaveLength(1);
     expect(await studio.spend.ledger.summary(batchId)).toMatchObject({ batchUsd: 0.009, lines: [expect.objectContaining({ status: "spent" })] });
     expect((await studio.services.images.list(batchId, "draft"))).toHaveLength(1);
+  });
+
+  it("keeps the first read's result when a second read with another result ends the render after it", async () => {
+    await batchAtIdeas();
+    const renders = new RenderStore(studio.table, () => studio.clock.now);
+    const first = await draft();
+    const queued = await renders.get(batchId, first.value.id);
+    // The first read has set its mark and not yet written the render; the second one saw a failure.
+    await studio.table.put({ pk: `BATCH#${batchId}`, sk: `ENDED#${queued.id}`, result: { status: "done", imageId: queued.id }, updatedAt: "2026-11-22T10:00:00.000Z" });
+    expect(await renders.end(queued, { status: "failed", error: "the picture could not be copied" })).toBe(false);
+    expect(await renders.get(batchId, queued.id)).toMatchObject({ status: "done", imageId: queued.id });
   });
 
   it("does not open a result or a picture that is not at a fal address, and sends the key to the queue only", async () => {
