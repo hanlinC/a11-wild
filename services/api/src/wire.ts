@@ -50,7 +50,7 @@ export async function wire(): Promise<Wired> {
 
 export function appDeps({ config, table, approvals, keys, pictures }: Wired): Deps {
   const now = () => new Date();
-  const { tools } = studioTools({ config, table, now, keys, pictures, net: realNet });
+  const { tools, services } = studioTools({ config, table, now, keys, pictures, net: realNet });
   return {
     config,
     table,
@@ -63,6 +63,8 @@ export function appDeps({ config, table, approvals, keys, pictures }: Wired): De
       registry: new ToolRegistry(tools),
       prompts: PROMPTS,
     }),
+    studio: services,
+    pictures,
     now,
   };
 }

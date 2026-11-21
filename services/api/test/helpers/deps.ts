@@ -9,6 +9,7 @@ import { buildConfig } from "../../src/config.js";
 import { PROMPTS } from "../../src/mcp/prompts.js";
 import { defineTool, ToolRegistry } from "../../src/mcp/registry.js";
 import { McpServer } from "../../src/mcp/server.js";
+import { createSession, SESSION_COOKIE } from "../../src/auth/session.js";
 import { studioTools } from "../../src/mcp/tools/index.js";
 import type { Net } from "../../src/urlsafety.js";
 import { fakeNet } from "./net.js";
@@ -101,6 +102,8 @@ export async function createStudio(options: StudioOptions = {}) {
       registry: new ToolRegistry([...tools, ...sampleTools]),
       prompts: PROMPTS,
     }),
+    studio: services,
+    pictures,
     now,
   };
 
@@ -148,4 +151,10 @@ export async function callTool(studio: Studio, name: string, args: unknown = {},
   const text = result.content[0].text as string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return result.isError === true ? { ok: false as const, error: text } : { ok: true as const, value: JSON.parse(text) as any };
+}
+
+/** The cookie of a signed-in dashboard session. */
+export async function sessionCookie(studio: Studio, role: "owner" | "member" = "owner"): Promise<string> {
+  const user = { sub: `sub-${role}`, email: `${role}@example.com`, role, disabled: false };
+  return `${SESSION_COOKIE}=${await createSession(studio.table, config, user, studio.clock.now)}`;
 }

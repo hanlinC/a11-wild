@@ -4,9 +4,13 @@ import { Route, Routes } from "react-router";
 import { Shell } from "@/components/shell";
 import { ApiError, api } from "@/lib/api";
 import { SessionProvider } from "@/lib/session";
+import { Brand } from "@/routes/brand";
+import { Brands } from "@/routes/brands";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
 import { SignedOut } from "@/routes/signed-out";
+import { Spend } from "@/routes/spend";
+import { Taste } from "@/routes/taste";
 
 type Session = { state: "loading" } | { state: "signed-out"; failed: boolean } | { state: "signed-in"; me: Me };
 
@@ -33,6 +37,10 @@ export function App() {
       <Routes>
         <Route element={<Shell />}>
           <Route index element={<Home />} />
+          <Route path="brands" element={<Brands />} />
+          <Route path="brands/:brandId" element={<Brand />} />
+          <Route path="taste" element={<Taste />} />
+          <Route path="spend" element={<Spend />} />
           <Route path="connections" element={<Connections />} />
           <Route path="*" element={<Home />} />
         </Route>

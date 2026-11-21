@@ -233,3 +233,29 @@ export interface Idea {
   /** Does it stay clear of every kill reason? */
   killTest: IdeaTest;
 }
+
+/** A picture with a link that opens it for a few minutes. */
+export type Viewable<T> = T & { viewUrl: string };
+
+/** What the dashboard's brand list shows. */
+export interface BrandSummary {
+  brand: BrandKit;
+  logoUrl: string | null;
+  products: { id: string; name: string }[];
+}
+
+/** What the dashboard's brand page shows. */
+export interface BrandPage {
+  brand: BrandKit;
+  logoUrl: string | null;
+  products: { product: Omit<Product, "photos"> & { photos: Viewable<ProductPhoto>[] }; facts: Fact[]; truthSheet: TruthSheet | null }[];
+  batches: Batch[];
+}
+
+/** What the dashboard's taste page shows. */
+export interface TastePage {
+  canon: CanonVersion;
+  versions: Omit<CanonVersion, "text">[];
+  log: TasteEntry[];
+  swipe: SwipeItem[];
+}

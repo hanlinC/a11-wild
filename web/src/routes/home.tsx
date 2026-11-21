@@ -7,9 +7,9 @@ import { api } from "@/lib/api";
 
 /** The pipeline, in the order a batch moves through it. `ready` turns true as each part ships. */
 const STAGES = [
-  { name: "Brand and product", detail: "Pick a saved brand or give a new address, then one product page.", ready: false },
-  { name: "Facts and truth sheet", detail: "Every fact with its exact quote and source. Real size, shape and pack.", ready: false },
-  { name: "Three ideas", detail: "One device, one focal point, five elements or fewer. Checked against your taste.", ready: false },
+  { name: "Brand and product", detail: "Pick a saved brand or give a new address, then one product page.", ready: true },
+  { name: "Facts and truth sheet", detail: "Every fact with its exact quote and source. Real size, shape and pack.", ready: true },
+  { name: "Three ideas", detail: "One device, one focal point, five elements or fewer. Checked against your taste.", ready: true },
   { name: "Drafts", detail: "Three per idea, each from its own skeleton, measured against the packshot.", ready: false },
   { name: "Your pick", detail: "Drafts beside the truth sheet, numbered and unranked. You choose one per idea.", ready: false },
   { name: "Finals", detail: "High quality, re-measured, with a real-camera finish.", ready: false },

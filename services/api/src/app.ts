@@ -8,6 +8,8 @@ import { authRoutes } from "./http/auth-routes.js";
 import { mcpRoutes } from "./http/mcp-routes.js";
 import { log } from "./log.js";
 import type { McpServer } from "./mcp/server.js";
+import type { StudioServices } from "./mcp/tools/index.js";
+import type { Pictures } from "./pictures/store.js";
 import type { Table } from "./store/table.js";
 
 /** Everything a request needs. Tests pass in-memory versions. */
@@ -18,6 +20,9 @@ export interface Deps {
   approvals: ClientApprovals;
   signIn: DashboardSignIn;
   mcp: McpServer;
+  /** The stores behind the tools. The dashboard reads the same ones. */
+  studio: StudioServices;
+  pictures: Pictures;
   now: () => Date;
 }
 

@@ -63,3 +63,6 @@ export function studioTools(parts: StudioParts) {
   ];
   return { tools, services };
 }
+
+/** The studio's stores, as the tools and the dashboard routes share them. */
+export type StudioServices = ReturnType<typeof studioTools>["services"];

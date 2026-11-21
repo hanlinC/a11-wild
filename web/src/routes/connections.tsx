@@ -5,14 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
+import { when } from "@/lib/when";
 import { useMe } from "@/lib/session";
 
-const WHEN = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" });
-
-function when(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : WHEN.format(date);
-}
 
 type Action = "approve" | "revoke";
 

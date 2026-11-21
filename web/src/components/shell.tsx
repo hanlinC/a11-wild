@@ -7,10 +7,13 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { to: "/", label: "Studio" },
+  { to: "/brands", label: "Brands" },
+  { to: "/taste", label: "Taste" },
+  { to: "/spend", label: "Spend" },
   { to: "/connections", label: "Connections" },
 ] as const;
 
-/** The frame around every signed-in page: wordmark, the two sections, who is signed in. */
+/** The frame around every signed-in page: wordmark, the sections, who is signed in. */
 export function Shell() {
   const me = useMe();
   const [leaving, setLeaving] = useState(false);
@@ -37,7 +40,7 @@ export function Shell() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end
+                end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
                     "rounded-md px-2.5 py-1.5 text-body transition-colors",

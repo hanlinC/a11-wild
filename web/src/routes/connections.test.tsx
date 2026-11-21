@@ -18,6 +18,13 @@ describe("Connections page", () => {
     expect(waiting.getByRole("button", { name: "Approve" })).toBeInTheDocument();
   });
 
+  it("names the time zone beside each time", async () => {
+    stubApi({ "GET /api/clients": () => ({ body: { clients: [client()] } }) });
+    renderSignedIn(<Connections />);
+    const zone = new Intl.DateTimeFormat("en-GB", { timeZoneName: "short" }).formatToParts(new Date("2026-11-21T10:00:00.000Z")).find((part) => part.type === "timeZoneName")!.value;
+    expect(await screen.findByText(new RegExp(`${zone.replace("+", "\\+")} · signed in as`))).toBeInTheDocument();
+  });
+
   it("approves a program and moves it to the approved list", async () => {
     const calls = stubApi({
       "GET /api/clients": () => ({ body: { clients: [client()] } }),
@@ -99,7 +106,7 @@ describe("Connections page", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
 
-    expect(await screen.findByText("That connection no longer exists.")).toBeInTheDocument();
+    expect(await screen.findByText("That is no longer there.")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Devin")).not.toBeInTheDocument());
   });
 
