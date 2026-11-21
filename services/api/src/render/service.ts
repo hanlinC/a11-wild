@@ -234,8 +234,8 @@ export class RenderService {
       return picture.key;
     });
     const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...(rough ? [rough.key] : []), ...named])];
-    // The rough of a concept goes to the model on top of the real photos, so that it never takes the place of one.
-    if (keys.length - (rough ? 1 : 0) > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
+    // The picture a render is built round and the rough of a concept go to the model on top of the real photos, so that neither takes the place of one.
+    if (new Set(named).size > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
 
     if (input.kind === "rough") {
       const full = await renders.claimRough(batch.id, idea.id, { concept: ROUGHS_PER_CONCEPT, batch: ROUGHS_PER_BATCH });

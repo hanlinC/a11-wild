@@ -92,6 +92,13 @@ describe("a draft of a concept ad", () => {
     const four = await send("idea-2", 1, { references: ["pack-1", "food-1", "prop-1", "prop-2"] });
     expect(four.ok ? "" : four.error).toBe("");
     expect(urls()).toHaveLength(5);
+    // With no rough, the plan the draft starts from is on top of the four photos too.
+    for (const rough of (await studio.services.images.list(batchId, "rough")).filter((image) => image.ideaId === "idea-4")) await studio.table.delete(`BATCH#${batchId}`, `IMAGE#${rough.id}`);
+    await callTool(studio, "render_status", { batchId, renderId: four.value.id });
+    await studio.services.images.add({ id: "s4", batchId, kind: "skeleton", key: `batches/${batchId}/skeletons/s4.png` });
+    const planned = await send("idea-4", 1, { fromId: "s4", references: ["pack-1", "food-1", "prop-1", "prop-2"] });
+    expect(planned.ok ? "" : planned.error).toBe("");
+    expect(urls()).toHaveLength(5);
   });
 
   it("keeps the draft number for v3 only", async () => {
