@@ -32,7 +32,8 @@ const NEXT: Record<BatchState, BatchState[]> = {
   finals: ["finished"],
   // A finished batch goes back to its finals when one of them gets a D item or a repair after the fact.
   finished: ["done", "finals"],
-  done: [],
+  // A final that gets a D item after the batch was done takes it back to its finals.
+  done: ["finals"],
   spec_only: [],
 };
 
@@ -62,6 +63,6 @@ export function requireMove(from: BatchState, wanted: BatchState, tool: string):
 
 /** What the agent does next from a state, for a session that resumes a batch. */
 export const stepAfter = (state: BatchState): string => {
-  const next = NEXT[state][0];
+  const next = state === "done" ? undefined : NEXT[state][0];
   return next ? STEP[next] : "nothing: the batch is at its end";
 };

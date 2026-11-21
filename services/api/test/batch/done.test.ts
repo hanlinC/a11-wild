@@ -93,6 +93,20 @@ describe("the done gate", () => {
     expect(await done()).toMatchObject({ done: true, batch: { state: "done" } });
   });
 
+  it("is not done any more when a final gets a D item after the batch was done, and takes a new final", async () => {
+    for (const ideaId of IDEAS) await pick(ideaId, drafts[ideaId]!);
+    const finals: Record<string, string> = {};
+    for (const ideaId of IDEAS) finals[ideaId] = await final(ideaId);
+    expect(await done()).toMatchObject({ done: true, batch: { state: "done" } });
+    await studio.services.checks.measure(batchId, finals["idea-2"]!, "cap_check", { code: "D11", note: "The cap is 12% too flat." });
+    const report = await done();
+    expect(report).toMatchObject({ done: false, batch: { state: "finals" }, nextStep: expect.stringMatching(/Not met: finals/) });
+    expect(condition(report, "finals")).toMatchObject({ passed: false, evidence: expect.stringMatching(/idea-2 with no D item/) });
+    // A new final of the same pick closes it again.
+    await final("idea-2");
+    expect(await done()).toMatchObject({ done: true, batch: { state: "done" } });
+  });
+
   it("gives the dashboard the same conditions with the same results, and changes nothing", async () => {
     for (const ideaId of IDEAS) await pick(ideaId, drafts[ideaId]!);
     for (const ideaId of IDEAS) await final(ideaId);

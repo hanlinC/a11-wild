@@ -157,11 +157,11 @@ export class BoardService implements FinalRule {
         if (!ranks.has(idea.id)) missing.push(`the blind critic's rank of the drafts of ${idea.id} (a fresh helper: critic_open with step "drafts", then critic_rank)`);
       }
       if (missing.length === 0) batch = await batches.move(batch, "checked", "checks_save");
-    } else if (batch.state === "finals" || batch.state === "finished") {
+    } else if (batch.state === "finals" || batch.state === "finished" || batch.state === "done") {
       missing.push(...(await this.finals(batch)).flatMap((entry) => entry.missing));
       if (missing.length === 0 && batch.state === "finals") batch = await batches.move(batch, "finished", "checks_save");
-      // A finished batch whose final got a D item, or a repair that is not checked yet, is not finished any more.
-      else if (missing.length > 0 && batch.state === "finished") batch = await batches.move(batch, "finals", "checks_save");
+      // A finished or done batch whose final got a D item, or a repair that is not checked yet, is not finished any more.
+      else if (missing.length > 0 && batch.state !== "finals") batch = await batches.move(batch, "finals", "checks_save");
     }
     return { batch, missing };
   }
