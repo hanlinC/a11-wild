@@ -1,0 +1,282 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { RULES_VERSION } from "../../src/houserules.js";
+import { idea, rankDrafts, readTaste, sheet } from "../helpers/batch.js";
+import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
+import { fakeNet } from "../helpers/net.js";
+
+const rules = { rulesVersion: RULES_VERSION };
+const SCENE = "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it. The top third is plain dark sky.";
+const STAGES = ["tof", "mof", "bof"] as const;
+const WHY = "It reads at once, and only this brand could run it.";
+const TTF = new Uint8Array([0x00, 0x01, 0x00, 0x00, 0, 0, 0, 0]);
+const FONT_CSS = "https://fonts.googleapis.com/css2?family=Archivo:wght@800";
+const FONT_FILE = "https://fonts.gstatic.com/s/archivo/v19/archivo-800.ttf";
+const net = () => fakeNet({ [FONT_CSS]: { body: `@font-face { font-family: 'Archivo'; src: url(${FONT_FILE}) format('truetype'); }` }, [FONT_FILE]: { body: TTF } });
+
+let studio: Studio;
+let batchId: string;
+let brandId: string;
+
+/** One idea with words. Number n of 24: eight for each stage. */
+const letter = (n: number) => String.fromCharCode(64 + n);
+const worded = (n: number, extra: object = {}) =>
+  idea(n, { stage: STAGES[n % 3], headline: `Headline ${letter(n)}`, subline: `The subline of idea ${letter(n)}.`, claims: [], shows: ["pack-1"], ...extra });
+const burst = (extra: (n: number) => object = () => ({})) => Array.from({ length: 24 }, (_, index) => worded(index + 1, extra(index + 1)));
+
+async function v2Batch(photos = [{ key: "products/p/pack.jpg", sourceUrl: "https://cdn.wongi.example/pack.jpg", kind: "pack" as const }]) {
+  const brand = await studio.services.brands.saveBrand({ name: "WonGi", url: "https://wongi.example/", logo: { key: "brands/b/logo.png", sourceUrl: "https://wongi.example/logo.png" }, palette: [], fonts: ["Archivo"], savedBy: "owner@example.com" });
+  const product = await studio.services.brands.saveProduct({ brandId: brand.id, name: "Seaweed crisps", url: "https://wongi.example/products/seaweed-crisps", photos, savedBy: "owner@example.com" });
+  const made = await callTool(studio, "batch_create", { kind: "v2", brandId: brand.id, productId: product.id });
+  brandId = brand.id;
+  batchId = made.value.batch.id as string;
+  await callTool(studio, "truth_save", { batchId, ...sheet });
+  return product;
+}
+
+/** The fresh critic chooses the first idea of each stage in its packet. */
+async function choose(refuse: string[] = []) {
+  const packet = await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true });
+  const picks = STAGES.map((stage) => ({
+    stage,
+    ideaId: refuse.includes(stage) ? null : (packet.value.ideas.find((entry: { stage: string }) => entry.stage === stage).id as string),
+    reason: WHY,
+  }));
+  return { packet, reply: await callTool(studio, "critic_select", { ...rules, batchId, ticket: packet.value.ticket, picks }) };
+}
+
+/** The owner's yes. The words are his: they need not be the idea's own. */
+const approve = (ideas: { id: string }[], words: { headline?: string; subline?: string } = {}) =>
+  callTool(studio, "copy_approve", { ...rules, batchId, ideas: ideas.map((entry) => ({ ideaId: entry.id, headline: words.headline ?? "ONCE YOU START.", subline: words.subline ?? "You cannot stop.", ownerSaid: "yes, these words" })) });
+
+async function render(ideaId: string, kind: "draft" | "final", fromId?: string): Promise<string> {
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+  const sent = await callTool(studio, "render_submit", { ...rules, batchId, ideaId, kind, prompt: SCENE, ...(fromId ? { fromId } : {}) });
+  if (!sent.ok) throw new Error(sent.error);
+  return (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id;
+}
+async function skeleton(ideaId: string): Promise<string> {
+  const job = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId, bg: "101010" });
+  return (await callTool(studio, "pixel_status", { batchId, jobId: job.value.id })).value.image.id;
+}
+async function checked(imageId: string) {
+  await callTool(studio, "checks_save", { ...rules, batchId, imageId, items: [] });
+  const job = await callTool(studio, "pack_check", { batchId, imageId, at: [500, 800], bg: "101010" });
+  await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+}
+async function typeSet(imageId: string, extra: object = {}) {
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+  const job = await callTool(studio, "type_set", { ...rules, batchId, imageId, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF", ...extra });
+  if (!job.ok) return job;
+  return callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+}
+const state = async () => (await callTool(studio, "batch_get", { batchId })).value.batch.state as string;
+const selected = async () => (await callTool(studio, "batch_get", { batchId })).value.ideas as { id: string; stage: string; headline: string }[];
+
+/** A v2 batch with its three ideas chosen and its words approved. */
+async function wordedBatch() {
+  await v2Batch();
+  await readTaste(studio, batchId);
+  await callTool(studio, "references_get", { batchId });
+  await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+  await choose();
+  const ideas = await selected();
+  await approve(ideas);
+  await callTool(studio, "font_save", { brandId, family: "Archivo", weight: 800 });
+  return ideas;
+}
+
+beforeEach(async () => {
+  studio = await createStudio({ net: net() });
+  await approvedClient(studio);
+});
+
+describe("a v2 batch: the burst", () => {
+  it("needs the owner's reference ads read, beside his taste", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    const early = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    expect(early).toMatchObject({ ok: false, error: expect.stringMatching(/Not read yet: references_get/) });
+    expect((await callTool(studio, "references_get", { batchId })).value).toMatchObject({ kind: "v2", references: [] });
+    const ok = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    expect(ok.ok ? "" : ok.error).toBe("");
+  });
+
+  it("refuses a burst of fewer than 24, and one with fewer than 8 for a stage", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    const few = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst().slice(0, 12) });
+    expect(few).toMatchObject({ ok: false, error: expect.stringMatching(/24/) });
+    const lopsided = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst((n) => (n % 3 === 2 ? { stage: "tof" } : {})) });
+    expect(lopsided).toMatchObject({ ok: false, error: expect.stringMatching(/0 ideas for bottom of funnel/) });
+  });
+
+  it("refuses an idea that shows a thing the product has no real photo of", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    const reply = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst((n) => (n === 4 ? { shows: ["pack-1", "food-1"] } : {})) });
+    expect(reply).toMatchObject({ ok: false, error: expect.stringMatching(/shows food-1, and this product has no such photo/) });
+  });
+
+  it("refuses a top of funnel headline with a price, and a number no fact proves", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    const priced = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst((n) => (n === 3 ? { stage: "tof", headline: "Now S$30 for six" } : {})) });
+    expect(priced.ok).toBe(false);
+    const unproven = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst((n) => (n === 2 ? { subline: "40% less irritation after 28 days." } : {})) });
+    expect(unproven).toMatchObject({ ok: false, error: expect.stringMatching(/40/) });
+  });
+
+  it("keeps the whole burst, and the fresh critic chooses one idea for each stage", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    const { packet, reply } = await choose();
+    expect(packet.value.ideas).toHaveLength(24);
+    // The critic gets the burst in another order than the author wrote it.
+    expect(packet.value.ideas.map((entry: { id: string }) => entry.id)).not.toEqual(burst().map((_, index) => `idea-${index + 1}`));
+    expect(reply.ok).toBe(true);
+    const ideas = await selected();
+    expect(ideas.map((entry) => entry.stage).sort()).toEqual(["bof", "mof", "tof"]);
+    expect(await state()).toBe("judged");
+    expect(await studio.services.batches.burst(batchId)).toHaveLength(24);
+  });
+
+  it("stays at its ideas when the critic refuses a stage", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    const { reply } = await choose(["mof"]);
+    expect(reply.value.nextStep).toMatch(/refused stages/);
+    expect(await state()).toBe("ideas");
+    // The older tool of v1 cannot stand in for the choice.
+    const packet = await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true });
+    const old = await callTool(studio, "critic_pick", { ...rules, batchId, ticket: packet.value.ticket, ideas: [] });
+    expect(old.ok).toBe(false);
+  });
+});
+
+describe("a v2 batch: the words", () => {
+  it("makes no draft before the owner approves the words", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    await choose();
+    const [first] = await selected();
+    const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: first!.id, bg: "101010" });
+    const fromId = made.ok ? (await callTool(studio, "pixel_status", { batchId, jobId: made.value.id })).value.image.id : undefined;
+    const sent = await callTool(studio, "render_submit", { ...rules, batchId, ideaId: first!.id, kind: "draft", prompt: SCENE, ...(fromId ? { fromId } : {}) });
+    expect(sent.ok ? "sent" : sent.error).toMatch(/copy_approve/);
+    expect(studio.fal.submits()).toHaveLength(0);
+  });
+
+  it("takes the words from the owner only, all three ideas at first, exactly as he gave them", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    await choose();
+    const ideas = await selected();
+    const member = await callTool(studio, "copy_approve", { ...rules, batchId, ideas: [{ ideaId: ideas[0]!.id, headline: "A", subline: "B", ownerSaid: "yes" }] }, { sub: "sub-member" });
+    expect(member.ok).toBe(false);
+    expect(await approve(ideas.slice(0, 2))).toMatchObject({ ok: false, error: expect.stringMatching(/covers every idea/) });
+    const saved = await approve(ideas, { headline: "Why your favorite café | switched to OATSIDE." });
+    expect(saved.value).toMatchObject({ state: "worded", approved: [{ headline: "Why your favorite café | switched to OATSIDE.", version: 1 }, { version: 1 }, { version: 1 }] });
+    // The same words again keep their version; other words are a new one.
+    const again = await approve([ideas[0]!], { headline: "Why your favorite café | switched to OATSIDE." });
+    expect(again.value.approved[0]).toMatchObject({ version: 1 });
+    const changed = await approve([ideas[0]!], { headline: "Last one already?" });
+    expect(changed.value.approved[0]).toMatchObject({ version: 2, headline: "Last one already?" });
+  });
+
+  it("refuses words with a number that the idea's facts do not hold", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    await choose();
+    const ideas = await selected();
+    const reply = await approve(ideas, { subline: "1.6x faster skin recovery in 2 weeks." });
+    expect(reply).toMatchObject({ ok: false, error: expect.stringMatching(/are not saved/) });
+    expect(await state()).toBe("judged");
+  });
+});
+
+describe("a v2 batch: the type", () => {
+  it("saves a brand font from Google Fonts, and refuses a file that is not a font", async () => {
+    await v2Batch();
+    const saved = await callTool(studio, "font_save", { brandId, family: "Archivo", weight: 800 });
+    expect(saved.value).toMatchObject({ saved: { family: "Archivo", weight: 800, sourceUrl: FONT_FILE }, fontFiles: [{ family: "Archivo", weight: 800 }] });
+    expect(studio.pictures.files.get(`brands/${brandId}/fonts/archivo-800.ttf`)?.type).toBe("font/ttf");
+    const missing = await callTool(studio, "font_save", { brandId, family: "Brand Sans", weight: 700 });
+    expect(missing).toMatchObject({ ok: false, error: expect.stringMatching(/not on Google Fonts/) });
+
+    studio = await createStudio({ net: fakeNet({ "https://wongi.example/fonts/brand.woff2": { body: "<html>not a font</html>" } }) });
+    await approvedClient(studio);
+    await v2Batch();
+    const html = await callTool(studio, "font_save", { brandId, family: "Brand Sans", weight: 700, url: "https://wongi.example/fonts/brand.woff2" });
+    expect(html).toMatchObject({ ok: false, error: expect.stringMatching(/not a TrueType, OpenType, WOFF or WOFF2 font/) });
+    const local = await callTool(studio, "font_save", { brandId, family: "Brand Sans", weight: 700, url: "https://169.254.169.254/latest/meta-data" });
+    expect(local.ok).toBe(false);
+  });
+
+  it("sets the owner's words, never the caller's, in the brand's font with the real logo", async () => {
+    const ideas = await wordedBatch();
+    const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
+    const smuggled = await callTool(studio, "type_set", { ...rules, batchId, imageId: draft, area: [0.06, 0.12, 0.94, 0.3], headline: "FREE TODAY" });
+    expect(smuggled.ok).toBe(false);
+    const set = await typeSet(draft);
+    expect(set.value).toMatchObject({ status: "done", image: { kind: "typeset", fromId: draft, rootId: draft, ideaId: ideas[0]!.id } });
+    const event = studio.pixels.events.find((entry) => entry.tool === "headline");
+    expect(event?.input).toMatchObject({ headline: "ONCE YOU START.", subline: "You cannot stop.", fontKey: `brands/${brandId}/fonts/archivo-800.ttf`, logoKey: "brands/b/logo.png", colour: "FFFFFF" });
+    expect(event?.outKey).toMatch(new RegExp(`^batches/${batchId}/`));
+  });
+
+  it("refuses to set words without a saved font file, on a v1 batch, and on an idea without approved words", async () => {
+    await v2Batch();
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    await choose();
+    const ideas = await selected();
+    await approve(ideas);
+    const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
+    expect(await typeSet(draft)).toMatchObject({ ok: false, error: expect.stringMatching(/font_save/) });
+    expect(studio.pixels.events.some((entry) => entry.tool === "headline")).toBe(false);
+  });
+
+  it("does not show the owner a draft without its words, and asks for them again after a change", async () => {
+    const ideas = await wordedBatch();
+    const drafts: Record<string, string[]> = {};
+    for (const entry of ideas) {
+      drafts[entry.id] = [];
+      for (let n = 0; n < 3; n++) {
+        const imageId = await render(entry.id, "draft", await skeleton(entry.id));
+        await checked(imageId);
+        drafts[entry.id]!.push(imageId);
+      }
+    }
+    const bare = await callTool(studio, "board_show", { batchId });
+    expect(JSON.stringify(bare)).toMatch(/type_set for picture/);
+    expect(await state()).toBe("drafting");
+
+    for (const list of Object.values(drafts)) for (const imageId of list) await typeSet(imageId);
+    expect((await rankDrafts(studio, batchId)).ok).toBe(true);
+    const board = await callTool(studio, "board_show", { batchId });
+    expect(board.value.batch.state).toBe("waiting_pick");
+    expect(board.value.ideas[0].copy).toMatchObject({ headline: "ONCE YOU START." });
+    expect(board.value.ideas[0].drafts[0].words.image.kind).toBe("typeset");
+
+    // The owner changes the words of one idea: its pictures carry the old words, so they no longer count.
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await approve([ideas[0]!], { headline: "THE ONE THAT STARTED IT ALL." });
+    const after = await callTool(studio, "board_show", { batchId });
+    const first = after.value.ideas.find((entry: { idea: { id: string } }) => entry.idea.id === ideas[0]!.id);
+    expect(first.drafts.every((draft: { words?: unknown }) => draft.words === undefined)).toBe(true);
+  });
+});

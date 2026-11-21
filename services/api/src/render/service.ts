@@ -1,5 +1,5 @@
 import type { Batch, BatchImage, Idea, Render, RenderKind } from "@a11-wild/shared";
-import { hasWords, requireMove } from "../batch/state.js";
+import { hasWords, requireMove, StateError, stepAfter } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { estimateUsd, type FalClient } from "../fal/client.js";
@@ -132,7 +132,11 @@ export class RenderService {
     let count: number;
 
     if (input.kind === "draft") {
-      if (![draftsFrom(batch), "priced", "waiting_spend", "drafting"].includes(batch.state)) requireMove(batch, batch.state === "judged" ? "worded" : "drafting", "render_submit");
+      if (![draftsFrom(batch), "priced", "waiting_spend", "drafting"].includes(batch.state)) {
+        // An ad with words waits for the owner's yes to them: no draft is paid for before it.
+        if (batch.state === "judged") throw new StateError(`render_submit cannot run yet: the batch is at "judged". The step that is missing: ${stepAfter(batch)}.`);
+        requireMove(batch, "drafting", "render_submit");
+      }
       // Real photos first: the model builds from a real photo of each thing the picture shows, never from its own guess.
       const missing = (idea.shows ?? []).filter((name) => !photoNamed(product, name));
       if (missing.length > 0) {
