@@ -23,7 +23,10 @@ const worded = (n: number, extra: object = {}) =>
   idea(n, { stage: STAGES[n % 3], headline: `Headline ${letter(n)}`, subline: `The subline of idea ${letter(n)}.`, claims: [], shows: ["pack-1"], ...extra });
 const burst = (extra: (n: number) => object = () => ({})) => Array.from({ length: 24 }, (_, index) => worded(index + 1, extra(index + 1)));
 
-async function v2Batch(photos = [{ key: "products/p/pack.jpg", sourceUrl: "https://cdn.wongi.example/pack.jpg", kind: "pack" as const }]) {
+const PACK = { key: "products/p/pack.jpg", sourceUrl: "https://cdn.wongi.example/pack.jpg", kind: "pack" as const };
+const SLICE = { key: "products/p/slice.jpg", sourceUrl: "https://cdn.wongi.example/slice.jpg", kind: "food" as const };
+
+async function v2Batch(photos: (typeof PACK | typeof SLICE)[] = [PACK]) {
   const brand = await studio.services.brands.saveBrand({ name: "WonGi", url: "https://wongi.example/", logo: { key: "brands/b/logo.png", sourceUrl: "https://wongi.example/logo.png" }, palette: [], fonts: ["Archivo"], savedBy: "owner@example.com" });
   const product = await studio.services.brands.saveProduct({ brandId: brand.id, name: "Seaweed crisps", url: "https://wongi.example/products/seaweed-crisps", photos, savedBy: "owner@example.com" });
   const made = await callTool(studio, "batch_create", { kind: "v2", brandId: brand.id, productId: product.id });
@@ -73,8 +76,8 @@ const state = async () => (await callTool(studio, "batch_get", { batchId })).val
 const selected = async () => (await callTool(studio, "batch_get", { batchId })).value.ideas as { id: string; stage: string; headline: string }[];
 
 /** A v2 batch with its three ideas chosen and its words approved. */
-async function wordedBatch() {
-  await v2Batch();
+async function wordedBatch(photos?: Parameters<typeof v2Batch>[0]) {
+  await v2Batch(photos);
   await readTaste(studio, batchId);
   await callTool(studio, "references_get", { batchId });
   await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
@@ -248,6 +251,18 @@ describe("a v2 batch: the type", () => {
     const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
     expect(await typeSet(draft)).toMatchObject({ ok: false, error: expect.stringMatching(/font_save/) });
     expect(studio.pixels.events.some((entry) => entry.tool === "headline")).toBe(false);
+  });
+
+  it("builds a skeleton from a real photo of each thing by its name, never from a file an agent typed", async () => {
+    const ideas = await wordedBatch([PACK, SLICE, SLICE]);
+    const plan = { bg: "FFD21E", products: [{ cx: 0.3, base: 0.8, height: 0.3 }, { cx: 0.7, base: 0.8, height: 0.2, photo: "food-2" }] };
+    const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: ideas[0]!.id, plan, vary: { regions: [[80, 200, 300, 420]] } });
+    expect(made.ok ? "" : made.error).toBe("");
+    const { input } = studio.pixels.events.at(-1)!;
+    expect(input).toMatchObject({ vary: { regions: [[80, 200, 300, 420]], seed: 7 }, plan: { products: [{ cx: 0.3 }, { cx: 0.7, photoKey: "products/p/slice.jpg" }] } });
+    expect(JSON.stringify(input)).not.toMatch(/"photo":/);
+    const missing = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: ideas[0]!.id, plan: { ...plan, products: [{ cx: 0.5, base: 0.8, height: 0.3, photo: "prop-1" }] } });
+    expect(missing).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: this product has no photo prop-1/) });
   });
 
   it("does not show the owner a draft without its words, and asks for them again after a change", async () => {
