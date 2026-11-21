@@ -98,12 +98,14 @@ export class PackService {
   /** Makes the pack of a batch and its link. The link is returned here once: only the hash of its token is kept. */
   async publish(batch: Batch, by: string, input: PackContent): Promise<{ link: string; version: PackVersion }> {
     const { packs, now } = this.deps;
-    if (await packs.get(batch.id)) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update: a link is never replaced to change its ads.");
+    // A pack with no version is a publish that stopped halfway: this call finishes it, under a new link.
+    const begun = await packs.get(batch.id);
+    if (begun && (await packs.versions(batch.id)).length > 0) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update: a link is never replaced to change its ads.");
     const version: PackVersion = { ...(await this.content(batch, input, undefined, 1)), at: now().toISOString(), by };
     const token = randomBytes(32).toString("base64url");
-    const pack: Pack = { batchId: batch.id, tokenHash: hashToken(token), current: 1, createdAt: version.at, by };
-    if (!(await packs.create(pack))) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update.");
-    await packs.addVersion(batch.id, version);
+    if (begun) await packs.relink(begun, hashToken(token));
+    else if (!(await packs.create({ batchId: batch.id, tokenHash: hashToken(token), current: 1, createdAt: version.at, by }))) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update.");
+    if (!(await packs.addVersion(batch.id, version))) throw new Refusal("Another publish of this pack was saved at the same moment. Read it with pack_get.");
     return { link: this.link(token), version };
   }
 

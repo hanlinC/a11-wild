@@ -1,5 +1,6 @@
 import type { BatchImage } from "@a11-wild/shared";
 import { beforeEach, describe, expect, it } from "vitest";
+import { loggedPath } from "../../src/app.js";
 import { RULES_VERSION } from "../../src/houserules.js";
 import { hashToken } from "../../src/pack/service.js";
 import { approvedClient, callTool, createStudio, json, sessionCookie, type Studio } from "../helpers/deps.js";
@@ -68,6 +69,23 @@ describe("pack_publish", () => {
     expect(stored).toContain(hashToken(token));
     expect(JSON.stringify((await callTool(studio, "pack_get", { batchId })).value)).not.toMatch(/tokenHash|[a-f0-9]{64}/);
     expect(await publish()).toMatchObject({ ok: false, error: expect.stringMatching(/has a pack.*pack_update/) });
+  });
+
+  it("finishes a publish that stopped after the pack row and before its first version", async () => {
+    await studio.services.packs.create({ batchId, tokenHash: "0".repeat(64), current: 1, createdAt: "2026-11-21T12:00:00.000Z", by: "owner@example.com" });
+    const made = (await publish()).value;
+    expect(made.version.version).toBe(1);
+    expect((await open(made.link)).status).toBe(200);
+    // The half-made link opens nothing, and a second publish is refused as before.
+    expect([...studio.table.items.keys()].some((key) => key.includes("0".repeat(64)))).toBe(false);
+    expect(await publish()).toMatchObject({ ok: false, error: expect.stringMatching(/has a pack/) });
+  });
+
+  it("never writes the token of a link into a log line", () => {
+    expect(loggedPath(`/api/pack/${"a".repeat(43)}/uploads`)).toBe("/api/pack/<token>/uploads");
+    expect(loggedPath(`/api/pack/${"a".repeat(43)}`)).toBe("/api/pack/<token>");
+    expect(loggedPath("/api/packs")).toBe("/api/packs");
+    expect(loggedPath("/api/batches/b1/board")).toBe("/api/batches/b1/board");
   });
 
   it("is the owner's alone", async () => {
