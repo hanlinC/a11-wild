@@ -52,10 +52,31 @@ describe("a draft of a concept ad", () => {
 
   it("can still be built round a skeleton that holds the real pack", async () => {
     await studio.services.images.add({ id: "s1", batchId, kind: "skeleton", key: `batches/${batchId}/skeletons/s1.png` });
-    const sent = await send("idea-2", 1, { fromId: "s1", references: [] });
+    // Round a skeleton too, the model sees the real photo of each thing the concept shows.
+    expect(await send("idea-2", 1, { fromId: "s1", references: [] })).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: concept idea-2 shows pack-1/) });
+    const sent = await send("idea-2", 1, { fromId: "s1" });
     expect(sent).toMatchObject({ ok: true, value: { fromId: "s1", draft: 1 } });
     expect(urls()[0]).toBe(`https://pictures.example/batches/${batchId}/skeletons/s1.png?signed=1`);
+    expect(urls()).toHaveLength(3);
+  });
+
+  it("with no rough starts from a plan of the real photos", async () => {
+    for (const rough of (await studio.services.images.list(batchId, "rough")).filter((image) => image.ideaId === "idea-2")) await studio.table.delete(`BATCH#${batchId}`, `IMAGE#${rough.id}`);
+    const before = studio.fal.submits().length;
+    expect(await send("idea-2", 1)).toMatchObject({ ok: false, error: expect.stringMatching(/Concept idea-2 has no rough, so its draft starts from a plan of the real photos/) });
+    expect(studio.fal.submits()).toHaveLength(before);
+    await studio.services.images.add({ id: "s1", batchId, kind: "skeleton", key: `batches/${batchId}/skeletons/s1.png` });
+    expect((await send("idea-2", 1, { fromId: "s1" })).ok).toBe(true);
     expect(urls()).toHaveLength(2);
+  });
+
+  it("gets its rough on top of four real photos", async () => {
+    const got = (await callTool(studio, "batch_get", { batchId })).value;
+    const more = [1, 2].map((n) => ({ key: `products/p/prop${n}.jpg`, sourceUrl: `https://cdn.wongi.example/prop${n}.jpg`, kind: "prop" as const, what: `Prop ${n}` }));
+    await studio.services.brands.saveProduct({ ...got.product, photos: [...got.product.photos, ...more], savedBy: "owner@example.com" });
+    const four = await send("idea-2", 1, { references: ["pack-1", "food-1", "prop-1", "prop-2"] });
+    expect(four.ok ? "" : four.error).toBe("");
+    expect(urls()).toHaveLength(5);
   });
 
   it("keeps the draft number for v3 only", async () => {
@@ -86,7 +107,7 @@ describe("a real-photo plan", () => {
     const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.5, base: 0.8, height: 0.4, photo: "food-1" }]) });
     const skeleton = (await callTool(studio, "pixel_status", { batchId, jobId: made.value.id })).value.image.id as string;
     expect((await studio.services.jobs.get(batchId, skeleton)).input).toMatchObject({ plan: { bg: "#FFD21E", products: [{ photoKey: "products/p/food.jpg", height: 0.4 }] } });
-    const sent = await send("idea-2", 1, { fromId: skeleton, references: [] });
+    const sent = await send("idea-2", 1, { fromId: skeleton });
     expect(sent).toMatchObject({ ok: true, value: { fromId: skeleton } });
   });
 
@@ -133,6 +154,16 @@ describe("a draft that its checks reject", () => {
     await made("idea-2", 3);
     expect(await shown()).toHaveLength(3);
     expect(await shown()).not.toContain(first);
+  });
+
+  it("is made again when only the picture with its words is rejected", async () => {
+    const first = await made("idea-2", 1);
+    await look(first, []);
+    const words = (await studio.services.copy.list(batchId)).find((entry) => entry.ideaId === "idea-2")!;
+    await studio.services.images.add({ id: "t1", batchId, kind: "typeset", key: `batches/${batchId}/typeset/t1.png`, ideaId: "idea-2", fromId: first, rootId: first, wordsVersion: words.version });
+    await look("t1", [{ code: "F6", note: "The headline covers the pouch." }, { code: "F7", note: "The words do not stand clear." }]);
+    const redo = await send("idea-2", 1);
+    expect(redo.ok ? "" : redo.error).toBe("");
   });
 
   it("is not made a third time", async () => {

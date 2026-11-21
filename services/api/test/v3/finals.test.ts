@@ -112,6 +112,22 @@ describe("a v3 batch: the board and the finals", () => {
     expect((await points(finals[2]!)).value.state).toBe("finished");
   });
 
+  it("lets him take a draft he passed on after the other finals are finished", async () => {
+    await callTool(studio, "pick_save", { batchId, ideaId: "idea-2", imageId: null, ownerSaid: "none of these" });
+    for (const ideaId of ["idea-4", "idea-5"]) await points(await final(ideaId));
+    expect(await state()).toBe("finished");
+    expect((await done()).done).toBe(false);
+    tick();
+    const again = await callTool(studio, "pick_save", { batchId, ideaId: "idea-2", imageId: drafts["idea-2"]![1], ownerSaid: "draft 2 after all" });
+    expect(again.ok ? "" : again.error).toBe("");
+    expect(await state()).toBe("finals");
+    const imageId = await render("idea-2", { kind: "final", fromId: drafts["idea-2"]![1] });
+    await checked(imageId);
+    await run("photo_finish", { imageId });
+    await points(await words(imageId));
+    expect(await state()).toBe("finished");
+  });
+
   it("takes a newer verdict of the owner over his earlier pass", async () => {
     const passed = await callTool(studio, "pick_save", { batchId, ideaId: "idea-2", imageId: null, ownerSaid: "none of these" });
     expect(passed.ok ? "" : passed.error).toBe("");

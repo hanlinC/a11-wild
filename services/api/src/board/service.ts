@@ -22,7 +22,8 @@ export const PACK_CHECK = "pack_check";
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log and not in the calibration.";
 
 /** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
-const PICKING: BatchState[] = ["checked", "waiting_pick", "finals"];
+// A finished batch still takes a newer choice: the owner may pick a draft of an idea he passed on.
+const PICKING: BatchState[] = ["checked", "waiting_pick", "finals", "finished"];
 
 interface Deps {
   batches: BatchStore;
@@ -315,6 +316,8 @@ export class BoardService implements FinalRule {
     }
 
     const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: seenOf(draft).id } : {}), ownerSaid, by: user.email });
+    // A newer choice in a finished batch names a draft with no final yet: the batch goes back to its finals.
+    if (batch.state === "finished") await this.progress(batch);
     // A pick in a test batch is the tester's, not the owner's taste.
     if (batch.test) return { pick, note: TEST_PICK };
     await tasteLog.add({
