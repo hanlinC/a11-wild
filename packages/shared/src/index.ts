@@ -100,3 +100,45 @@ export interface Fact {
   checkedAt: string;
   savedBy: string;
 }
+
+/** One version of the owner's taste canon. Version 0 means none was written yet. */
+export interface CanonVersion {
+  version: number;
+  text: string;
+  /** One line on what changed and why. */
+  reason: string;
+  savedBy: string;
+  savedAt: string;
+}
+
+/** One thing the owner chose, passed on or said. */
+export interface TasteEntry {
+  id: string;
+  at: string;
+  kind: "pick" | "pass" | "note";
+  /** The owner's own words. */
+  ownerSaid: string;
+  /** What it was about, in a line: the brand, the idea, the draft. */
+  about?: string;
+  batchId?: string;
+  ideaId?: string;
+  draftId?: string;
+  savedBy: string;
+  /** The record's id in a11-adgen, when it was copied from there. */
+  originId?: string;
+}
+
+/** A saved reference. */
+export interface SwipeItem {
+  id: string;
+  title: string;
+  /** One line on what the reference does. */
+  why: string;
+  /** Who made it, or where it is from. */
+  source: string;
+  sourceUrl?: string;
+  tags?: string[];
+  addedAt: string;
+  savedBy: string;
+  originId?: string;
+}
