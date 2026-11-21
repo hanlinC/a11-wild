@@ -43,7 +43,7 @@ export const PROBES = [
   {
     name: "dashboard API without a session is refused",
     async run(origin, fetchFn) {
-      for (const path of ["/api/me", "/api/clients", "/api/brands", "/api/spend", "/api/taste", "/api/calibration", "/api/batches/none/board", "/api/batches/none/done"]) {
+      for (const path of ["/api/me", "/api/clients", "/api/brands", "/api/spend", "/api/taste", "/api/calibration", "/api/packs", "/api/batches/none/board", "/api/batches/none/done"]) {
         const response = await fetchFn(`${origin}${path}`);
         if (response.status !== 401) return `${path} status ${response.status}`;
       }
@@ -72,6 +72,22 @@ export const PROBES = [
         ].filter(([name, part]) => !(headers.get(name) ?? "").includes(part));
         if (missing.length > 0) return `${path} lacks ${missing.map(([name]) => name).join(", ")}`;
       }
+    },
+  },
+  {
+    name: "a pack link with a wrong token opens nothing and takes no file",
+    async run(origin, fetchFn) {
+      // A token of the right shape that no pack has. A wrong link must look the same as no link.
+      const token = "A".repeat(43);
+      const page = await fetchFn(`${origin}/api/pack/${token}`);
+      if (page.status !== 404) return `page status ${page.status}`;
+      if (!(page.headers.get("x-robots-tag") ?? "").includes("noindex")) return "no noindex on the pack answer";
+      const upload = await fetchFn(`${origin}/api/pack/${token}/uploads`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "probe.png", type: "image/png", bytes: 1 }),
+      });
+      if (upload.status !== 404) return `upload status ${upload.status}`;
     },
   },
   {

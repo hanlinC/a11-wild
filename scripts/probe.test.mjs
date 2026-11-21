@@ -32,6 +32,9 @@ function healthyStudio(overrides = {}) {
     "GET /api/spend": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/taste": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/calibration": () => Response.json({ error: "signed_out" }, { status: 401 }),
+    "GET /api/packs": () => Response.json({ error: "signed_out" }, { status: 401 }),
+    [`GET /api/pack/${"A".repeat(43)}`]: () => Response.json({ error: "not_found" }, { status: 404, headers: { "x-robots-tag": "noindex, nofollow" } }),
+    [`POST /api/pack/${"A".repeat(43)}/uploads`]: () => Response.json({ error: "not_found" }, { status: 404 }),
     "GET /api/batches/none/board": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/batches/none/done": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "POST /api/clients/probe/approve": () => Response.json({ error: "signed_out" }, { status: 401 }),
@@ -96,6 +99,14 @@ describe("live probe", () => {
       "GET /api/no-such-path": () => new Response("<html></html>", { headers: { "content-type": "text/html" } }),
     });
     expect(names).toEqual(["an unknown API path is JSON 404, not the dashboard page"]);
+  });
+
+  it("fails when a wrong pack token opens a pack, or takes a file", async () => {
+    const name = "a pack link with a wrong token opens nothing and takes no file";
+    const token = "A".repeat(43);
+    expect(await failedNames({ [`GET /api/pack/${token}`]: () => Response.json({ brand: "x" }) })).toEqual([name]);
+    expect(await failedNames({ [`GET /api/pack/${token}`]: () => Response.json({ error: "not_found" }, { status: 404 }) })).toEqual([name]);
+    expect(await failedNames({ [`POST /api/pack/${token}/uploads`]: () => Response.json({ putUrl: "https://x" }) })).toEqual([name]);
   });
 
   it("reports a network failure as a failed probe, not a crash", async () => {
