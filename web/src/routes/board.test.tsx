@@ -178,6 +178,36 @@ describe("Pick board", () => {
     expect(within(gate).getByText(/person who does not know the brand/)).toBeInTheDocument();
   });
 
+  it("reads the done gate again after the owner's pick", async () => {
+    const page = board();
+    const gate = (evidence: string, passed: boolean) => ({
+      body: { batch: page.batch, done: false, conditions: [{ name: "picks", asks: "The owner has picked one draft for each idea.", passed, evidence }], strangerTest: [] },
+    });
+    let picked = false;
+    stubApi({
+      "GET /api/batches/b1/board": () => ({ body: { ...page, batch: { ...page.batch, state: "finals" } } }),
+      "GET /api/batches/b1/done": () => (picked ? gate("2 idea(s): each has a pick.", true) : gate("idea-1: no pick yet", false)),
+      "POST /api/batches/b1/picks": () => {
+        picked = true;
+        return { body: { pick: { ideaId: "idea-1", imageId: "idea-1-d3", ownerSaid: "calm", at, by: "owner@example.com" } } };
+      },
+    });
+    renderSignedIn(
+      <Routes>
+        <Route path="batches/:batchId" element={<Board />} />
+      </Routes>,
+      undefined,
+      "/batches/b1",
+    );
+    expect(await screen.findByText("idea-1: no pick yet")).toBeInTheDocument();
+    const first = screen.getByRole("heading", { name: "Idea 1: Rock 1" }).closest("section")!;
+    await userEvent.click(within(first).getByRole("button", { name: "Pick draft 3" }));
+    await userEvent.type(within(first).getByLabelText("Why draft 3, in your own words"), "calm");
+    await userEvent.click(within(first).getByRole("button", { name: "Save the pick" }));
+    expect(await screen.findByText("2 idea(s): each has a pick.")).toBeInTheDocument();
+    expect(screen.queryByText("idea-1: no pick yet")).not.toBeInTheDocument();
+  });
+
   it("gives a member no way to pick", async () => {
     show(board(), MEMBER);
     await screen.findByAltText("Rock 1, draft 1");

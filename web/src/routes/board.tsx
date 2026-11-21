@@ -85,7 +85,7 @@ export function Board() {
       {ideas.map((entry, index) => (
         <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} canPick={picking === "open"} onSaved={reload} />
       ))}
-      {["finals", "finished", "done"].includes(batch.state) ? <DoneGate batchId={batch.id} /> : null}
+      {["finals", "finished", "done"].includes(batch.state) ? <DoneGate board={board} /> : null}
     </>
   );
 }

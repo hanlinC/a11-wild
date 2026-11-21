@@ -1,3 +1,4 @@
+import type { Board } from "@a11-wild/shared";
 import { useCallback } from "react";
 import { Loading } from "@/components/loading";
 import { Card, Section } from "@/components/page";
@@ -6,8 +7,9 @@ import { api } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
 
 /** The owner's conditions for calling a batch done, each with what the studio measured, and what only he can judge. */
-export function DoneGate({ batchId }: { batchId: string }) {
-  const load = useCallback(() => api.done(batchId), [batchId]);
+export function DoneGate({ board }: { board: Board }) {
+  // Read again each time the board is: a pick changes what the gate says.
+  const load = useCallback(() => api.done(board.batch.id), [board]);
   const { value: report, error } = useLoad(load);
 
   return (
