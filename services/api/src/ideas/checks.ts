@@ -18,7 +18,21 @@ export const STAGE_NAMES: Record<FunnelStage, string> = { tof: "top of funnel", 
 /** Words with a letter or a digit in them: "S$58.90." is one word, a lone dash is none. */
 export const wordCount = (text: string) => text.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
 
-const OFFER = /(?:S\$|SGD|\$)\s?\d|\d\s?%\s?off\b|\bfree\s+(?:delivery|shipping)\b/i;
+/**
+ * A price, a saving or a delivery offer, as the words of an ad write them. A percentage alone is not one ("100% oat").
+ * Found by review, 22-11-2026: "Next-day delivery" and "Save 20%" passed the first, narrower pattern.
+ */
+const OFFER = new RegExp(
+  [
+    String.raw`(?:S\$|SGD|\$)\s?\d`,
+    String.raw`\d\s?%\s?(?:off|discount|less|cheaper)\b`,
+    String.raw`\bsave\s+(?:up\s+to\s+)?(?:S\$|SGD|\$)?\s?\d`,
+    String.raw`\b(?:discounts?|promo(?:tion)?s?|vouchers?|coupons?)\b`,
+    String.raw`\b(?:1|one)[- ]for[- ](?:1|one)\b|\bbuy\s+\w+\s*,?\s+(?:get|free)\b`,
+    String.raw`\b(?:delivery|delivered|shipping)\b`,
+  ].join("|"),
+  "i",
+);
 /** A number as written: "58.90", "1,000", "10". */
 const NUMBER = /\d+(?:[.,]\d+)*/g;
 const plain = (text: string) => text.replace(/(\d),(?=\d{3})/g, "$1");

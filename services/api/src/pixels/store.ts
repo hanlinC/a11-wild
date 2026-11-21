@@ -10,7 +10,7 @@ export interface StoredJob extends PixelJob {
   input: Record<string, unknown>;
   resultKey: string;
   /** For a tool that makes a picture: where it goes and what it is. */
-  out?: { key: string; kind: ImageKind; ideaId?: string; fromId?: string; rootId?: string };
+  out?: { key: string; kind: ImageKind; ideaId?: string; fromId?: string; rootId?: string; wordsVersion?: number };
 }
 
 export const jobView = ({ input: _input, resultKey: _resultKey, out: _out, ...job }: StoredJob): PixelJob => job;

@@ -183,7 +183,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
               altHeadline: line(120).optional().describe("v2: one other headline, as an option for the owner. Never more than one."),
               claims: z.array(z.strictObject({ text: line(300), factId: id })).max(6).optional().describe("v2: each claim the words make, with the saved fact that proves it."),
               footnote: line(160).optional().describe("v2: the source line of a claim from a study, set small at the bottom."),
-              shows: z.array(line(20)).max(8).optional().describe('v2: the real photo of each brand item and prop in the picture: "pack-1", "food-2", "prop-1".'),
+              shows: z.array(line(20)).max(8).optional().describe('The real photo of each brand item and prop in the picture: "pack-1", "food-2", "prop-1". An ad with words must name them; a v1 idea may.'),
             }),
           )
           .max(BURST_MAX),
@@ -202,11 +202,22 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
           ...idea,
           references: references.map(({ url, ...ref }) => ({ ...ref, ...(url ? { url } : {}) })),
           ...(worded
-            ? { ...(stage ? { stage } : {}), ...(headline ? { headline } : {}), ...(subline ? { subline } : {}), ...(altHeadline ? { altHeadline } : {}), ...(claims ? { claims } : {}), ...(footnote ? { footnote } : {}), ...(shows ? { shows } : {}) }
+            ? { ...(stage ? { stage } : {}), ...(headline ? { headline } : {}), ...(subline ? { subline } : {}), ...(altHeadline ? { altHeadline } : {}), ...(claims ? { claims } : {}), ...(footnote ? { footnote } : {}) }
             : {}),
+          // Real photos first holds for every kind: what an idea says it shows is kept, and checked again before each draft.
+          ...(shows ? { shows } : {}),
         }));
         const product = await brands.product(batch.productId);
-        const faults = worded ? burstFaults(clean, await facts.list(product.id), photoNames(product.photos)) : ideaFaults(clean);
+        const names = photoNames(product.photos);
+        const faults = worded
+          ? burstFaults(clean, await facts.list(product.id), names)
+          : [
+              ...ideaFaults(clean),
+              ...clean.flatMap((entry, index) => {
+                const missing = (entry.shows ?? []).filter((photo) => !names.includes(photo));
+                return missing.length > 0 ? [`Idea ${index + 1} shows ${missing.join(", ")}, and this product has no such photo. Its photos: ${names.join(", ") || "none"}.`] : [];
+              }),
+            ];
         if (faults.length > 0) throw new Refusal(`The ideas are not saved. ${faults.join(" ")}`);
         const saved = clean.map((idea, index) => ({ id: `idea-${index + 1}`, ...idea }));
         if (worded) {

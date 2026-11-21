@@ -275,10 +275,14 @@ export class PixelService {
         ...(words.footnote ? { footnote: words.footnote } : {}),
         fontKey: font.key,
         ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
+        // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
+        weight: input.weight,
+        ...(input.subWeight ? { subWeight: input.subWeight } : {}),
         ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
         renderKey: on.key,
       },
-      { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
+      // The picture keeps the version of the words it was sent with: the owner can change them while the job runs.
+      { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, wordsVersion: words.version, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
     );
   }
 
@@ -309,8 +313,8 @@ export class PixelService {
         const line = String(result.line ?? "").slice(0, 600);
         // What the job made or measured is saved before the job ends, so a read that stops half way is done again by the next one. Each write gives the same row again.
         if (job.out) {
-          const { key, kind, ideaId, fromId, rootId } = job.out;
-          await images.add({ id: job.id, batchId, kind, key, ...(ideaId ? { ideaId } : {}), ...(fromId ? { fromId } : {}), ...(rootId ? { rootId } : {}) });
+          const { key, kind, ideaId, fromId, rootId, wordsVersion } = job.out;
+          await images.add({ id: job.id, batchId, kind, key, ...(ideaId ? { ideaId } : {}), ...(fromId ? { fromId } : {}), ...(rootId ? { rootId } : {}), ...(wordsVersion ? { wordsVersion } : {}) });
         } else if (job.imageId) {
           // D11 is the product drawn wrong: the pack's shape, and where the cap sits. Each pack of a picture keeps its own result.
           const pack = typeof job.input.pack === "number" ? job.input.pack : 1;

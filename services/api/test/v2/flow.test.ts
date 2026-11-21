@@ -74,11 +74,14 @@ async function checked(imageId: string) {
   const job = await callTool(studio, "pack_check", { batchId, imageId, at: [500, 800], bg: "101010" });
   await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
 }
-async function typeSet(imageId: string, extra: object = {}) {
+async function typeSet(imageId: string, extra: object = {}, look = true) {
   studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
   const job = await callTool(studio, "type_set", { ...rules, batchId, imageId, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF", ...extra });
   if (!job.ok) return job;
-  return callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+  const set = await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+  // The agent looks at the picture with its words, as it does at the bare one.
+  if (set.ok && look) await callTool(studio, "checks_save", { ...rules, batchId, imageId: set.value.image.id, items: [] });
+  return set;
 }
 const state = async () => (await callTool(studio, "batch_get", { batchId })).value.batch.state as string;
 const selected = async () => (await callTool(studio, "batch_get", { batchId })).value.ideas as { id: string; stage: string; headline: string }[];
@@ -260,11 +263,14 @@ describe("a v2 batch: the type", () => {
     const second = await callTool(studio, "font_save", { brandId, family: "Inter", weight: 500 });
     expect(second.ok ? "" : second.error).toBe("");
     const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
-    const set = await typeSet(draft, { subFamily: "Inter" });
+    const set = await typeSet(draft, { subFamily: "Inter", subWeight: 500 });
     expect(set.ok ? "" : set.error).toBe("");
     expect(studio.pixels.events.findLast((entry) => entry.tool === "headline")?.input).toMatchObject({
       fontKey: `brands/${brandId}/fonts/archivo-800.ttf`,
       subFontKey: `brands/${brandId}/fonts/inter-500.ttf`,
+      // The weights go to the tool too: a variable font takes them on its weight axis.
+      weight: 800,
+      subWeight: 500,
     });
     expect(await typeSet(draft, { subFamily: "Papyrus" })).toMatchObject({ ok: false, error: expect.stringMatching(/no font file of "Papyrus".*font_save/) });
   });
@@ -294,6 +300,23 @@ describe("a v2 batch: the type", () => {
     expect(missing).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: this product has no photo prop-1/) });
   });
 
+  it("does not count words that were sent before the owner changed them, though the picture came after", async () => {
+    const ideas = await wordedBatch();
+    const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
+    // The job is sent with the first words, and read only after the owner changed them.
+    const job = await callTool(studio, "type_set", { ...rules, batchId, imageId: draft, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF" });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await approve([ideas[0]!], { headline: "THE ONE THAT STARTED IT ALL." });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const old = await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+    expect(old.value.image).toMatchObject({ kind: "typeset", wordsVersion: 1 });
+    const shown = async () => (await studio.services.board.board(batchId)).ideas.find((entry) => entry.idea.id === ideas[0]!.id)!.drafts[0]!.words;
+    expect(await shown()).toBeUndefined();
+
+    expect((await typeSet(draft)).value.image).toMatchObject({ wordsVersion: 2 });
+    expect((await shown())?.image.wordsVersion).toBe(2);
+  });
+
   it("does not show the owner a draft without its words, and asks for them again after a change", async () => {
     const ideas = await wordedBatch();
     const drafts: Record<string, string[]> = {};
@@ -309,7 +332,24 @@ describe("a v2 batch: the type", () => {
     expect(JSON.stringify(bare)).toMatch(/type_set for picture/);
     expect(await state()).toBe("drafting");
 
-    for (const list of Object.values(drafts)) for (const imageId of list) await typeSet(imageId);
+    // A rank of the bare photos is not a rank of the ads: it does not count once the words are on.
+    expect((await rankDrafts(studio, batchId)).ok).toBe(true);
+    const sets: Record<string, string> = {};
+    for (const list of Object.values(drafts)) for (const imageId of list) sets[imageId] = (await typeSet(imageId, {}, false)).value.image.id;
+    // The picture with its words is what the owner sees: it is looked at too, and its faults are saved on it.
+    const unseen = await callTool(studio, "board_show", { batchId });
+    const one = Object.keys(sets)[0]!;
+    expect(JSON.stringify(unseen)).toContain(`checks_save for picture ${sets[one]}`);
+    const fault = await callTool(studio, "checks_save", { ...rules, batchId, imageId: sets[one], items: [{ code: "D1", note: "The headline runs over the pack." }] });
+    expect(fault.value.stillMissing).toContain(`type_set again for picture ${one}: with its words it has D1 (The headline runs over the pack.)`);
+    sets[one] = (await typeSet(one)).value.image.id;
+    for (const imageId of Object.values(sets)) await callTool(studio, "checks_save", { ...rules, batchId, imageId, items: [] });
+    const stale = await callTool(studio, "board_show", { batchId });
+    expect(stale).toMatchObject({ ok: false, error: expect.stringMatching(/blind critic's rank of the drafts of .* as they are now/) });
+
+    const packet = await callTool(studio, "critic_open", { batchId, step: "drafts", freshHelper: true });
+    // The critic's rank is of the picture it opened: the one with the words.
+    expect(packet.value.ideas.flatMap((entry: { drafts: { imageId: string; shownId: string }[] }) => entry.drafts.map((draft) => [draft.imageId, draft.shownId])).sort()).toEqual(Object.entries(sets).sort());
     expect((await rankDrafts(studio, batchId)).ok).toBe(true);
     const board = await callTool(studio, "board_show", { batchId });
     expect(board.value.batch.state).toBe("waiting_pick");
@@ -322,5 +362,17 @@ describe("a v2 batch: the type", () => {
     const after = await callTool(studio, "board_show", { batchId });
     const first = after.value.ideas.find((entry: { idea: { id: string } }) => entry.idea.id === ideas[0]!.id);
     expect(first.drafts.every((draft: { words?: unknown }) => draft.words === undefined)).toBe(true);
+    // He has not seen the ad with his new words, so he cannot choose among its drafts yet, nor pass on them.
+    const early = await callTool(studio, "pick_save", { batchId, ideaId: ideas[0]!.id, imageId: drafts[ideas[0]!.id]![0], ownerSaid: "this one" });
+    expect(early).toMatchObject({ ok: false, error: expect.stringMatching(/words of .* are not on its drafts as they are now.*type_set.*fresh critic rank them again/) });
+    expect(await callTool(studio, "pick_save", { batchId, ideaId: ideas[0]!.id, imageId: null, ownerSaid: "none" })).toMatchObject({ ok: false });
+    // An idea whose words did not change is still his to choose.
+    const other = await callTool(studio, "pick_save", { batchId, ideaId: ideas[1]!.id, imageId: drafts[ideas[1]!.id]![0], ownerSaid: "this one" });
+    expect(other.value.pick).toMatchObject({ imageId: drafts[ideas[1]!.id]![0], shownId: sets[drafts[ideas[1]!.id]![0]!] });
+
+    const again: string[] = [];
+    for (const imageId of drafts[ideas[0]!.id]!) again.push((await typeSet(imageId)).value.image.id);
+    const picked = await callTool(studio, "pick_save", { batchId, ideaId: ideas[0]!.id, imageId: drafts[ideas[0]!.id]![0], ownerSaid: "this one" });
+    expect(picked.value.pick).toMatchObject({ shownId: again[0] });
   });
 });

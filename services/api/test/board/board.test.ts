@@ -52,6 +52,11 @@ describe("checks", () => {
     const got = await callTool(studio, "rules_get", { role: "main", kind: "v1" });
     expect(Object.keys(got.value.pictureChecks)).toHaveLength(19);
     expect(got.value.pictureChecks.D11).toMatch(/pack_check, 2%/);
+    expect(got.value.pictureChecks.D1).toMatch(/^Writing in the picture\. No readable words/);
+    // An ad with words: the owner's approved words, set by type_set, are not the D1 defect.
+    const worded = await callTool(studio, "rules_get", { role: "critic", kind: "v2" });
+    expect(worded.value.pictureChecks.D1).toMatch(/owner's approved headline, subline and footnote that type_set put on the picture.*no word the model drew/);
+    expect(Object.keys(worded.value.pictureChecks)).toHaveLength(19);
   });
 
   it("moves the batch to checked only when every draft was looked at, and names what is missing", async () => {

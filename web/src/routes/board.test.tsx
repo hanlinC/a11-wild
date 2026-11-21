@@ -95,7 +95,7 @@ describe("Pick board", () => {
   });
 
   it("shows an ad with words as it is delivered: the picture with the approved words, and the words as text", async () => {
-    const withWords = { ...draft("idea-1", 1), words: { image: { ...draft("idea-1", 1).image, id: "idea-1-t1", kind: "typeset" as const }, viewUrl: "https://pictures.example/typeset-1.jpg" } };
+    const withWords = { ...draft("idea-1", 1), words: { image: { ...draft("idea-1", 1).image, id: "idea-1-t1", kind: "typeset" as const }, viewUrl: "https://pictures.example/typeset-1.jpg", checks: { imageId: "idea-1-t1", looked: true, items: [{ code: "F3" as const, note: "The subline sits close to the pack." }], savedAt: at } } };
     const copy = { ideaId: "idea-1", headline: "ONCE YOU | START.", subline: "You cannot stop.", ownerSaid: "yes", version: 1, at, by: "owner@example.com" };
     show(board({ batch: { ...board().batch, kind: "v2" }, ideas: [{ idea: idea(1), copy, drafts: [withWords, draft("idea-1", 2)], pick: null, rank: null, finals: [] }] }));
     expect(await screen.findByText("ONCE YOU START.")).toBeInTheDocument();
@@ -103,6 +103,8 @@ describe("Pick board", () => {
     expect(screen.getByText("Headline ad")).toBeInTheDocument();
     expect(screen.getByAltText("Rock 1, draft 1")).toHaveAttribute("src", "https://pictures.example/typeset-1.jpg");
     expect(screen.getAllByText("Words set")).toHaveLength(1);
+    // What was found in the picture with its words is shown beside it.
+    expect(screen.getByText("The subline sits close to the pack.")).toBeInTheDocument();
   });
 
   it("saves a pass on all three, and shows a saved pick in the owner's words", async () => {
