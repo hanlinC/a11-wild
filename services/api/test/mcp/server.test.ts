@@ -57,7 +57,7 @@ describe("MCP server", () => {
     const result = await callTool("rules_get", { role: "critic" });
     const payload = JSON.parse(result.content[0].text);
     expect(payload.rulesVersion).toBe(RULES_VERSION);
-    expect(payload.rules.map((rule: { id: string }) => rule.id)).toContain("gold");
+    expect(payload.rules.map((rule: { id: string }) => rule.id)).toContain("blind-critic");
     expect(payload.rules.map((rule: { id: string }) => rule.id)).not.toContain("spend");
   });
 

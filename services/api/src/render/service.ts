@@ -122,8 +122,6 @@ export class RenderService {
     let count: number;
 
     if (input.kind === "draft") {
-      // Until the blind judge exists, a batch goes from its ideas straight to its drafts.
-      if (batch.state === "ideas") batch = await batches.move(batch, "judged", "render_submit");
       if (!["judged", "priced", "waiting_spend", "drafting"].includes(batch.state)) requireMove(batch.state, "drafting", "render_submit");
       if (mine.length >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
       const hasPack = product.photos.some((photo) => photo.kind === "pack");

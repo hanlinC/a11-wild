@@ -1,9 +1,13 @@
+import { DoneGate } from "../../batch/done.js";
 import { BatchReads } from "../../batch/reads.js";
 import { BatchStore } from "../../batch/store.js";
 import { BoardService } from "../../board/service.js";
 import { BrandStore } from "../../brand/store.js";
 import { CheckStore } from "../../checks/store.js";
 import type { Config } from "../../config.js";
+import { Calibration } from "../../critic/calibration.js";
+import { CriticService } from "../../critic/service.js";
+import { CriticStore } from "../../critic/store.js";
 import { FactStore } from "../../facts/store.js";
 import { FalClient } from "../../fal/client.js";
 import { ImageStore } from "../../images/store.js";
@@ -30,6 +34,7 @@ import { batchTools } from "./batch.js";
 import { boardTools } from "./board.js";
 import { brandTools } from "./brand.js";
 import { coreTools } from "./core.js";
+import { criticTools } from "./critic.js";
 import { factTools } from "./facts.js";
 import { importTools } from "./import.js";
 import { pixelTools } from "./pixels.js";
@@ -73,11 +78,15 @@ export function studioTools(parts: StudioParts) {
   const fal = new FalClient(parts.keys, parts.falFetch);
   const checks = new CheckStore(table, now);
   const picks = new PickStore(table, now);
-  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, tasteLog, pictures });
+  const criticStore = new CriticStore(table, now);
+  const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures });
+  const calibration = new Calibration({ batches, picks, critic: criticStore });
+  const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore });
+  const done = new DoneGate({ batches, brands, facts, truth, board });
   const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
   const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, runner: parts.pixelRunner, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels };
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, done };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -85,7 +94,8 @@ export function studioTools(parts: StudioParts) {
     ...factTools({ brands, facts, parallel }),
     ...tasteTools({ canon, tasteLog, swipe, reads }),
     ...importTools({ importer }),
-    ...batchTools({ batches, brands, facts, truth, reads }),
+    ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done }),
+    ...criticTools({ critic, calibration }),
     ...renderTools({ render }),
     ...pixelTools({ pixels }),
     ...boardTools({ board }),

@@ -1,0 +1,121 @@
+import { createHash } from "node:crypto";
+import type { CriticRank, Idea, IdeaVerdict } from "@a11-wild/shared";
+import { requireMove } from "../batch/state.js";
+import type { BatchStore } from "../batch/store.js";
+import type { BoardService } from "../board/service.js";
+import type { BrandStore } from "../brand/store.js";
+import type { FactStore } from "../facts/store.js";
+import { Refusal } from "../mcp/registry.js";
+import { DRAFTS_PER_IDEA } from "../render/service.js";
+import type { TruthStore } from "../truth/store.js";
+import { draftsPacket, ideasPacket, rankable } from "./packet.js";
+import type { CriticStep, CriticStore, Ticket } from "./store.js";
+
+interface Deps {
+  batches: BatchStore;
+  brands: BrandStore;
+  truth: TruthStore;
+  facts: FactStore;
+  board: BoardService;
+  critic: CriticStore;
+}
+
+export const BLIND_NEEDED =
+  "A blind critic is needed: a fresh helper that gets the batch id and nothing else. The session that wrote the ideas or made the drafts cannot judge them. If you cannot start a fresh helper, tell the owner and stop.";
+const BAD_TICKET = "This ticket is not valid: it was used, it ran out, or it is not of this batch. A ticket works once. Start a fresh helper and call critic_open again.";
+/** The states in which drafts can be ranked: from the first finished drafts until the owner has chosen for every idea. */
+const RANKING = ["drafting", "checked", "waiting_pick", "finals"];
+
+const stampOf = (ideas: Idea[]) => createHash("sha256").update(JSON.stringify(ideas)).digest("hex").slice(0, 32);
+const once = (ids: string[]) => new Set(ids).size === ids.length;
+const same = (a: string[], b: string[]) => a.length === b.length && once(a) && a.every((id) => b.includes(id));
+
+/** The blind judgement of a batch: a fresh critic opens a packet, and its word is taken once, with the packet's ticket. */
+export class CriticService {
+  constructor(private readonly deps: Deps) {}
+
+  async open(batchId: string, step: CriticStep, freshHelper: boolean) {
+    if (!freshHelper) throw new Refusal(BLIND_NEEDED);
+    const { batches, brands, truth, facts, board, critic } = this.deps;
+    const batch = await batches.get(batchId);
+    if (batch.format !== "static_4x5") throw new Refusal("This batch ends with a text spec. The blind critic judges a batch whose pictures the studio makes.");
+    const product = await brands.product(batch.productId);
+    const common = {
+      brand: await brands.brand(batch.brandId),
+      product,
+      truthSheet: (await truth.get(batch.productId, batch.truthVersion)) ?? null,
+      facts: await facts.list(product.id),
+    };
+    const ideas = await batches.ideas(batchId);
+    const stamp = stampOf(ideas);
+
+    if (step === "ideas") {
+      if (batch.state !== "ideas") requireMove(batch.state, "judged", "critic_open");
+      return { ...ideasPacket(common, ideas), ...(await critic.issue(batchId, { step, ideaIds: ideas.map((idea) => idea.id), stamp })) };
+    }
+    if (!RANKING.includes(batch.state)) requireMove(batch.state, "checked", "critic_open");
+    const open = rankable(await board.board(batchId), DRAFTS_PER_IDEA);
+    if (open.length === 0) {
+      throw new Refusal(`No idea of this batch can be ranked now. An idea is ranked when its ${DRAFTS_PER_IDEA} drafts are finished and the owner has not chosen for it yet.`);
+    }
+    return { ...draftsPacket(common, open), ...(await critic.issue(batchId, { step, ideaIds: open.map(({ idea }) => idea.id), stamp })) };
+  }
+
+  /** The ticket of this batch and this step, checked against the ideas as they are now. It is not spent yet. */
+  private async ticket(batchId: string, ticket: string, step: CriticStep, judged: string[]): Promise<Ticket> {
+    const found = await this.deps.critic.read(batchId, ticket);
+    if (!found || found.step !== step) throw new Refusal(BAD_TICKET);
+    if (found.stamp !== stampOf(await this.deps.batches.ideas(batchId))) {
+      throw new Refusal("The ideas of this batch changed after this ticket was made. Start a fresh helper and call critic_open again.");
+    }
+    if (!same(judged, found.ideaIds)) throw new Refusal(`Judge each idea of the packet once, and no other: ${found.ideaIds.join(", ")}.`);
+    return found;
+  }
+
+  /** The critic's keep or cut for each idea. A batch whose ideas are all kept is judged. */
+  async pick(batchId: string, ticket: string, verdicts: IdeaVerdict[]) {
+    const { batches, critic } = this.deps;
+    const batch = await batches.get(batchId);
+    if (batch.state !== "ideas") requireMove(batch.state, "judged", "critic_pick");
+    await this.ticket(batchId, ticket, "ideas", verdicts.map((verdict) => verdict.ideaId));
+    if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
+    await critic.saveVerdicts(batchId, verdicts);
+    const cut = verdicts.filter((verdict) => verdict.verdict === "cut");
+    if (cut.length > 0) {
+      return {
+        state: batch.state,
+        cut: cut.map(({ ideaId, reason }) => ({ ideaId, reason })),
+        nextStep: "Report the cut ideas and your reasons. The main agent writes a new idea in place of each one (ideas_save with all three), and then a fresh critic judges again.",
+      };
+    }
+    const moved = await batches.move(batch, "judged", "critic_pick");
+    return {
+      state: moved.state,
+      nextStep: "Report that the three ideas are kept, with your reasons. The main agent now sends one draft to read its price.",
+    };
+  }
+
+  /** The critic's order of each idea's drafts. It is refused for an idea the owner has already chosen for. */
+  async rank(batchId: string, ticket: string, ranks: Omit<CriticRank, "at">[]) {
+    const { batches, board, critic } = this.deps;
+    const batch = await batches.get(batchId);
+    if (!RANKING.includes(batch.state)) requireMove(batch.state, "checked", "critic_rank");
+    await this.ticket(batchId, ticket, "drafts", ranks.map((rank) => rank.ideaId));
+    const open = rankable(await board.board(batchId), DRAFTS_PER_IDEA);
+    for (const rank of ranks) {
+      const entry = open.find(({ idea }) => idea.id === rank.ideaId);
+      if (!entry) throw new Refusal(`The drafts of ${rank.ideaId} cannot be ranked now: the owner has chosen for it, or its drafts changed. Start a fresh helper and call critic_open again.`);
+      const drafts = entry.drafts.map((draft) => draft.imageId);
+      if (!same(rank.order.map((place) => place.imageId), drafts)) throw new Refusal(`Put every draft of ${rank.ideaId} in the order once, and no other picture: ${drafts.join(", ")}.`);
+    }
+    if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
+    for (const rank of ranks) await critic.saveRank(batchId, rank);
+    const { batch: after, missing } = await board.progress(batch);
+    return {
+      saved: ranks.map((rank) => rank.ideaId),
+      state: after.state,
+      ...(missing.length > 0 ? { stillMissing: missing } : {}),
+      nextStep: "Report that the drafts are ranked. Do not tell the main agent or the owner your order: the owner picks first.",
+    };
+  }
+}

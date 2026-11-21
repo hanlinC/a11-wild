@@ -22,15 +22,15 @@ Step 3. Truth first. Save the facts, each with an exact quote and its page addre
 
 Step 4. Ideas. Write three ideas. Each has one device, one focal point and five elements or fewer. Find references outside the category and write one line on what each does. Apply the cover test and the kill test, and cut what fails.
 
-Step 5. Judge. Give only the batch id to a fresh critic. Ask it to score the gold set blind, then to pick the ideas and rank the drafts blind, each with a reason. Record the balanced accuracy and compare it with the last run.
+Step 5. Judge. Give only the batch id to a fresh critic: a new helper that has seen nothing of this batch. It calls critic_open with step "ideas" and says keep or cut for each idea, with a reason (critic_pick). Write a new idea in place of each one it cuts, and send a fresh critic again. If you cannot start a fresh helper, tell the owner and stop.
 
-Step 6. Spend gate. Send one draft first to read the real price. Under US$1 for the batch, continue. At US$1 or more, show the owner the count and the estimate and wait for his yes. Then make three drafts for each idea, each from its own skeleton; change camera, crop and scale. Save the shape, print, D and F checks for every draft, and name every draft that has a D item.
+Step 6. Spend gate. Send one draft first to read the real price. Under US$1 for the batch, continue. At US$1 or more, show the owner the count and the estimate and wait for his yes. Then make three drafts for each idea, each from its own skeleton; change camera, crop and scale. Save the shape, print, D and F checks for every draft, and name every draft that has a D item. Then give only the batch id to a fresh critic again: it ranks each idea's drafts blind (critic_open with step "drafts", critic_rank). Its rank stays hidden until the owner has picked; never ask for it.
 
 Step 7. Show. Show the drafts with the logo in the picture and no words, numbered 1 to 3 with no rank, each beside its truth sheet. Give the result first.
 
-Step 8. Stop. The owner picks. Then make the finals under the same spend gate, measure them again, and tell him what remains for the stranger test. He runs that test himself.
+Step 8. Stop. The owner picks. Then make the finals under the same spend gate and measure them again. Call batch_done: it says which of his conditions hold, and lists what remains for the stranger test. He runs that test himself.
 
-Done when: the owner has picked one draft for each idea; no final has a D item; balanced accuracy has not fallen by 0.04 or more; shape and proportions match the truth sheet; every claim traces to the fact sheet.
+Done when: the owner has picked one draft for each idea; no final has a D item; shape and proportions match the truth sheet; every claim traces to the fact sheet.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
 

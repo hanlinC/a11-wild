@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RenderStore } from "../../src/render/store.js";
 import { RULES_VERSION } from "../../src/houserules.js";
-import { batchAtTruth, idea } from "../helpers/batch.js";
+import { batchAtTruth, idea, judgeIdeas } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import type { FalCall } from "../helpers/fal.js";
 
@@ -21,6 +21,7 @@ async function batchAtIdeas(options: { fal?: (call: FalCall) => ReturnType<NonNu
     await studio.services.brands.saveProduct({ ...made.product, photos: [...made.product.photos, { key: "products/p/pack.png", sourceUrl: "https://cdn.wongi.example/pack.png", kind: "pack" }] });
   }
   await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1), idea(2), idea(3)] });
+  await judgeIdeas(studio, batchId);
 }
 
 const draft = (extra: object = {}) => callTool(studio, "render_submit", { rulesVersion: RULES_VERSION, batchId, ideaId: "idea-1", kind: "draft", prompt: SCENE, ...extra });

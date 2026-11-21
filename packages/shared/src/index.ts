@@ -383,5 +383,58 @@ export interface Board {
   brand: { id: string; name: string };
   product: { id: string; name: string };
   truthSheet: TruthSheet | null;
-  ideas: { idea: Idea; drafts: BoardDraft[]; pick: Pick | null; finals: BoardDraft[] }[];
+  ideas: {
+    idea: Idea;
+    drafts: BoardDraft[];
+    pick: Pick | null;
+    /** The blind critic's rank of this idea's drafts. Null until the owner has picked or passed, so that it cannot lead him. */
+    rank: CriticRank | null;
+    finals: BoardDraft[];
+  }[];
+}
+
+/** The blind critic's order of one idea's drafts, best first, with a reason for each place. */
+export interface CriticRank {
+  ideaId: string;
+  order: { imageId: string; reason: string }[];
+  at: string;
+}
+
+/** The blind critic's word on one idea: keep it, or cut it and have another written. */
+export interface IdeaVerdict {
+  ideaId: string;
+  verdict: "keep" | "cut";
+  reason: string;
+}
+
+/** A share of n, with the 95% interval it could lie in. Under 30 it shows a direction only. */
+export interface Share {
+  k: number;
+  n: number;
+  value: number | null;
+  interval: [number, number] | null;
+  note?: string;
+}
+
+/** What the dashboard's calibration page shows: does the blind critic agree with the owner? */
+export interface CalibrationPage {
+  /** How often the owner picked the draft that the blind critic had put first, and the place of each draft he picked. */
+  picks: { firstPlace: Share; byPlace: Record<string, number> };
+}
+
+/** One condition of the done gate, with what the studio measured. */
+export interface DoneCondition {
+  name: "picks" | "finals";
+  /** The condition in the owner's words. */
+  asks: string;
+  passed: boolean;
+  evidence: string;
+}
+
+export interface DoneReport {
+  batch: Batch;
+  done: boolean;
+  conditions: DoneCondition[];
+  /** What the studio cannot measure. The owner judges these himself. */
+  strangerTest: string[];
 }

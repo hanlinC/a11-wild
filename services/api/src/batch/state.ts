@@ -6,15 +6,15 @@ const STEP: Record<BatchState, string> = {
   intake: "choose a saved brand and product (batch_create)",
   truth: "save the product's truth sheet (truth_save)",
   ideas: "save three ideas (ideas_save)",
-  judged: "the blind pick: the critic scores the gold set, then picks and ranks",
+  judged: 'the blind pick, by a fresh helper that gets the batch id only: critic_open with step "ideas", then critic_pick',
   priced: "send one draft to read its price",
   waiting_spend: "the owner's yes to the estimate (spend_approve)",
   drafting: "make the drafts",
-  checked: "save the shape and print checks of every draft",
+  checked: 'save the shape and print checks of every draft, and have a fresh helper rank each idea\'s drafts blind (critic_open with step "drafts", then critic_rank)',
   waiting_pick: "show the board to the owner",
   finals: "the owner's pick of one draft for each idea",
   finished: "make the finals and pass their pack, cap and finish checks",
-  done: "pass the done gate",
+  done: "pass the done gate (batch_done)",
   spec_only: "save the text spec (spec_save)",
 };
 

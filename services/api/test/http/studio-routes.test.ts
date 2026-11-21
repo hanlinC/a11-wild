@@ -22,7 +22,7 @@ const saveCanon = (body: unknown, as = cookie, origin: string | undefined = ORIG
 
 describe("studio routes", () => {
   it("answers 401 without a session on every route", async () => {
-    for (const path of ["/api/brands", "/api/brands/x", "/api/batches", "/api/spend", "/api/taste", "/api/taste/canon/1"]) {
+    for (const path of ["/api/brands", "/api/brands/x", "/api/batches", "/api/spend", "/api/taste", "/api/taste/canon/1", "/api/calibration", "/api/batches/x/done"]) {
       expect((await get(path, {})).status, path).toBe(401);
     }
     expect((await saveCanon({ text: "x", reason: "y" }, "")).status).toBe(401);

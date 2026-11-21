@@ -1,0 +1,80 @@
+import { createHash, randomBytes } from "node:crypto";
+import type { CriticRank, IdeaVerdict } from "@a11-wild/shared";
+import { type Item, record, type Table } from "../store/table.js";
+
+const pk = (batchId: string) => `BATCH#${batchId}`;
+const ticketSk = (ticket: string) => `TICKET#${createHash("sha256").update(ticket).digest("hex")}`;
+const VERDICTS_SK = "CRITIC#IDEAS";
+const OPEN = "open";
+
+/** A critic has this long to judge after it opens a packet. */
+export const TICKET_MINUTES = 120;
+
+export type CriticStep = "ideas" | "drafts";
+
+export interface Ticket {
+  step: CriticStep;
+  /** The ideas the packet showed. */
+  ideaIds: string[];
+  /** A mark of the ideas as they were when the packet was made. A judgement of other ideas is not theirs. */
+  stamp: string;
+  until: string;
+}
+
+export interface SavedVerdicts {
+  verdicts: IdeaVerdict[];
+  at: string;
+}
+
+/** What a blind critic was given leave to judge, and what it said. */
+export class CriticStore {
+  constructor(
+    private readonly table: Table,
+    private readonly now: () => Date,
+  ) {}
+
+  /** Makes a ticket for one judgement. Only its hash is kept, so the table cannot give a ticket back. */
+  async issue(batchId: string, input: Omit<Ticket, "until">): Promise<{ ticket: string; until: string }> {
+    const ticket = randomBytes(24).toString("base64url");
+    const until = new Date(this.now().getTime() + TICKET_MINUTES * 60_000);
+    await this.table.put({ pk: pk(batchId), sk: ticketSk(ticket), ...input, until: until.toISOString(), state: OPEN, expiresAt: Math.floor(until.getTime() / 1000) + 3600 });
+    return { ticket, until: until.toISOString() };
+  }
+
+  /** The ticket, while it is unused and in time. */
+  async read(batchId: string, ticket: string): Promise<Ticket | undefined> {
+    const item = await this.table.get<Item & Ticket>(pk(batchId), ticketSk(ticket));
+    if (!item || item.state !== OPEN || item.until <= this.now().toISOString()) return undefined;
+    const { step, ideaIds, stamp, until } = item;
+    return { step, ideaIds, stamp, until };
+  }
+
+  /** Spends the ticket. False when another call spent it first. */
+  use(batchId: string, ticket: string): Promise<boolean> {
+    return this.table.delete(pk(batchId), ticketSk(ticket), { ifEquals: { attribute: "state", value: OPEN } });
+  }
+
+  async saveVerdicts(batchId: string, verdicts: IdeaVerdict[]): Promise<SavedVerdicts> {
+    const saved: SavedVerdicts = { verdicts, at: this.now().toISOString() };
+    await this.table.put({ pk: pk(batchId), sk: VERDICTS_SK, ...saved });
+    return saved;
+  }
+
+  /** The newest judgement of the batch's ideas. */
+  async verdicts(batchId: string): Promise<SavedVerdicts | undefined> {
+    const item = await this.table.get<Item & SavedVerdicts>(pk(batchId), VERDICTS_SK);
+    return item && record<SavedVerdicts>(item);
+  }
+
+  async saveRank(batchId: string, rank: Omit<CriticRank, "at">): Promise<CriticRank> {
+    const saved: CriticRank = { ...rank, at: this.now().toISOString() };
+    await this.table.put({ pk: pk(batchId), sk: `RANK#${rank.ideaId}`, ...saved });
+    return saved;
+  }
+
+  /** The rank of each idea's drafts, by idea. */
+  async ranks(batchId: string): Promise<Map<string, CriticRank>> {
+    const items = await this.table.query<Item & CriticRank>(pk(batchId));
+    return new Map(items.filter((item) => item.sk.startsWith("RANK#")).map((item) => [item.ideaId, record<CriticRank>(item)]));
+  }
+}

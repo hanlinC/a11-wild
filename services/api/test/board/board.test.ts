@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PACK_CHECK } from "../../src/board/service.js";
 import { RULES_VERSION } from "../../src/houserules.js";
-import { batchAtTruth, idea } from "../helpers/batch.js";
+import { batchAtTruth, idea, judgeIdeas, rankDrafts } from "../helpers/batch.js";
 import { approvedClient, callTool, config, createStudio, json, sessionCookie, type Studio } from "../helpers/deps.js";
 
 const SCENE = "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it.";
@@ -25,6 +25,7 @@ async function batchWithDrafts() {
   await approvedClient(studio);
   batchId = (await batchAtTruth(studio)).batchId;
   await callTool(studio, "ideas_save", { ...rules, batchId, ideas: [idea(1), idea(2), idea(3)] });
+  await judgeIdeas(studio, batchId);
   drafts = {};
   for (const ideaId of ["idea-1", "idea-2", "idea-3"]) {
     for (let n = 0; n < 3; n++) {
@@ -35,8 +36,10 @@ async function batchWithDrafts() {
 }
 
 const check = (imageId: string, items: object[] = []) => callTool(studio, "checks_save", { ...rules, batchId, imageId, items });
+/** Every draft looked at, and each idea's drafts ranked by the blind critic. */
 const checkAll = async () => {
   for (const imageId of Object.values(drafts).flat()) await check(imageId);
+  await rankDrafts(studio, batchId);
 };
 const pick = (ideaId: string, imageId: string | null, ownerSaid = "this one, the rock reads at once", as: { sub?: string } = {}) =>
   callTool(studio, "pick_save", { batchId, ideaId, imageId, ownerSaid }, as);
@@ -55,13 +58,16 @@ describe("checks", () => {
     const [first, ...rest] = Object.values(drafts).flat();
     const one = await check(first!, [{ code: "F6", note: "Seven things to look at." }]);
     expect(one.value).toMatchObject({ state: "drafting", checks: { looked: true, items: [{ code: "F6" }] } });
-    expect(one.value.stillMissing).toHaveLength(8);
+    // Eight more looks, and the blind critic's rank of each idea's drafts.
+    expect(one.value.stillMissing).toHaveLength(11);
     expect(await callTool(studio, "board_show", { batchId })).toEqual(refused(/board is not ready.*checks_save for picture/));
     // The dashboard shows the drafts so far, and tells the owner that he cannot pick yet.
     const early = await json(await studio.app.request(`/api/batches/${batchId}/board`, { headers: { cookie: await sessionCookie(studio) } }));
     expect(early.picking).toBe("not_yet");
     for (const imageId of rest) await check(imageId);
-    expect(await state()).toBe("checked");
+    expect(await state()).toBe("drafting");
+    expect(await callTool(studio, "board_show", { batchId })).toEqual(refused(/still missing: the blind critic's rank of the drafts of idea-1/i));
+    expect((await rankDrafts(studio, batchId)).value).toMatchObject({ state: "checked", saved: ["idea-1", "idea-2", "idea-3"] });
   });
 
   it("keeps a D item that a tool measured: the agent's save cannot remove it", async () => {
@@ -102,8 +108,10 @@ describe("pick board", () => {
       expect(entry.drafts.map((draft: { number: number }) => draft.number)).toEqual([1, 2, 3]);
       expect(entry.drafts.map((draft: { image: { id: string } }) => draft.image.id)).toEqual(drafts[entry.idea.id]);
       expect(entry.pick).toBeNull();
+      // The blind critic has ranked these drafts. The board keeps that from him until he has picked.
+      expect(entry.rank).toBeNull();
     }
-    expect(JSON.stringify(board)).not.toMatch(/rank|score/i);
+    expect(JSON.stringify(board)).not.toMatch(/"order"|score|only this brand could run it/i);
   });
 
   it("saves the owner's pick with his words to the taste log, and refuses a member's", async () => {

@@ -1,3 +1,4 @@
+import { RULES_VERSION } from "../../src/houserules.js";
 import { callTool, type Studio } from "./deps.js";
 
 export const PAGE = "https://wongi.example/products/seaweed-crisps";
@@ -42,4 +43,24 @@ export async function batchAtTruth(studio: Studio, create: object = {}) {
   await callTool(studio, "truth_save", { batchId, ...sheet });
   await readTaste(studio, batchId);
   return { batchId, brand, product };
+}
+
+const WHY = "It reads at once, and only this brand could run it.";
+
+/** The blind critic keeps the batch's ideas, as a fresh helper would. */
+export async function judgeIdeas(studio: Studio, batchId: string) {
+  const packet = await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true });
+  const ideas = packet.value.ideas.map((idea: { id: string }) => ({ ideaId: idea.id, verdict: "keep", reason: WHY }));
+  return callTool(studio, "critic_pick", { rulesVersion: RULES_VERSION, batchId, ticket: packet.value.ticket, ideas });
+}
+
+/** The blind critic ranks every idea's drafts in the order they were sent, as a fresh helper would. */
+export async function rankDrafts(studio: Studio, batchId: string) {
+  const packet = await callTool(studio, "critic_open", { batchId, step: "drafts", freshHelper: true });
+  if (!packet.ok) return packet;
+  const ranks = packet.value.ideas.map((entry: { idea: { id: string }; drafts: { imageId: string }[] }) => ({
+    ideaId: entry.idea.id,
+    order: entry.drafts.map((draft) => ({ imageId: draft.imageId, reason: WHY })),
+  }));
+  return callTool(studio, "critic_rank", { rulesVersion: RULES_VERSION, batchId, ticket: packet.value.ticket, ranks });
 }

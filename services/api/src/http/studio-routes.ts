@@ -16,7 +16,7 @@ export function studioRoutes(
   session: MiddlewareHandler<SessionEnv>,
   ownerWrite: readonly [MiddlewareHandler<SessionEnv>, MiddlewareHandler, MiddlewareHandler<SessionEnv>],
 ): void {
-  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board } = deps.studio;
+  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board, calibration, done } = deps.studio;
   const logoUrl = (brand: BrandKit) => (brand.logo ? deps.pictures.viewUrl(brand.logo.key) : null);
 
   routes.get("/api/brands", session, async (c) => {
@@ -107,6 +107,17 @@ export function studioRoutes(
       throw error;
     }
   });
+
+  routes.get("/api/batches/:batchId/done", session, async (c) => {
+    try {
+      return c.json(await done.report(await batches.get(c.req.param("batchId"))));
+    } catch (error) {
+      if (error instanceof Refusal) return c.json({ error: "not_found" }, 404);
+      throw error;
+    }
+  });
+
+  routes.get("/api/calibration", session, async (c) => c.json(await calibration.report()));
 
   routes.post("/api/batches/:batchId/picks", ...ownerWrite, async (c) => {
     const body = PICK.safeParse(await c.req.json().catch(() => undefined));

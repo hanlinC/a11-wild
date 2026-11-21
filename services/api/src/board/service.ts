@@ -2,6 +2,7 @@ import type { Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, Image
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { type CheckStore, defectOf, rejected } from "../checks/store.js";
+import type { CriticStore } from "../critic/store.js";
 import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { PickStore } from "../picks/store.js";
@@ -25,6 +26,7 @@ interface Deps {
   renders: RenderStore;
   checks: CheckStore;
   picks: PickStore;
+  critic: CriticStore;
   tasteLog: TasteLog;
   pictures: Pictures;
 }
@@ -34,6 +36,14 @@ export const countedOf = (image: BatchImage, all: BatchImage[]): BatchImage =>
   all.filter((other) => (other.kind === "reprint" || other.kind === "swap") && other.rootId === image.id).at(-1) ?? image;
 /** The real-camera finish that was made from this very picture, the newest one. */
 const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
+
+/** Where one idea stands on its way to a final. */
+export interface IdeaFinal {
+  ideaId: string;
+  pick: Pick | undefined;
+  /** What the idea still needs. Empty when it has a clean, finished final, or the owner's pass. */
+  missing: string[];
+}
 
 /** The drafts of a batch as the owner sees them, the checks that every picture needs, and the owner's picks. */
 export class BoardService implements FinalRule {
@@ -52,9 +62,9 @@ export class BoardService implements FinalRule {
   }
 
   async board(batchId: string): Promise<Board> {
-    const { batches, brands, truth, checks, picks, pictures } = this.deps;
+    const { batches, brands, truth, checks, picks, critic, pictures } = this.deps;
     const batch = await batches.get(batchId);
-    const [brand, product, ideas, drafts, finals, found, picked] = await Promise.all([
+    const [brand, product, ideas, drafts, finals, found, picked, ranks] = await Promise.all([
       brands.brand(batch.brandId),
       brands.product(batch.productId),
       batches.ideas(batchId),
@@ -62,6 +72,7 @@ export class BoardService implements FinalRule {
       this.sent(batchId, "final"),
       checks.all(batchId),
       picks.all(batchId),
+      critic.ranks(batchId),
     ]);
     const all = await this.deps.images.list(batchId);
     const shown = (list: BatchImage[] = []): Promise<BoardDraft[]> =>
@@ -86,12 +97,11 @@ export class BoardService implements FinalRule {
       product: { id: product.id, name: product.name },
       truthSheet: (await truth.get(batch.productId, batch.truthVersion)) ?? null,
       ideas: await Promise.all(
-        ideas.map(async (idea) => ({
-          idea,
-          drafts: await shown(drafts.get(idea.id)),
-          pick: picked.find((pick) => pick.ideaId === idea.id) ?? null,
-          finals: await shown(finals.get(idea.id)),
-        })),
+        ideas.map(async (idea) => {
+          const pick = picked.find((entry) => entry.ideaId === idea.id) ?? null;
+          // The critic's rank is shown only after the owner's own choice, so that it cannot lead him.
+          return { idea, drafts: await shown(drafts.get(idea.id)), pick, rank: pick ? (ranks.get(idea.id) ?? null) : null, finals: await shown(finals.get(idea.id)) };
+        }),
       ),
     };
   }
@@ -104,42 +114,51 @@ export class BoardService implements FinalRule {
     return missing;
   }
 
-  /** Moves the batch on when every draft, or every final, is checked. Returns what is still missing. */
-  async progress(batch: Batch): Promise<{ batch: Batch; missing: string[] }> {
+  /** Where each idea stands on its way to a final: the owner's choice, and what its newest final still needs. */
+  async finals(batch: Batch): Promise<IdeaFinal[]> {
     const { batches, brands, checks, picks } = this.deps;
     const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
-    const found = await checks.all(batch.id);
-    const all = await this.deps.images.list(batch.id);
+    const [found, all, finals, made] = await Promise.all([checks.all(batch.id), this.deps.images.list(batch.id), this.sent(batch.id, "final"), picks.all(batch.id)]);
+    const entries: IdeaFinal[] = [];
+    for (const idea of await batches.ideas(batch.id)) {
+      const pick = made.find((entry) => entry.ideaId === idea.id);
+      const missing: string[] = [];
+      entries.push({ ideaId: idea.id, pick, missing });
+      if (!pick) missing.push(`the owner's pick, or his pass, for ${idea.id}`);
+      if (!pick?.imageId) continue;
+      // The newest final of the picked draft is the one that counts: an earlier one was made again because it failed, and a final of a draft he no longer picks does not count.
+      const newest = finals.get(idea.id)?.filter((final) => final.fromId === pick.imageId).at(-1);
+      if (!newest) {
+        missing.push(`a finished final of ${idea.id}, from the picked draft ${pick.imageId}`);
+        continue;
+      }
+      // A repair of a final stands for it, and is checked again as a new picture.
+      const final = countedOf(newest, all);
+      missing.push(...(await this.needs(batch.id, final, hasPack, found)));
+      const defect = defectOf(found.get(final.id));
+      if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
+      else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
+      else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
+    }
+    return entries;
+  }
+
+  /** Moves the batch on when every draft, or every final, is checked. Returns what is still missing. */
+  async progress(batch: Batch): Promise<{ batch: Batch; missing: string[] }> {
+    const { batches, brands, checks, critic } = this.deps;
     const missing: string[] = [];
     if (batch.state === "drafting") {
-      const drafts = await this.sent(batch.id, "draft");
+      const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
+      const [found, all, drafts, ranks] = await Promise.all([checks.all(batch.id), this.deps.images.list(batch.id), this.sent(batch.id, "draft"), critic.ranks(batch.id)]);
       for (const idea of await batches.ideas(batch.id)) {
         const mine = drafts.get(idea.id) ?? [];
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);
         for (const image of mine) missing.push(...(await this.needs(batch.id, countedOf(image, all), hasPack, found)));
+        if (!ranks.has(idea.id)) missing.push(`the blind critic's rank of the drafts of ${idea.id} (a fresh helper: critic_open with step "drafts", then critic_rank)`);
       }
       if (missing.length === 0) batch = await batches.move(batch, "checked", "checks_save");
     } else if (batch.state === "finals" || batch.state === "finished") {
-      const finals = await this.sent(batch.id, "final");
-      const made = await picks.all(batch.id);
-      for (const idea of await batches.ideas(batch.id)) {
-        const pick = made.find((entry) => entry.ideaId === idea.id);
-        if (!pick) missing.push(`the owner's pick, or his pass, for ${idea.id}`);
-        if (!pick?.imageId) continue;
-        // The newest final of the picked draft is the one that counts: an earlier one was made again because it failed, and a final of a draft he no longer picks does not count.
-        const newest = finals.get(idea.id)?.filter((final) => final.fromId === pick.imageId).at(-1);
-        if (!newest) {
-          missing.push(`a finished final of ${idea.id}, from the picked draft ${pick.imageId}`);
-          continue;
-        }
-        // A repair of a final stands for it, and is checked again as a new picture.
-        const final = countedOf(newest, all);
-        missing.push(...(await this.needs(batch.id, final, hasPack, found)));
-        const defect = defectOf(found.get(final.id));
-        if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
-        else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
-        else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
-      }
+      missing.push(...(await this.finals(batch)).flatMap((entry) => entry.missing));
       if (missing.length === 0 && batch.state === "finals") batch = await batches.move(batch, "finished", "checks_save");
       // A finished batch whose final got a D item, or a repair that is not checked yet, is not finished any more.
       else if (missing.length > 0 && batch.state === "finished") batch = await batches.move(batch, "finals", "checks_save");

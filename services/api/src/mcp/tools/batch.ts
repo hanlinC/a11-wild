@@ -1,9 +1,11 @@
 import { z } from "zod";
 import type { Batch } from "@a11-wild/shared";
+import type { DoneGate } from "../../batch/done.js";
 import type { BatchReads } from "../../batch/reads.js";
 import { requireMove, stepAfter } from "../../batch/state.js";
 import type { BatchStore } from "../../batch/store.js";
 import type { BrandStore } from "../../brand/store.js";
+import type { CriticStore } from "../../critic/store.js";
 import type { FactStore } from "../../facts/store.js";
 import { ELEMENTS_MAX, ideaFaults, IDEAS_PER_BATCH } from "../../ideas/checks.js";
 import type { TruthStore } from "../../truth/store.js";
@@ -15,6 +17,8 @@ export interface BatchToolDeps {
   facts: FactStore;
   truth: TruthStore;
   reads: BatchReads;
+  critic: CriticStore;
+  done: DoneGate;
 }
 
 const id = z.string().min(1).max(64);
@@ -24,17 +28,18 @@ const test = (what: string) => z.strictObject({ passed: z.boolean(), note: line(
 const CANNOT_RENDER =
   "The studio makes one kind of picture: a static 4:5 ad. For this format the step it cannot do is rendering. It keeps the facts, the truth sheet, the ideas and a text spec.";
 
-export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDeps): ToolDefinition[] {
+export function batchTools({ batches, brands, facts, truth, reads, critic, done }: BatchToolDeps): ToolDefinition[] {
   /** What a session needs to go on with a batch, from its id alone. */
   async function view(batch: Batch) {
     // A batch that saved a sheet keeps that version. A batch that has not yet sees the product's newest.
-    const [brand, product, sheet, newest, ideas, unread] = await Promise.all([
+    const [brand, product, sheet, newest, ideas, unread, judged] = await Promise.all([
       brands.brand(batch.brandId),
       brands.product(batch.productId),
       truth.get(batch.productId, batch.truthVersion),
       truth.get(batch.productId),
       batches.ideas(batch.id),
       reads.missing(batch.id),
+      critic.verdicts(batch.id),
     ]);
     const newer = sheet && newest && newest.version > sheet.version ? newest.version : undefined;
     const next =
@@ -48,6 +53,8 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
         ? { truthNote: `This batch keeps version ${sheet?.version} of the truth sheet, which it saved. The product's sheet is now at version ${newer} (truth_get reads it).` }
         : {}),
       ideas,
+      // What the blind critic said of the ideas, so that a cut idea can be written again.
+      ...(judged ? { criticOnIdeas: judged } : {}),
       tasteNotRead: unread,
     };
   }
@@ -181,6 +188,14 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
           ...(batch.format === "other" ? { note: CANNOT_RENDER } : {}),
         };
       },
+    }),
+    defineTool({
+      name: "batch_done",
+      description:
+        "The done gate. Free. It measures the owner's conditions for this batch and gives each as passed or failed with its evidence: he picked one draft for each idea; each pick became a final with no D item, the right shape and its real-camera finish. When both hold, the batch is marked done. The reply also lists strangerTest: what the studio cannot measure. Give that list to the owner; he runs that test himself, and you never answer it for him.",
+      input: { batchId: id },
+      writes: true,
+      handler: ({ batchId }) => done.close(batchId),
     }),
     defineTool({
       name: "spec_save",

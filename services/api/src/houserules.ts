@@ -4,7 +4,7 @@
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.1";
+export const RULES_VERSION = "2026-11-22.2";
 
 export const RULE_ROLES = ["main", "critic"] as const;
 export type RuleRole = (typeof RULE_ROLES)[number];
@@ -69,12 +69,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "blind-critic",
     roles: ["main", "critic"],
-    text: "The critic is a fresh helper that gets the batch id and nothing else. It judges blind and gives a reason for each choice. If you cannot start a fresh helper, say so and stop; do not judge your own work.",
-  },
-  {
-    id: "gold",
-    roles: ["critic"],
-    text: "Score the gold set blind before you judge a batch. Do not change a prompt to pass the gold set without a written reason.",
+    text: "The critic is a fresh helper that gets the batch id and nothing else. It judges the ideas blind before any draft is made, and ranks each idea's drafts blind before the owner picks, with a reason for each choice. Its rank is kept from the owner and from the main agent until he has picked. If you cannot start a fresh helper, say so and stop; do not judge your own work.",
   },
   {
     id: "taste-in-words",

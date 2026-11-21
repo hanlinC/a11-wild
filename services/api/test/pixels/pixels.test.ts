@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RULES_VERSION } from "../../src/houserules.js";
 import type { PixelEvent } from "../../src/pixels/runner.js";
-import { batchAtTruth, idea } from "../helpers/batch.js";
+import { batchAtTruth, idea, judgeIdeas } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 
 const SCENE = "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it.";
@@ -20,6 +20,7 @@ async function start(pixels?: (event: PixelEvent) => ReturnType<NonNullable<Para
   batchId = made.batchId;
   await studio.services.brands.saveProduct({ ...made.product, photos: [...made.product.photos, { key: PACK, sourceUrl: "https://cdn.wongi.example/pack.png", kind: "pack" }] });
   await callTool(studio, "ideas_save", { ...rules, batchId, ideas: [idea(1), idea(2), idea(3)] });
+  await judgeIdeas(studio, batchId);
 }
 
 const status = async (jobId: string) => (await callTool(studio, "pixel_status", { batchId, jobId })).value;
