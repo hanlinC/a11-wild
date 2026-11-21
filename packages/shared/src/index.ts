@@ -533,6 +533,8 @@ export interface TastePage {
 /** What a picture of a batch is: the skeleton a draft is built round, a draft, a final, or what a pixel tool made from one. */
 export type ImageKind =
   | "skeleton"
+  /** A cheap first picture of a concept, made before the owner picks concepts. */
+  | "rough"
   | "draft"
   | "final"
   | "reprint"
@@ -565,7 +567,7 @@ export interface BatchImage {
   createdAt: string;
 }
 
-export type RenderKind = "draft" | "final";
+export type RenderKind = "rough" | "draft" | "final";
 
 /** One request to the picture model, from the moment it is sent. */
 export interface Render {

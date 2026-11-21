@@ -10,6 +10,7 @@ export const FAL_MODEL = "openai/gpt-image-2.5/sunburst";
 
 /** 4:5 sizes. Both sides are multiples of 16, as the model needs. */
 export const SIZES = {
+  rough: { width: 1024, height: 1280, quality: "low" },
   draft: { width: 1024, height: 1280, quality: "low" },
   final: { width: 1536, height: 1920, quality: "high" },
 } as const satisfies Record<RenderKind, { width: number; height: number; quality: string }>;

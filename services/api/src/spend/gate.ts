@@ -6,7 +6,7 @@ import { showUsd, toMicro, toUsd } from "./money.js";
 /** The estimate at which a batch waits for the owner's yes. */
 export const ASK_FROM_USD = 1;
 
-export type GateStage = "research" | "drafts" | "finals";
+export type GateStage = "research" | "roughs" | "drafts" | "finals";
 
 /** The stage cannot continue yet. The message says what it waits for. */
 export class GateError extends Refusal {}

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DRAFTS_PER_IDEA, REFERENCES_MAX, type RenderService } from "../../render/service.js";
+import { DRAFTS_PER_IDEA, REFERENCES_MAX, type RenderService, ROUGHS_PER_BATCH, ROUGHS_PER_CONCEPT } from "../../render/service.js";
 import { defineTool, type ToolDefinition } from "../registry.js";
 
 const id = z.string().min(1).max(64);
@@ -8,11 +8,11 @@ export function renderTools({ render }: { render: RenderService }): ToolDefiniti
   return [
     defineTool({
       name: "render_submit",
-      description: `Sends one picture to the model: a draft (low quality, 1024 by 1280) or a final (high quality, 1536 by 1920). It costs money, so only the owner's session can call it. Describe the scene only: a prompt that asks for words in the picture is refused, and the studio adds the picture rules itself. A draft of a product with a pack photo is built round a skeleton (fromId, from skeleton_make); each of an idea's ${DRAFTS_PER_IDEA} drafts has its own skeleton, with another camera, crop or scale. A final is made from the draft the owner picked (fromId), and never from a draft with a D item. The first draft of a batch goes alone to read the price; the rest wait for it, and for the owner's yes when the estimate is US$1 or more. The same holds for finals. The reply is a job: read it with render_status.`,
+      description: `Sends one picture to the model: a rough or a draft (low quality, 1024 by 1280) or a final (high quality, 1536 by 1920). A rough is a first look at a concept of a v3 batch, made before the owner picks concepts and before any words are approved: at most ${ROUGHS_PER_CONCEPT} for one concept and ${ROUGHS_PER_BATCH} for a batch, drawn from the product's real photos in references, with no skeleton. It costs money, so only the owner's session can call it. Describe the scene only: a prompt that asks for words in the picture is refused, and the studio adds the picture rules itself. A draft of a product with a pack photo is built round a skeleton (fromId, from skeleton_make); each of an idea's ${DRAFTS_PER_IDEA} drafts has its own skeleton, with another camera, crop or scale. A final is made from the draft the owner picked (fromId), and never from a draft with a D item. The first draft of a batch goes alone to read the price; the rest wait for it, and for the owner's yes when the estimate is US$1 or more. The same holds for finals. The reply is a job: read it with render_status.`,
       input: {
         batchId: id,
         ideaId: id.describe('The idea the picture is for: "idea-1".'),
-        kind: z.enum(["draft", "final"]),
+        kind: z.enum(["rough", "draft", "final"]),
         prompt: z.string().min(20).max(4000).describe("The scene, in plain words: camera, light, surface, props. No words to paint."),
         fromId: id.optional().describe("The skeleton of a draft, or the picked draft of a final."),
         references: z

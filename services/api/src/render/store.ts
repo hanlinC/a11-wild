@@ -39,6 +39,23 @@ export class RenderStore {
     return render as StoredRender;
   }
 
+  /**
+   * Takes one of the roughs a concept and a batch may have, in one step each, so that two calls at
+   * the same moment cannot both take the last one. Returns what is used up, or nothing when it is taken.
+   */
+  async claimRough(batchId: string, ideaId: string, most: { concept: number; batch: number }): Promise<"concept" | "batch" | undefined> {
+    if (!(await this.table.add(pk(batchId), `ROUGHS#${ideaId}`, "count", 1, { ceiling: most.concept }))) return "concept";
+    if (await this.table.add(pk(batchId), "ROUGHS", "count", 1, { ceiling: most.batch })) return undefined;
+    await this.table.add(pk(batchId), `ROUGHS#${ideaId}`, "count", -1);
+    return "batch";
+  }
+
+  /** Gives back the place of a rough that was never made. */
+  async releaseRough(batchId: string, ideaId: string): Promise<void> {
+    await this.table.add(pk(batchId), `ROUGHS#${ideaId}`, "count", -1);
+    await this.table.add(pk(batchId), "ROUGHS", "count", -1);
+  }
+
   /** Oldest first: the order they were sent in. */
   async list(batchId: string): Promise<StoredRender[]> {
     const items = await this.table.query<Item & StoredRender>(pk(batchId));

@@ -16,6 +16,9 @@ export const DRAFTS_PER_IDEA = 3;
 /** A final that fails its checks may be made again, this many times for one idea. */
 export const FINALS_PER_IDEA = 3;
 export const REFERENCES_MAX = 4;
+/** A rough is a cheap look at a concept before the owner picks: few for each concept, few for a batch. */
+export const ROUGHS_PER_CONCEPT = 2;
+export const ROUGHS_PER_BATCH = 8;
 
 /** The state from which a batch's drafts can be made: its ideas are judged, and its words are approved when it has words. */
 const draftsFrom = (batch: Batch) => (hasWords(batch.kind) ? "worded" : "judged");
@@ -64,7 +67,7 @@ interface Deps {
   finals: FinalRule;
 }
 
-const STAGE: Record<RenderKind, GateStage> = { draft: "drafts", final: "finals" };
+const STAGE: Record<RenderKind, GateStage> = { rough: "roughs", draft: "drafts", final: "finals" };
 const live = (render: Render) => render.status !== "failed";
 
 /** Turns an idea and a skeleton into drafts and finals, each at a price the owner's gate has passed. */
@@ -119,9 +122,18 @@ export class RenderService {
     if (asked) {
       throw new Refusal(`R16: a picture carries the brand logo and no words. This prompt asks for words in the picture ("${asked}"). Describe the scene only. The studio adds the no-words rule itself, and the logo is the one mark.`);
     }
-    const idea: Idea | undefined = (await batches.ideas(batch.id)).find((saved) => saved.id === input.ideaId);
-    if (!idea) throw new Refusal(`This batch has no idea ${input.ideaId}. batch_get gives its ideas.`);
+    if (input.kind === "rough" && batch.kind !== "v3") throw new Refusal("Only a batch of concept ads (v3) has roughs. A v1 or v2 batch starts with its drafts.");
+    // A rough is made of any concept of the set. A draft or a final is made of an idea the batch chose.
+    const idea: Idea | undefined = (input.kind === "rough" ? await batches.burst(batch.id) : await batches.ideas(batch.id)).find((saved) => saved.id === input.ideaId);
+    if (!idea) throw new Refusal(`This batch has no ${input.kind === "rough" ? "concept" : "idea"} ${input.ideaId}. batch_get gives ${input.kind === "rough" ? "its concepts in burst" : "its ideas"}.`);
     await fal.ready();
+    const realPhotos = () => {
+      // Real photos first: the model builds from a real photo of each thing the picture shows, never from its own guess.
+      const missing = (idea.shows ?? []).filter((name) => !photoNamed(product, name));
+      if (missing.length > 0) {
+        throw new Refusal(`Real photos first: idea ${idea.id} shows ${missing.join(", ")}, and this product has no such photo. Find a real photo of each one (image_search or the brand's own pages) and save it with product_save. The model never invents a product, a food or a prop.`);
+      }
+    };
 
     const [product, brand, all] = await Promise.all([brands.product(batch.productId), brands.brand(batch.brandId), renders.list(batch.id)]);
     const sent = all.filter((render) => render.kind === input.kind && live(render));
@@ -131,17 +143,18 @@ export class RenderService {
     let source: BatchImage | undefined;
     let count: number;
 
-    if (input.kind === "draft") {
+    if (input.kind === "rough") {
+      if (!["ideas", "reviewed"].includes(batch.state)) requireMove(batch, "ideas", "render_submit");
+      if (input.fromId) throw new Refusal("A rough has no skeleton: the model draws it from the product's real photos. Give them in references.");
+      realPhotos();
+      count = ROUGHS_PER_BATCH;
+    } else if (input.kind === "draft") {
       if (![draftsFrom(batch), "priced", "waiting_spend", "drafting"].includes(batch.state)) {
         // An ad with words waits for the owner's yes to them: no draft is paid for before it.
         if (batch.state === "judged") throw new StateError(`render_submit cannot run yet: the batch is at "judged". The step that is missing: ${stepAfter(batch)}.`);
         requireMove(batch, "drafting", "render_submit");
       }
-      // Real photos first: the model builds from a real photo of each thing the picture shows, never from its own guess.
-      const missing = (idea.shows ?? []).filter((name) => !photoNamed(product, name));
-      if (missing.length > 0) {
-        throw new Refusal(`Real photos first: idea ${idea.id} shows ${missing.join(", ")}, and this product has no such photo. Find a real photo of each one (image_search or the brand's own pages) and save it with product_save. The model never invents a product, a food or a prop.`);
-      }
+      realPhotos();
       if (mine.length >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
       const hasPack = product.photos.some((photo) => photo.kind === "pack");
       if (input.fromId) {
@@ -174,17 +187,31 @@ export class RenderService {
     const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...named])];
     if (keys.length > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
 
-    batch = await this.passGate(batch, input.kind, sent);
-
-    const usd = estimateUsd(input.kind, keys.length);
-    const reservation = await ledger.reserve({ service: "fal", kind: input.kind, ref: `${idea.id}: ${idea.title}`, batchId: batch.id, usd });
+    if (input.kind === "rough") {
+      const full = await renders.claimRough(batch.id, idea.id, { concept: ROUGHS_PER_CONCEPT, batch: ROUGHS_PER_BATCH });
+      if (full === "concept") throw new Refusal(`Concept ${idea.id} has its ${ROUGHS_PER_CONCEPT} roughs. A rough is a first look, not a draft: show what there is.`);
+      if (full === "batch") throw new Refusal(`This batch has its ${ROUGHS_PER_BATCH} roughs. A rough is a first look: the critic and the owner judge the concepts from what there is.`);
+    }
+    let usd: number;
+    let reservation;
     let job;
+    try {
+      batch = await this.passGate(batch, input.kind, sent);
+      usd = estimateUsd(input.kind, keys.length);
+      reservation = await ledger.reserve({ service: "fal", kind: input.kind, ref: `${idea.id}: ${idea.title}`, batchId: batch.id, usd });
+    } catch (error) {
+      if (input.kind === "rough") await renders.releaseRough(batch.id, idea.id);
+      throw error;
+    }
     try {
       const referenceUrls = await Promise.all(keys.map((key) => pictures.viewUrl(key, REFERENCE_LINK_SECONDS)));
       job = await fal.submit({ kind: input.kind, prompt: `${input.prompt.trim()}\n\n${RENDER_RULES}`, referenceUrls });
     } catch (error) {
-      // Only a sure refusal gives the money back. Any other failure may still be billed.
-      if (error instanceof NotBilledError) await ledger.release(reservation);
+      // Only a sure refusal gives the money back. Any other failure may still be billed, and a rough that may be billed keeps its place.
+      if (error instanceof NotBilledError) {
+        await ledger.release(reservation);
+        if (input.kind === "rough") await renders.releaseRough(batch.id, idea.id);
+      }
       throw error;
     }
     const render = await renders.create({
@@ -200,6 +227,8 @@ export class RenderService {
     });
     if (input.kind === "draft" && (batch.state === "priced" || batch.state === "waiting_spend")) await batches.move(batch, "drafting", "render_submit");
     if (input.kind === "final" && batch.state === "waiting_pick") await batches.move(batch, "finals", "render_submit");
+    // The critic has not seen this rough: its review of the concepts is no longer the whole of them.
+    if (input.kind === "rough" && batch.state === "reviewed") await batches.move(batch, "ideas", "render_submit");
     const alone = sent.length === 0 ? `This is the first of the ${STAGE[input.kind]}: it goes alone to read the price. Read it with render_status until it is done, then send the rest.` : undefined;
     return this.view(render, alone);
   }
@@ -214,7 +243,11 @@ export class RenderService {
 
     if (result.state === "failed") {
       // Only a sure refusal gives the money back. A picture that fal made and the studio could not copy was still billed.
-      if (await renders.end(render, { status: "failed", error: result.error })) await (result.refund ? ledger.release(render.reservation) : ledger.settle(render.reservation));
+      if (await renders.end(render, { status: "failed", error: result.error })) {
+        await (result.refund ? ledger.release(render.reservation) : ledger.settle(render.reservation));
+        // A rough that was not billed gives its place back.
+        if (render.kind === "rough" && result.refund) await renders.releaseRough(batchId, render.ideaId);
+      }
       return this.view(await renders.get(batchId, renderId));
     }
 
