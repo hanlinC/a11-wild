@@ -43,6 +43,16 @@ describe("ideas", () => {
     expect(saved).toEqual(refused(/Idea 3 .* fails its kill test \(It says the crisps lower blood pressure\.\)/));
   });
 
+  it("keeps the real photos a v1 idea says it shows, and refuses a photo the product does not have", async () => {
+    // Real photos first holds for every kind of ad, v1 too.
+    const { batchId } = await batchAtTruth(studio);
+    const missing = await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1, { shows: ["food-1", "prop-1"] }), idea(2), idea(3)] });
+    expect(missing).toEqual(refused(/Idea 1 shows prop-1, and this product has no such photo\. Its photos: food-1\./));
+    const saved = await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1, { shows: ["food-1"] }), idea(2), idea(3)] });
+    expect(saved.ok ? "" : saved.error).toBe("");
+    expect((await callTool(studio, "batch_get", { batchId })).value.ideas[0].shows).toEqual(["food-1"]);
+  });
+
   it("refuses an idea with no outside-category reference", async () => {
     const { batchId } = await batchAtTruth(studio);
     const saved = await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1, { references: [] }), idea(2), idea(3)] });
