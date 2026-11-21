@@ -13,5 +13,6 @@ new StudioStack(app, "A11WildStudio", {
 
 new GithubDeployStack(app, "A11WildGithubDeploy", {
   description: "a11-wild: lets GitHub Actions on the main branch deploy, with no stored key.",
-  repository: "hanlinC/a11-wild",
+  // Public ids, from GitHub's API: `gh api repos/<owner>/<name> --jq '.owner.id, .id'`.
+  repository: { owner: "hanlinC", ownerId: 8711410, name: "a11-wild", id: 1466542466 },
 });

@@ -5,8 +5,18 @@ import type { Construct } from "constructs";
 const GITHUB_ISSUER = "token.actions.githubusercontent.com";
 
 export interface GithubDeployStackProps extends StackProps {
-  /** "owner/name" of the one repository that may deploy. */
-  repository: string;
+  /** The one repository that may deploy. GitHub's API gives the two public ids. */
+  repository: { owner: string; ownerId: number; name: string; id: number };
+}
+
+/**
+ * The subject GitHub puts in the token of a run on the main branch. Repositories
+ * made after 15 July 2026 get the immutable form, which carries the owner id and
+ * the repository id, so a new repository that takes over the name cannot deploy.
+ */
+export function mainBranchSubject(repository: GithubDeployStackProps["repository"]): string {
+  const { owner, ownerId, name, id } = repository;
+  return `repo:${owner}@${ownerId}/${name}@${id}:ref:refs/heads/main`;
 }
 
 /**
@@ -28,7 +38,7 @@ export class GithubDeployStack extends Stack {
       assumedBy: new iam.WebIdentityPrincipal(provider.oidcProviderArn, {
         StringEquals: {
           [`${GITHUB_ISSUER}:aud`]: "sts.amazonaws.com",
-          [`${GITHUB_ISSUER}:sub`]: `repo:${props.repository}:ref:refs/heads/main`,
+          [`${GITHUB_ISSUER}:sub`]: mainBranchSubject(props.repository),
         },
       }),
     });

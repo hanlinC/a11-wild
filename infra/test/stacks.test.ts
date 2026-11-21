@@ -160,7 +160,9 @@ describe("studio stack", () => {
 describe("GitHub deploy stack", () => {
   let template: Template;
   beforeAll(() => {
-    template = Template.fromStack(new GithubDeployStack(newApp(), "Deploy", { repository: "owner/repo" }));
+    template = Template.fromStack(
+      new GithubDeployStack(newApp(), "Deploy", { repository: { owner: "owner", ownerId: 11, name: "repo", id: 22 } }),
+    );
   });
 
   it("trusts only the main branch of the one repository", () => {
@@ -171,7 +173,8 @@ describe("GitHub deploy stack", () => {
     expect(statements[0].Condition).toEqual({
       StringEquals: {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:owner/repo:ref:refs/heads/main",
+        // The immutable form. GitHub no longer sends "repo:owner/repo:..." for a new repository.
+        "token.actions.githubusercontent.com:sub": "repo:owner@11/repo@22:ref:refs/heads/main",
       },
     });
   });
