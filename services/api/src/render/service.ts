@@ -112,7 +112,7 @@ export class RenderService {
     }
     if (kind === "draft" && batch.state === draftsFrom(batch)) batch = await batches.move(batch, "priced", "render_submit");
     try {
-      await gate.check(batch.id, stage);
+      await gate.check(batch.id, stage, sent.length);
     } catch (error) {
       if (error instanceof GateError && batch.state === "priced") await batches.move(batch, "waiting_spend", "render_submit");
       throw error;

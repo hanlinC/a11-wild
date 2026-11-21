@@ -48,6 +48,17 @@ describe("spend gate", () => {
     await expect(gate.check("batch-1", "drafts")).rejects.toThrow(/US\$3\.60/);
   });
 
+  it("counts a render past the estimate, and asks when that takes the stage to US$1", async () => {
+    await gate.price("batch-1", "drafts", { firstUsd: 0.1, count: 9 });
+    // The ninth is inside the estimate; a redo after nine is one more, and ten make US$1.
+    expect((await gate.check("batch-1", "drafts", 8)).count).toBe(9);
+    await expect(gate.check("batch-1", "drafts", 9)).rejects.toThrow(/10 drafts at about US\$1\.00/);
+    await gate.approve("batch-1", "drafts", owner);
+    expect((await gate.check("batch-1", "drafts", 9)).approvedBy).toBe("owner@example.com");
+    // The yes covers ten. The three drafts of a lowered direction are a new question.
+    await expect(gate.check("batch-1", "drafts", 10)).rejects.toThrow(/11 drafts/);
+  });
+
   it("holds the gate for finals apart from the gate for drafts", async () => {
     await gate.price("batch-1", "drafts", { firstUsd: 0.05, count: 9 });
     await expect(gate.check("batch-1", "finals")).rejects.toThrow(/first .* alone/);

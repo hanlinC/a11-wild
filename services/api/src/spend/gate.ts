@@ -106,11 +106,19 @@ export class SpendGate {
     return item ? this.view(item) : undefined;
   }
 
-  /** Passes when the rest of the stage may be sent. Throws a GateError that says what is missing. */
-  async check(batchId: string, stage: GateStage): Promise<GateState> {
-    const item = await this.table.get<GateItem>(...key(batchId, stage));
+  /**
+   * Passes when the next item of the stage may be sent. Throws a GateError that says what is missing.
+   * `sent` is how many the stage has sent: one more than the estimate counted (a redo, the drafts of a
+   * lowered direction) makes the estimate larger, and a larger estimate is a new question for the owner.
+   */
+  async check(batchId: string, stage: GateStage, sent = 0): Promise<GateState> {
+    let item = await this.table.get<GateItem>(...key(batchId, stage));
     if (!item) {
       throw new GateError(`Send the first of the ${stage} alone, to read the real price. The rest wait for that price.`);
+    }
+    if (item.count > 0 && sent >= item.count) {
+      item = { ...item, count: sent + 1, estimateMicro: Math.round((item.estimateMicro / item.count) * (sent + 1)) };
+      await this.table.put(item);
     }
     const state = this.view(item);
     if (state.needsYes && !state.approvedBy) {
