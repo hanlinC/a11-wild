@@ -311,6 +311,36 @@ class Repairs(unittest.TestCase):
         self.assertTrue(blue[:, :512].any() and not blue[:, 512:].any())
         self.assertTrue(yellow[:, 512:].any() and not yellow[:, :512].any())
 
+    def test_a_plan_of_real_photos_needs_no_pack_and_keeps_their_pixels(self):
+        slice_ = np.full((300, 300, 3), 255, np.uint8)
+        slice_[60:240, 100:200] = (200, 150, 40)
+        self.store.add("products/p/food.png", Image.fromarray(slice_))
+        tart = np.full((300, 300, 3), 255, np.uint8)
+        tart[60:240, 100:200] = (30, 140, 60)
+        self.store.add("products/p/tart.png", Image.fromarray(tart))
+        plan = {"size": [1024, 1280], "bg": "#E83C28", "products": [
+            {"cx": 0.3, "base": 0.8, "height": 0.3, "photoKey": "products/p/food.png"},
+            {"cx": 0.7, "base": 0.8, "height": 0.2, "photoKey": "products/p/tart.png"},
+        ]}
+        answer = self.job("skeleton", plan=plan)
+        self.assertTrue(answer["ok"], answer)
+        picture = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB")).astype(int)
+        yellow = (picture[..., 0] > 170) & (picture[..., 1] > 120) & (picture[..., 2] < 90)
+        green = (picture[..., 0] < 80) & (picture[..., 1] > 110) & (picture[..., 2] < 110)
+        self.assertTrue(yellow[:, :512].any() and not yellow[:, 512:].any())
+        self.assertTrue(green[:, 512:].any() and not green[:, :512].any())
+        # Each cut-out stands at the height and the base its plan gives.
+        rows = np.where(yellow.any(axis=1))[0]
+        self.assertAlmostEqual((rows.max() + 1 - rows.min()) / 1280, 0.3, delta=0.02)
+        self.assertAlmostEqual((rows.max() + 1) / 1280, 0.8, delta=0.02)
+
+    def test_a_plan_with_no_pack_names_a_real_photo_for_each_item(self):
+        plan = {"size": [1024, 1280], "bg": "#E83C28", "products": [{"cx": 0.3, "base": 0.8, "height": 0.3}]}
+        answer = self.job("skeleton", plan=plan)
+        self.assertFalse(answer["ok"])
+        self.assertIn("names a saved real photo", answer["error"])
+        self.assertFalse(self.job("skeleton", bg="E83C28")["ok"])
+
     def test_a_plan_photo_outside_the_picture_folders_is_not_read(self):
         self.store.files["jobs/b1/other.json"] = b"{}"
         plan = {"products": [{"cx": 0.5, "base": 0.8, "height": 0.3, "photoKey": "jobs/b1/other.json"}]}

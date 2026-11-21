@@ -71,7 +71,7 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
         plan: plan
           .optional()
           .describe(
-            'Each pack at its own place. cx, base and height are shares of the canvas; side is up, L or R (lying); rot is a small turn in degrees. A product may be another real photo of this product in place of the pack: photo "food-2" or "prop-1" (a real slice of each flavour, a real prop), cut from its plain backdrop.',
+            'Each pack at its own place. cx, base and height are shares of the canvas; side is up, L or R (lying); rot is a small turn in degrees. A product may be another real photo of this product in place of the pack: photo "food-2" or "prop-1" (a real slice of each flavour, a real prop), cut from its plain backdrop. A product with no pack photo (a cake, a dish) is built from such photos alone: every item names one.',
           ),
         vary: z
           .object({ regions: z.array(box).min(1).max(6), seed: z.number().int().min(0).max(100000).default(7) })

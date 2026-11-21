@@ -68,3 +68,37 @@ describe("a draft of a concept ad", () => {
     expect(refused).toMatchObject({ ok: false, error: expect.stringMatching(/Only a draft of a concept ad/) });
   });
 });
+
+describe("a real-photo plan", () => {
+  const plan = (products: object[]) => ({ bg: "FFD21E", products });
+
+  it("is made after the direction, from the product's saved real photos by name", async () => {
+    const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.3, base: 0.8, height: 0.3 }, { cx: 0.7, base: 0.8, height: 0.2, photo: "food-1" }]) });
+    expect(made.ok ? "" : made.error).toBe("");
+    const { input } = studio.pixels.events.at(-1)!;
+    expect(input).toMatchObject({ packKey: "products/p/pack.jpg", plan: { products: [{ cx: 0.3 }, { cx: 0.7, photoKey: "products/p/food.jpg" }] } });
+    // A photo the product does not have is refused, and no file name an agent types is read.
+    expect(await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.5, base: 0.8, height: 0.3, photo: "prop-1" }]) })).toMatchObject({ ok: false, error: expect.stringMatching(/Real photos first: this product has no photo prop-1/) });
+    expect((await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.5, base: 0.8, height: 0.3, photoKey: "products/other/x.jpg" }]) })).ok).toBe(false);
+  });
+
+  it("is saved beside its picture, and the draft built round it keeps it", async () => {
+    const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.5, base: 0.8, height: 0.4, photo: "food-1" }]) });
+    const skeleton = (await callTool(studio, "pixel_status", { batchId, jobId: made.value.id })).value.image.id as string;
+    expect((await studio.services.jobs.get(batchId, skeleton)).input).toMatchObject({ plan: { bg: "#FFD21E", products: [{ photoKey: "products/p/food.jpg", height: 0.4 }] } });
+    const sent = await send("idea-2", 1, { fromId: skeleton, references: [] });
+    expect(sent).toMatchObject({ ok: true, value: { fromId: skeleton } });
+  });
+
+  it("needs no pack photo when each item names a real photo", async () => {
+    const got = (await callTool(studio, "batch_get", { batchId })).value;
+    await studio.services.brands.saveProduct({ ...got.product, photos: got.product.photos.filter((photo: { kind: string }) => photo.kind !== "pack"), savedBy: "owner@example.com" });
+    const bare = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", bg: "FFD21E" });
+    expect(bare).toMatchObject({ ok: false, error: expect.stringMatching(/this product has no pack photo, so the skeleton is a plan in which each item names a saved real photo/) });
+    const mixed = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.3, base: 0.8, height: 0.3 }, { cx: 0.7, base: 0.8, height: 0.2, photo: "food-1" }]) });
+    expect(mixed.ok).toBe(false);
+    const made = await callTool(studio, "skeleton_make", { ...rules, batchId, ideaId: "idea-2", plan: plan([{ cx: 0.5, base: 0.8, height: 0.4, photo: "food-1" }]) });
+    expect(made.ok ? "" : made.error).toBe("");
+    expect(studio.pixels.events.at(-1)!.input).not.toHaveProperty("packKey");
+  });
+});

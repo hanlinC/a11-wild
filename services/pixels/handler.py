@@ -222,8 +222,17 @@ class Job:
 
 
 def skeleton(job):
-    pack, mask, box = job.pack()
     out = job.out()
+    if job.input.get("packKey") is None:
+        # A product with no pack (a cake, a dish): every item of the plan is a saved real photo of the product.
+        plan = job.input.get("plan")
+        products = plan.get("products") if isinstance(plan, dict) else None
+        if not products or any(not isinstance(product, dict) or "photoKey" not in product for product in products):
+            raise Refused("With no pack photo, each item of the plan names a saved real photo of the product.")
+        _, line = run(product_lock.layout, types.SimpleNamespace(packshot=None, box=None, alpha=None, plan=job.plan(), out=out))
+        four_by_five(out, "The skeleton")
+        return {"line": line}, out
+    pack, mask, box = job.pack()
     if job.input.get("plan") is not None:
         _, line = run(product_lock.layout, types.SimpleNamespace(packshot=pack, box=box, alpha=mask, plan=job.plan(pack, mask), out=out))
     else:

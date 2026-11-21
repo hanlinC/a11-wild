@@ -20,7 +20,7 @@ import { type JobStore, jobView, type StoredJob } from "./store.js";
 const JOB_MINUTES = 10;
 const RESULT_BYTES = 20_000;
 const RENDERED: ImageKind[] = ["draft", "final", ...REPAIR_KINDS];
-const SKELETON_STATES = ["ideas", "judged", "worded", "priced", "waiting_spend", "drafting"];
+const SKELETON_STATES = ["ideas", "judged", "worded", "directed", "priced", "waiting_spend", "drafting"];
 
 interface Deps {
   batches: BatchStore;
@@ -113,7 +113,13 @@ export class PixelService {
     if (!(await batches.ideas(batch.id)).some((idea) => idea.id === input.ideaId)) throw new Refusal(`This batch has no idea ${input.ideaId}.`);
     if (!input.placement.plan && !input.placement.bg) throw new Refusal("A skeleton needs the canvas colour (bg), or a plan that has one.");
     const placement = input.placement.plan ? { ...input.placement, plan: await this.planPhotos(batch.productId, planColours(input.placement.plan)) } : input.placement;
-    return this.start("skeleton", batch.id, { ...placement, packKey: await this.packKey(batch.id) }, { out: { kind: "skeleton", ideaId: input.ideaId } });
+    const pack = (await this.deps.brands.product(batch.productId)).photos.find((photo) => photo.kind === "pack");
+    // A product with no pack (a cake, a dish) is still built from real photos: each item of the plan names one.
+    const named = (input.placement.plan as { products?: { photo?: string }[] } | undefined)?.products?.every((entry) => entry.photo);
+    if (!pack && !named) {
+      throw new Refusal('Real photos first: this product has no pack photo, so the skeleton is a plan in which each item names a saved real photo of the product ("food-1", "prop-1"). Save the photos with product_save.');
+    }
+    return this.start("skeleton", batch.id, { ...placement, ...(pack ? { packKey: pack.key } : {}) }, { out: { kind: "skeleton", ideaId: input.ideaId } });
   }
 
   /** A plan product that names another real photo of the product ("food-2", "prop-1") gets that photo's key. An agent never types a key. */
