@@ -11,6 +11,9 @@ import { PROMPTS } from "./mcp/prompts.js";
 import { ToolRegistry } from "./mcp/registry.js";
 import { McpServer } from "./mcp/server.js";
 import { coreTools } from "./mcp/tools/core.js";
+import { spendTools } from "./mcp/tools/spend.js";
+import { SpendGate } from "./spend/gate.js";
+import { SpendLedger } from "./spend/ledger.js";
 import { DynamoTable } from "./store/table.js";
 
 function env(name: string): string {
@@ -41,6 +44,8 @@ export async function wire(): Promise<Wired> {
 }
 
 export function appDeps({ config, table, approvals }: Wired): Deps {
+  const now = () => new Date();
+  const spend = { ledger: new SpendLedger(table, now), gate: new SpendGate(table, now) };
   return {
     config,
     table,
@@ -50,9 +55,9 @@ export function appDeps({ config, table, approvals }: Wired): Deps {
     mcp: new McpServer({
       name: "a11-wild",
       version: config.buildId,
-      registry: new ToolRegistry(coreTools(config)),
+      registry: new ToolRegistry([...coreTools(config), ...spendTools(spend)]),
       prompts: PROMPTS,
     }),
-    now: () => new Date(),
+    now,
   };
 }

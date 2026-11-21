@@ -10,6 +10,9 @@ import { PROMPTS } from "../../src/mcp/prompts.js";
 import { defineTool, ToolRegistry } from "../../src/mcp/registry.js";
 import { McpServer } from "../../src/mcp/server.js";
 import { coreTools } from "../../src/mcp/tools/core.js";
+import { spendTools } from "../../src/mcp/tools/spend.js";
+import { SpendGate } from "../../src/spend/gate.js";
+import { SpendLedger } from "../../src/spend/ledger.js";
 import { FakeCognito } from "./fake-cognito.js";
 import { MemoryTable } from "./memory-table.js";
 import { createSigner } from "./tokens.js";
@@ -66,6 +69,7 @@ export async function createStudio() {
   await table.put(userItem({ sub: "sub-member", email: "member@example.com", role: "member" }));
 
   const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, now);
+  const spend = { ledger: new SpendLedger(table, now), gate: new SpendGate(table, now) };
   const deps: Deps = {
     config,
     table,
@@ -75,13 +79,13 @@ export async function createStudio() {
     mcp: new McpServer({
       name: "a11-wild",
       version: config.buildId,
-      registry: new ToolRegistry([...coreTools(config), ...sampleTools]),
+      registry: new ToolRegistry([...coreTools(config), ...spendTools(spend), ...sampleTools]),
       prompts: PROMPTS,
     }),
     now,
   };
 
-  return { app: createApp(deps), deps, table, cognito, signer, clock, approvals, tokenRequests, tokenEndpoint };
+  return { app: createApp(deps), deps, table, cognito, signer, clock, approvals, spend, tokenRequests, tokenEndpoint };
 }
 
 export type Studio = Awaited<ReturnType<typeof createStudio>>;

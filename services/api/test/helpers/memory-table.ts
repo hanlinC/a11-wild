@@ -30,4 +30,13 @@ export class MemoryTable implements Table {
   async query<T extends Item>(pk: string): Promise<T[]> {
     return [...this.items.values()].filter((item) => item.pk === pk).map((item) => structuredClone(item) as T);
   }
+
+  async add(pk: string, sk: string, attribute: string, amount: number, options: { ceiling?: number } = {}): Promise<boolean> {
+    const key = this.key(pk, sk);
+    const item = this.items.get(key) ?? { pk, sk };
+    const next = (typeof item[attribute] === "number" ? item[attribute] : 0) + amount;
+    if (options.ceiling !== undefined && next > options.ceiling) return false;
+    this.items.set(key, { ...item, [attribute]: next });
+    return true;
+  }
 }

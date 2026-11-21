@@ -24,3 +24,27 @@ export interface StudioStatus {
   buildId: string;
   rulesVersion: string;
 }
+
+export type SpendService = "parallel" | "fal";
+
+/** One paid call in the ledger. `reserved` means the outcome is not known, so it still counts. */
+export interface SpendLine {
+  at: string;
+  service: SpendService;
+  kind: string;
+  ref: string;
+  batchId?: string;
+  usd: number;
+  status: "reserved" | "spent" | "released";
+}
+
+export interface SpendSummary {
+  /** The calendar month, in UTC, as YYYY-MM. */
+  month: string;
+  monthUsd: number;
+  monthCapUsd: number;
+  batchCapUsd: number;
+  batchId?: string;
+  batchUsd?: number;
+  lines: SpendLine[];
+}

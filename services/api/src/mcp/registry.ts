@@ -24,6 +24,9 @@ export function defineTool<Shape extends z.ZodRawShape>(tool: ToolDefinition<Sha
   return tool as unknown as ToolDefinition;
 }
 
+/** A step the studio refuses on purpose. Its message goes to the agent as the tool's error. */
+export class Refusal extends Error {}
+
 export interface ToolResult {
   content: { type: "text"; text: string }[];
   isError?: true;
@@ -85,7 +88,14 @@ export class ToolRegistry {
     }
     const { rulesVersion: _rulesVersion, ...args } = parsed.data as Record<string, unknown>;
 
-    const result = await tool.handler(args, context);
+    let result: unknown;
+    try {
+      result = await tool.handler(args, context);
+    } catch (error) {
+      // A refusal the studio made on purpose carries a message written for the agent.
+      if (error instanceof Refusal) return failure(error.message);
+      throw error;
+    }
     return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result) }] };
   }
 }
