@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { CriticRank, IdeaVerdict } from "@a11-wild/shared";
+import type { CriticRank, IdeaVerdict, StagePick } from "@a11-wild/shared";
 import { type Item, record, type Table } from "../store/table.js";
 
 const pk = (batchId: string) => `BATCH#${batchId}`;
 const ticketSk = (ticket: string) => `TICKET#${createHash("sha256").update(ticket).digest("hex")}`;
 const VERDICTS_SK = "CRITIC#IDEAS";
+const STAGES_SK = "CRITIC#STAGES";
 const OPEN = "open";
 
 /** A critic has this long to judge after it opens a packet. */
@@ -21,6 +22,11 @@ export interface Ticket {
   /** The pictures a drafts packet showed, by draft. A repair made later shows another picture. */
   shown?: Record<string, string>;
   until: string;
+}
+
+export interface SavedStages {
+  picks: StagePick[];
+  at: string;
 }
 
 export interface SavedVerdicts {
@@ -66,6 +72,18 @@ export class CriticStore {
   async verdicts(batchId: string): Promise<SavedVerdicts | undefined> {
     const item = await this.table.get<Item & SavedVerdicts>(pk(batchId), VERDICTS_SK);
     return item && record<SavedVerdicts>(item);
+  }
+
+  async saveStages(batchId: string, picks: StagePick[]): Promise<SavedStages> {
+    const saved: SavedStages = { picks, at: this.now().toISOString() };
+    await this.table.put({ pk: pk(batchId), sk: STAGES_SK, ...saved });
+    return saved;
+  }
+
+  /** The newest choice of one idea for each funnel stage. */
+  async stages(batchId: string): Promise<SavedStages | undefined> {
+    const item = await this.table.get<Item & SavedStages>(pk(batchId), STAGES_SK);
+    return item && record<SavedStages>(item);
   }
 
   async saveRank(batchId: string, rank: Omit<CriticRank, "at">): Promise<CriticRank> {

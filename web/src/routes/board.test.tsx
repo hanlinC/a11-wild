@@ -23,7 +23,7 @@ const idea = (n: number) => ({
   killTest: { passed: true, note: "Real pack." },
 });
 const board = (overrides: Partial<BoardData> = {}): BoardData => ({
-  batch: { id: "b1", brandId: "br1", productId: "p1", format: "static_4x5", state: "waiting_pick", truthVersion: 2, createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
+  batch: { id: "b1", kind: "v1", brandId: "br1", productId: "p1", format: "static_4x5", state: "waiting_pick", truthVersion: 2, createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
   picking: "open",
   brand: { id: "br1", name: "WonGi" },
   product: { id: "p1", name: "Seaweed crisps" },

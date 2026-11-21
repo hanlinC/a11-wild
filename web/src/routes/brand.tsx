@@ -125,7 +125,7 @@ function ProductSection({ entry }: { entry: BrandPage["products"][number] }) {
               {product.photos.map((photo) => (
                 <li key={photo.key} className="w-28">
                   <img src={photo.viewUrl} alt={`${product.name}, ${photo.kind} photo`} className="aspect-square w-full rounded-lg bg-(--tint) object-contain" />
-                  <span className="mt-1 block text-caption text-muted-foreground">{photo.kind === "pack" ? "As sold" : "The food"}</span>
+                  <span className="mt-1 block text-caption text-muted-foreground">{photo.what ?? (photo.kind === "pack" ? "As sold" : photo.kind === "food" ? "The food" : "A prop")}</span>
                 </li>
               ))}
             </ul>

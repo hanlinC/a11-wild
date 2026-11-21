@@ -1,5 +1,5 @@
 import type { Batch, BatchImage, Idea, Render, RenderKind } from "@a11-wild/shared";
-import { requireMove } from "../batch/state.js";
+import { hasWords, requireMove } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { estimateUsd, type FalClient } from "../fal/client.js";
@@ -16,6 +16,16 @@ export const DRAFTS_PER_IDEA = 3;
 /** A final that fails its checks may be made again, this many times for one idea. */
 export const FINALS_PER_IDEA = 3;
 export const REFERENCES_MAX = 4;
+
+/** The state from which a batch's drafts can be made: its ideas are judged, and its words are approved when it has words. */
+const draftsFrom = (batch: Batch) => (hasWords(batch.kind) ? "worded" : "judged");
+
+/** The real photo that a name stands for: "pack-1" is the product's first pack photo. */
+export function photoNamed(product: { photos: { kind: string; key: string }[] }, name: string) {
+  const [kind, number] = name.split("-");
+  return product.photos.filter((photo) => photo.kind === kind)[Number(number) - 1];
+}
+
 /** fal reads a reference picture when the job starts, which can be some minutes after it is sent. */
 const REFERENCE_LINK_SECONDS = 3600;
 
@@ -91,7 +101,7 @@ export class RenderService {
       // The price was not saved when the first render ended. Save it now from that render.
       await gate.price(batch.id, stage, { firstUsd: first.usd, count: first.stageCount });
     }
-    if (kind === "draft" && batch.state === "judged") batch = await batches.move(batch, "priced", "render_submit");
+    if (kind === "draft" && batch.state === draftsFrom(batch)) batch = await batches.move(batch, "priced", "render_submit");
     try {
       await gate.check(batch.id, stage);
     } catch (error) {
@@ -122,7 +132,12 @@ export class RenderService {
     let count: number;
 
     if (input.kind === "draft") {
-      if (!["judged", "priced", "waiting_spend", "drafting"].includes(batch.state)) requireMove(batch.state, "drafting", "render_submit");
+      if (![draftsFrom(batch), "priced", "waiting_spend", "drafting"].includes(batch.state)) requireMove(batch, batch.state === "judged" ? "worded" : "drafting", "render_submit");
+      // Real photos first: the model builds from a real photo of each thing the picture shows, never from its own guess.
+      const missing = (idea.shows ?? []).filter((name) => !photoNamed(product, name));
+      if (missing.length > 0) {
+        throw new Refusal(`Real photos first: idea ${idea.id} shows ${missing.join(", ")}, and this product has no such photo. Find a real photo of each one (image_search or the brand's own pages) and save it with product_save. The model never invents a product, a food or a prop.`);
+      }
       if (mine.length >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
       const hasPack = product.photos.some((photo) => photo.kind === "pack");
       if (input.fromId) {
@@ -136,7 +151,7 @@ export class RenderService {
       }
       count = (await batches.ideas(batch.id)).length * DRAFTS_PER_IDEA;
     } else {
-      if (!["waiting_pick", "finals"].includes(batch.state)) requireMove(batch.state, "finals", "render_submit");
+      if (!["waiting_pick", "finals"].includes(batch.state)) requireMove(batch, "finals", "render_submit");
       if (!input.fromId) throw new Refusal("A final is made from the draft the owner picked. Give that draft's picture id as fromId.");
       from = await images.get(batch.id, input.fromId);
       if (from.kind !== "draft" || from.ideaId !== idea.id) throw new Refusal(`Picture ${from.id} is not a draft of idea ${idea.id}.`);
@@ -148,8 +163,8 @@ export class RenderService {
 
     const named = input.references.map((name) => {
       const [kind, number] = name.split("-");
-      const picture = kind === "logo" ? brand.logo : product.photos.filter((photo) => photo.kind === kind)[Number(number) - 1];
-      if (!picture) throw new Refusal(`This ${kind === "logo" ? "brand has no logo" : `product has no ${kind} photo ${number}`}. A reference picture is the brand's logo ("logo") or one of this product's photos ("pack-1", "food-1").`);
+      const picture = kind === "logo" ? brand.logo : photoNamed(product, name);
+      if (!picture) throw new Refusal(`This ${kind === "logo" ? "brand has no logo" : `product has no ${kind} photo ${number}`}. A reference picture is the brand's logo ("logo") or one of this product's photos ("pack-1", "food-1", "prop-1").`);
       return picture.key;
     });
     const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...named])];
@@ -209,7 +224,7 @@ export class RenderService {
       if (!(await gate.peek(batchId, stage))) {
         const batch = await batches.get(batchId);
         const state = await gate.price(batchId, stage, { firstUsd: toUsd(render.reservation.micro), count: render.stageCount });
-        if (render.kind === "draft" && batch.state === "judged") await batches.move(batch, "priced", "render_status");
+        if (render.kind === "draft" && batch.state === draftsFrom(batch)) await batches.move(batch, "priced", "render_status");
         const done = await renders.get(batchId, renderId);
         return this.view(
           done,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FUNNEL_STAGES } from "@a11-wild/shared";
 import type { Calibration } from "../../critic/calibration.js";
 import type { CriticService } from "../../critic/service.js";
 import { TICKET_MINUTES } from "../../critic/store.js";
@@ -34,6 +35,19 @@ export function criticTools({ critic, calibration }: { critic: CriticService; ca
       writes: true,
       needsRules: true,
       handler: ({ batchId, ticket, ideas }) => critic.pick(batchId, ticket, ideas),
+    }),
+    defineTool({
+      name: "critic_select",
+      description:
+        "The blind critic's choice from a burst of ideas with words (a v2 batch): one idea for each of tof, mof and bof, with a reason. It needs the ticket of critic_open with step \"ideas\". Give ideaId null to refuse a stage when none of its ideas reaches the owner's bar: the main agent then writes more, and the bar is not lowered. All three chosen: the batch is judged, and the owner approves the words next.",
+      input: {
+        batchId: id,
+        ticket,
+        picks: z.array(z.strictObject({ stage: z.enum(FUNNEL_STAGES), ideaId: id.nullable(), reason: reason.describe("Why this idea, or what the stage is missing.") })).length(3),
+      },
+      writes: true,
+      needsRules: true,
+      handler: ({ batchId, ticket, picks }) => critic.select(batchId, ticket, picks),
     }),
     defineTool({
       name: "critic_rank",

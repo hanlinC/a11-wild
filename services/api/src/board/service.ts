@@ -193,7 +193,7 @@ export class BoardService implements FinalRule {
   async show(batchId: string): Promise<Board> {
     const { batches } = this.deps;
     const batch = await batches.get(batchId);
-    if (["intake", "truth", "ideas", "judged", "priced", "waiting_spend", "spec_only"].includes(batch.state)) {
+    if (["intake", "truth", "ideas", "judged", "worded", "priced", "waiting_spend", "spec_only"].includes(batch.state)) {
       throw new Refusal(`The board is not ready: the batch is at "${batch.state}", and its drafts are not all made.`);
     }
     if (batch.state === "drafting") {

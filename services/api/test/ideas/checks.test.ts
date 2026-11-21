@@ -57,7 +57,7 @@ describe("ideas", () => {
 
   it("refuses ideas on a batch with no read of the canon, and names canon_get", async () => {
     const { brand, product } = await savedProduct(studio);
-    const batchId = (await callTool(studio, "batch_create", { brandId: brand.id, productId: product.id })).value.batch.id;
+    const batchId = (await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id })).value.batch.id;
     await callTool(studio, "truth_save", { batchId, ...sheet });
     await callTool(studio, "taste_log", { batchId });
     await callTool(studio, "swipe_search", { batchId });

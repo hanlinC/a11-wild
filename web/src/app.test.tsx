@@ -73,7 +73,7 @@ describe("dashboard", () => {
         body: {
           batches: [
             {
-              batch: { id: "b1", brandId: "br1", productId: "p1", format: "static_4x5", label: "First run", state: "waiting_pick", createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
+              batch: { id: "b1", kind: "v1", brandId: "br1", productId: "p1", format: "static_4x5", label: "First run", state: "waiting_pick", createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
               brand: { id: "br1", name: "WonGi" },
               product: { id: "p1", name: "Seaweed crisps" },
             },

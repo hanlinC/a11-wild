@@ -38,7 +38,7 @@ export async function readTaste(studio: Studio, batchId: string) {
 /** A batch at the `truth` state with the taste read. */
 export async function batchAtTruth(studio: Studio, create: object = {}) {
   const { brand, product } = await savedProduct(studio);
-  const made = await callTool(studio, "batch_create", { brandId: brand.id, productId: product.id, ...create });
+  const made = await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id, ...create });
   const batchId = made.value.batch.id as string;
   await callTool(studio, "truth_save", { batchId, ...sheet });
   await readTaste(studio, batchId);

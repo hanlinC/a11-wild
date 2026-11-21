@@ -80,8 +80,10 @@ export interface BrandKit {
 }
 
 export interface ProductPhoto extends PictureRef {
-  /** `pack` shows the product as sold. `food` shows the brand's own photo of the food itself. */
-  kind: "pack" | "food";
+  /** `pack` shows the product as sold. `food` shows the brand's own photo of the food itself. `prop` is a real photo of another thing a picture shows. */
+  kind: "pack" | "food" | "prop";
+  /** What the photo shows, when the product has more than one of its kind: "mango slice", "a real chilli padi". */
+  what?: string;
 }
 
 export interface Product {
@@ -155,6 +157,8 @@ export const BATCH_STATES = [
   "truth",
   "ideas",
   "judged",
+  /** The owner approved the words. Only a batch whose kind has words passes through it. */
+  "worded",
   "priced",
   "waiting_spend",
   "drafting",
@@ -167,8 +171,18 @@ export const BATCH_STATES = [
 ] as const;
 export type BatchState = (typeof BATCH_STATES)[number];
 
+/** `v1`: the picture carries the logo and no words. `v2` and `v3`: a headline and a subline are set on it. */
+export const BATCH_KINDS = ["v1", "v2", "v3"] as const;
+export type BatchKind = (typeof BATCH_KINDS)[number];
+
+export const FUNNEL_STAGES = ["tof", "mof", "bof"] as const;
+/** Top, middle and bottom of the funnel. */
+export type FunnelStage = (typeof FUNNEL_STAGES)[number];
+
 export interface Batch {
   id: string;
+  /** The kind of ad the batch makes. The owner names it at the start. */
+  kind: BatchKind;
   brandId: string;
   productId: string;
   /** `static_4x5` is the one picture the studio makes. Any other format gets a text spec. */
@@ -236,6 +250,40 @@ export interface Idea {
   coverTest: IdeaTest;
   /** Does it stay clear of every kill reason? */
   killTest: IdeaTest;
+  /** The funnel stage the ad is for. An idea of a kind with words has one. */
+  stage?: FunnelStage;
+  /** The words set on the picture. An idea of a kind with words has both. */
+  headline?: string;
+  subline?: string;
+  /** One other headline, as an option for the owner. */
+  altHeadline?: string;
+  /** Each claim the words make, with the saved fact that proves it. */
+  claims?: { text: string; factId: string }[];
+  /** A claim's source line, set small at the bottom of the picture. */
+  footnote?: string;
+  /** The product's real photos of each brand item the picture shows: "pack-1", "food-2". */
+  shows?: string[];
+}
+
+/** The words the owner approved for one idea. They are set on its pictures and reused word for word. */
+export interface ApprovedCopy {
+  ideaId: string;
+  headline: string;
+  subline: string;
+  footnote?: string;
+  /** What the owner said when he approved, in his own words. */
+  ownerSaid: string;
+  /** 1 for the first approval. Each change he approves adds one. */
+  version: number;
+  at: string;
+  by: string;
+}
+
+/** The blind critic's choice of the idea for one funnel stage, or its refusal of every idea of that stage. */
+export interface StagePick {
+  stage: FunnelStage;
+  ideaId: string | null;
+  reason: string;
 }
 
 /** A picture with a link that opens it for a few minutes. */

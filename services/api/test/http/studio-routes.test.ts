@@ -31,7 +31,7 @@ describe("studio routes", () => {
   it("gives a brand with its products, facts, truth sheet and batches", async () => {
     const { brand, product } = await savedProduct(studio);
     await callTool(studio, "facts_save", { productId: product.id, facts: [{ claim: "A pack holds 40 g", quote: "Net weight: 40 g.", url: PAGE }] });
-    const batchId = (await callTool(studio, "batch_create", { brandId: brand.id, productId: product.id })).value.batch.id;
+    const batchId = (await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id })).value.batch.id;
     await callTool(studio, "truth_save", { batchId, ...sheet, measures: [{ name: "pack height", value: 180, unit: "mm" }] });
 
     const list = await json(await get("/api/brands"));

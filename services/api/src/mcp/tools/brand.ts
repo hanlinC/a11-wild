@@ -123,7 +123,7 @@ export function brandTools({ brands, parallel, pictures, net }: BrandToolDeps): 
     defineTool({
       name: "product_save",
       description:
-        "Saves a product of a saved brand with the pictures the owner chose. Each picture must be a candidate of the product_extract or image_search named in fromId. kind is pack for the product as sold, food for the brand's own photo of the food itself. The studio copies each picture into its private store.",
+        "Saves a product of a saved brand with the pictures the owner chose. Each picture must be a candidate of the product_extract or image_search named in fromId. kind is pack for the product as sold, food for the brand's own photo of the food itself, prop for a real photo of another thing an ad will show (a real lemon, a real cake server). Save a real photo of every variant and every thing a picture will show: a draft is refused when one is missing. The studio copies each picture into its private store.",
       input: {
         brandId: id,
         extractId: id.describe("The extractId that product_extract returned for the product's page."),
@@ -132,7 +132,8 @@ export function brandTools({ brands, parallel, pictures, net }: BrandToolDeps): 
           .array(
             z.strictObject({
               url: httpsUrl,
-              kind: z.enum(["pack", "food"]),
+              kind: z.enum(["pack", "food", "prop"]),
+              what: z.string().min(1).max(120).optional().describe('What the photo shows, when the product has several of its kind: "mango slice". Give it for each variant and each prop.'),
               fromId: id.optional().describe("The extractId or searchId that offered this picture. Leave it out for the product's own extract."),
             }),
           )
@@ -154,7 +155,7 @@ export function brandTools({ brands, parallel, pictures, net }: BrandToolDeps): 
         const stored: ProductPhoto[] = [];
         for (const photo of photos) {
           const copy = await copyPicture({ url: photo.url, folder: `products/${productId}`, what: "The picture" }, net, pictures);
-          stored.push({ key: copy.key, sourceUrl: copy.sourceUrl, kind: photo.kind });
+          stored.push({ key: copy.key, sourceUrl: copy.sourceUrl, kind: photo.kind, ...(photo.what ? { what: photo.what } : {}) });
         }
         return {
           product: await brands.saveProduct({ id: productId, brandId, name, url: offer.url, photos: stored, savedBy: context.user.email }),

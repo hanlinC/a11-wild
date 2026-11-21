@@ -14,7 +14,7 @@ import { type JobStore, jobView, type StoredJob } from "./store.js";
 const JOB_MINUTES = 10;
 const RESULT_BYTES = 20_000;
 const RENDERED: ImageKind[] = ["draft", "final", "reprint", "swap"];
-const SKELETON_STATES = ["ideas", "judged", "priced", "waiting_spend", "drafting"];
+const SKELETON_STATES = ["ideas", "judged", "worded", "priced", "waiting_spend", "drafting"];
 
 interface Deps {
   batches: BatchStore;

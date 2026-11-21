@@ -15,7 +15,7 @@ beforeEach(async () => {
   const { brand, product } = await savedProduct(studio);
   productId = product.id;
   brandId = brand.id;
-  batchId = (await callTool(studio, "batch_create", { brandId: brand.id, productId })).value.batch.id;
+  batchId = (await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId })).value.batch.id;
 });
 
 describe("truth sheet", () => {
@@ -60,7 +60,7 @@ describe("truth sheet", () => {
     await readTaste(studio, batchId);
     await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1), idea(2), idea(3)] });
 
-    const later = (await callTool(studio, "batch_create", { brandId, productId })).value.batch.id;
+    const later = (await callTool(studio, "batch_create", { kind: "v1", brandId, productId })).value.batch.id;
     // A new batch sees the product's sheet before it saves one, and a save that changes nothing keeps the version.
     expect((await callTool(studio, "batch_get", { batchId: later })).value.truthSheet.version).toBe(1);
     const same = await callTool(studio, "truth_save", { batchId: later, ...sheet, measures: [{ name: "pack height", value: 180, unit: "mm" }] });

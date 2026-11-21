@@ -2,8 +2,15 @@ import type { Board, BrandKit, CheckItem, Fact, Idea, Product, TruthSheet } from
 import type { CriticStep } from "./store.js";
 
 /** An idea as a blind critic reads it: what the picture is, without its author's own verdict on it. */
-export function blindIdea({ id, title, visual, device, focalPoint, elements, references }: Idea) {
-  return { id, title, visual, device, focalPoint, elements, references };
+export function blindIdea({ id, title, visual, device, focalPoint, elements, references, stage, headline, subline, claims, footnote }: Idea) {
+  return {
+    id, title, visual, device, focalPoint, elements, references,
+    ...(stage ? { stage } : {}),
+    ...(headline ? { headline } : {}),
+    ...(subline ? { subline } : {}),
+    ...(claims ? { claims } : {}),
+    ...(footnote ? { footnote } : {}),
+  };
 }
 
 const READ_FIRST =
@@ -33,6 +40,17 @@ export function ideasPacket(common: Common, ideas: Idea[]) {
     ...about(common),
     ideas: ideas.map(blindIdea),
     task: "For each idea say keep or cut, with a reason. Cut an idea that fails the cover test or the kill test of the house rules, or that the owner's taste would pass on. Send all of them in one critic_pick call with the ticket. The ticket works once.",
+  };
+}
+
+/** What a critic gets to choose one idea for each funnel stage from a burst. The order is not the author's. */
+export function burstPacket(common: Common, ideas: Idea[]) {
+  return {
+    step: "ideas" satisfies CriticStep,
+    readFirst: `${READ_FIRST} Also read references_get with this batch's kind: the owner's own proud ads are the bar.`,
+    ...about(common),
+    ideas: ideas.map(blindIdea),
+    task: "Choose one idea for each funnel stage: tof, mof and bof. The bar is an ad the owner would pay for out of his own pocket and be proud of, beside his reference ads: one picture device that the product's truth calls for, and a line that points at it. Check each claim against the facts. If no idea of a stage reaches the bar, refuse that stage (ideaId null) and say what is missing; do not lower the bar. Send the three stages in one critic_select call with the ticket.",
   };
 }
 
