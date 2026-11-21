@@ -20,8 +20,11 @@ export class MemoryTable implements Table {
     return true;
   }
 
-  async delete(pk: string, sk: string): Promise<void> {
+  async delete(pk: string, sk: string, options: { ifEquals?: { attribute: string; value: string } } = {}): Promise<boolean> {
+    const { ifEquals } = options;
+    if (ifEquals && this.items.get(this.key(pk, sk))?.[ifEquals.attribute] !== ifEquals.value) return false;
     this.items.delete(this.key(pk, sk));
+    return true;
   }
 
   async query<T extends Item>(pk: string): Promise<T[]> {

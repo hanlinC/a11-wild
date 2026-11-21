@@ -39,4 +39,20 @@ describe("daily clean-up of self-registered clients", () => {
     expect(await pruneClients(studio.cognito, studio.approvals, NOW)).toEqual([]);
     expect(studio.cognito.clients.has("fresh")).toBe(true);
   });
+
+  it("keeps a client the owner approves while the clean-up runs", async () => {
+    studio.cognito.register("late", { createdAt: hoursAgo(25) });
+    await studio.approvals.statusOf("late", "owner@example.com");
+    // The clean-up read the record as pending; the approval lands before it deletes.
+    const read = studio.approvals.get.bind(studio.approvals);
+    studio.approvals.get = async (clientId) => {
+      const record = await read(clientId);
+      await studio.approvals.approve(clientId);
+      return record;
+    };
+
+    expect(await pruneClients(studio.cognito, studio.approvals, NOW)).toEqual([]);
+    expect(studio.cognito.clients.has("late")).toBe(true);
+    expect((await read("late"))?.status).toBe("approved");
+  });
 });

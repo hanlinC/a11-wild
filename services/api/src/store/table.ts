@@ -14,7 +14,8 @@ export interface Table {
   get<T extends Item>(pk: string, sk: string): Promise<T | undefined>;
   /** Returns false when `ifNotExists` is set and the item is already there. */
   put(item: Item, options?: { ifNotExists?: boolean }): Promise<boolean>;
-  delete(pk: string, sk: string): Promise<void>;
+  /** With `ifEquals`, deletes only while that attribute still has that value. Returns false when it does not. */
+  delete(pk: string, sk: string, options?: { ifEquals?: { attribute: string; value: string } }): Promise<boolean>;
   query<T extends Item>(pk: string): Promise<T[]>;
 }
 
@@ -51,8 +52,27 @@ export class DynamoTable implements Table {
     }
   }
 
-  async delete(pk: string, sk: string): Promise<void> {
-    await this.doc.send(new DeleteCommand({ TableName: this.tableName, Key: { pk, sk } }));
+  async delete(pk: string, sk: string, options: { ifEquals?: { attribute: string; value: string } } = {}): Promise<boolean> {
+    const { ifEquals } = options;
+    try {
+      await this.doc.send(
+        new DeleteCommand({
+          TableName: this.tableName,
+          Key: { pk, sk },
+          ...(ifEquals
+            ? {
+                ConditionExpression: "#attribute = :value",
+                ExpressionAttributeNames: { "#attribute": ifEquals.attribute },
+                ExpressionAttributeValues: { ":value": ifEquals.value },
+              }
+            : {}),
+        }),
+      );
+      return true;
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException) return false;
+      throw error;
+    }
   }
 
   async query<T extends Item>(pk: string): Promise<T[]> {

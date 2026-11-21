@@ -91,9 +91,12 @@ export class ClientApprovals {
     return record;
   }
 
-  /** Forgets a pending client. Used when its app client was deleted unapproved. */
-  async forget(clientId: string): Promise<void> {
-    await this.table.delete(PK, clientId);
+  /**
+   * Forgets a client only while it still waits for approval. Returns false when
+   * the owner decided in the meantime, so the caller must leave the client alone.
+   */
+  async forgetIfPending(clientId: string): Promise<boolean> {
+    return this.table.delete(PK, clientId, { ifEquals: { attribute: "status", value: "pending" } });
   }
 
   private async decide(clientId: string, status: ClientStatus): Promise<ClientRecord | undefined> {

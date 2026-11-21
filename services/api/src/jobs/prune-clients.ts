@@ -18,8 +18,10 @@ export async function pruneClients(
     const record = await approvals.get(client.clientId);
     if (record?.status === "approved") continue;
     if (now.getTime() - client.createdAt.getTime() < UNAPPROVED_CLIENT_MAX_AGE_MS) continue;
+    // The record goes first, and only while it still says pending: an approval
+    // that lands during this run wins, and the client is kept.
+    if (record?.status === "pending" && !(await approvals.forgetIfPending(client.clientId))) continue;
     await cognito.delete(client.clientId);
-    if (record?.status === "pending") await approvals.forget(client.clientId);
     deleted.push(client.clientId);
   }
   log.info("clients_pruned", { deleted: deleted.length });
