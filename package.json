@@ -24,6 +24,7 @@
     "user:invite": "node scripts/invite-user.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudformation": "3.1175.0",
     "@eslint/js": "10.0.1",
     "@types/node": "22.20.5",
     "eslint": "10.15.0",

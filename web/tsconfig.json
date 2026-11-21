@@ -7,8 +7,11 @@
     "outDir": "dist/types",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    // The Fluid components in src/components/ui and their helpers in src/lib stay
+    // exactly as the registry ships them, and they do not pass these two checks.
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false,
     "types": ["node", "vite/client"],
-    "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"],
