@@ -69,6 +69,8 @@ export class StateError extends Refusal {}
 const NEXT_V3: Partial<Record<BatchState, BatchState[]>> = {
   truth: ["briefed"],
   ideas: ["reviewed", "spec_only"],
+  // More concepts after the review take the batch back: the critic has not seen them.
+  reviewed: ["judged", "ideas"],
   worded: ["directed"],
 };
 

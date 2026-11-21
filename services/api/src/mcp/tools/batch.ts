@@ -5,6 +5,7 @@ import type { BatchReads } from "../../batch/reads.js";
 import { hasWords, requireMove, stepAfter } from "../../batch/state.js";
 import type { BatchStore } from "../../batch/store.js";
 import type { BrandStore } from "../../brand/store.js";
+import type { BriefStore } from "../../brief/store.js";
 import type { CopyStore } from "../../copy/store.js";
 import type { CriticStore } from "../../critic/store.js";
 import type { FactStore } from "../../facts/store.js";
@@ -21,6 +22,7 @@ export interface BatchToolDeps {
   critic: CriticStore;
   done: DoneGate;
   copy: CopyStore;
+  briefs: BriefStore;
 }
 
 const id = z.string().min(1).max(64);
@@ -30,7 +32,7 @@ const test = (what: string) => z.strictObject({ passed: z.boolean(), note: line(
 const CANNOT_RENDER =
   "The studio makes one kind of picture: a static 4:5 ad. For this format the step it cannot do is rendering. It keeps the facts, the truth sheet, the ideas and a text spec.";
 
-export function batchTools({ batches, brands, facts, truth, reads, critic, done, copy }: BatchToolDeps): ToolDefinition[] {
+export function batchTools({ batches, brands, facts, truth, reads, critic, done, copy, briefs }: BatchToolDeps): ToolDefinition[] {
   /** What a session needs to go on with a batch, from its id alone. */
   async function view(batch: Batch) {
     // A batch that saved a sheet keeps that version. A batch that has not yet sees the product's newest.
@@ -58,6 +60,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
         : {}),
       ideas,
       ...(hasWords(batch.kind) ? { burst: await batches.burst(batch.id), approvedCopy: await copy.list(batch.id), photoNames: photoNames(product.photos) } : {}),
+      ...(batch.kind === "v3" ? { brief: (await briefs.get(batch.id)) ?? null } : {}),
       // What the blind critic said of the ideas, so that a cut idea can be written again.
       ...(judged ? { criticOnIdeas: judged } : {}),
       tasteNotRead: unread,
@@ -72,7 +75,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       input: {
         kind: z
           .enum(BATCH_KINDS)
-          .describe("The kind of ad, in the owner's words for this batch. Ask him; there is no default. v1: the picture carries the logo and no words. v2: a headline and a subline set on the picture, with one ad each for top, middle and bottom of funnel. v3 is not built yet."),
+          .describe("The kind of ad, in the owner's words for this batch. Ask him; there is no default. v1: the picture carries the logo and no words. v2: a headline and a subline set on the picture, with one ad each for top, middle and bottom of funnel. v3: a concept ad, one picture device and the line that points at it; he picks three concepts himself from all of them, with a rough of each."),
         brandId: id,
         productId: id,
         format: z.enum(["static_4x5", "other"]).default("static_4x5"),
@@ -87,7 +90,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       },
       writes: true,
       handler: async ({ kind, brandId, productId, format, formatNote, label, test }, context) => {
-        if (kind === "v3") throw new Refusal("The studio does not make v3 ads yet. Tell the owner, and offer v1 or v2.");
+        if (kind === "v3" && format === "other") throw new Refusal("A concept ad (v3) is a static 4:5 picture. For another format, start a v1 or v2 batch: it ends with a text spec.");
         await brands.brand(brandId);
         const product = await brands.product(productId);
         if (product.brandId !== brandId) throw new Refusal("That product belongs to another brand. brand_list gives each brand's products.");
@@ -192,6 +195,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       needsRules: true,
       handler: async ({ batchId, ideas }, context) => {
         const batch = await batches.get(batchId);
+        if (batch.kind === "v3") throw new Refusal("A batch of concept ads saves its brief (brief_save) and then its concepts (concepts_save).");
         if (batch.state !== "ideas") requireMove(batch, "ideas", "ideas_save");
         const unread = await reads.missing(batchId, batch.kind);
         if (unread.length > 0) {

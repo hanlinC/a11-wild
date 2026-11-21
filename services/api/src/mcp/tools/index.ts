@@ -4,6 +4,7 @@ import { BatchStore } from "../../batch/store.js";
 import { BoardService } from "../../board/service.js";
 import { BrandStore } from "../../brand/store.js";
 import { CheckStore } from "../../checks/store.js";
+import { BriefStore } from "../../brief/store.js";
 import { CopyStore } from "../../copy/store.js";
 import type { Config } from "../../config.js";
 import { Calibration } from "../../critic/calibration.js";
@@ -39,6 +40,7 @@ import type { ToolDefinition } from "../registry.js";
 import { batchTools } from "./batch.js";
 import { boardTools } from "./board.js";
 import { brandTools } from "./brand.js";
+import { conceptTools } from "./concepts.js";
 import { copyTools } from "./copy.js";
 import { coreTools } from "./core.js";
 import { criticTools } from "./critic.js";
@@ -90,6 +92,7 @@ export function studioTools(parts: StudioParts) {
   const picks = new PickStore(table, now);
   const criticStore = new CriticStore(table, now);
   const copy = new CopyStore(table, now);
+  const briefs = new BriefStore(table, now);
   const references = new References(table, now);
   const meta = new MetaStore(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
@@ -110,7 +113,8 @@ export function studioTools(parts: StudioParts) {
     ...factTools({ brands, facts, parallel }),
     ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }),
     ...importTools({ importer }),
-    ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy }),
+    ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
+    ...conceptTools({ batches, brands, facts, reads, briefs }),
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),

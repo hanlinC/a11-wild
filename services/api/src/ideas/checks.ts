@@ -1,4 +1,4 @@
-import type { Fact, FunnelStage, Idea } from "@a11-wild/shared";
+import type { Fact, FunnelStage, Idea, Insight } from "@a11-wild/shared";
 import { FUNNEL_STAGES } from "@a11-wild/shared";
 
 export const IDEAS_PER_BATCH = 3;
@@ -10,6 +10,11 @@ export const PER_STAGE_MIN = 8;
 export const HEADLINE_WORDS_MAX = 8;
 export const SUBLINE_WORDS_MAX = 8;
 export const WORDS_MAX = 14;
+export const CONCEPTS_MIN = 6;
+export const CONCEPTS_MAX = 15;
+export const TERRITORIES_MIN = 3;
+export const TERRITORIES_MAX = 5;
+export const INSIGHTS_MIN = 3;
 
 export type IdeaInput = Omit<Idea, "id">;
 
@@ -97,6 +102,21 @@ export function ideaFaults(ideas: IdeaInput[]): string[] {
   return faults;
 }
 
+/** The countable facts of one idea with words: its elements, its words against the facts it names, and its real photos. */
+function wordedFaults(name: string, idea: IdeaInput, byId: Map<string, Fact>, photoNames: string[]): string[] {
+  const faults = sharedFaults(name, idea);
+  if (!idea.stage || !idea.headline || !idea.subline) return [...faults, `${name} needs a stage, a headline and a subline.`];
+  const unknown = (idea.claims ?? []).filter((claim) => !byId.has(claim.factId)).map((claim) => claim.factId);
+  if (unknown.length > 0) faults.push(`${name} names a fact that is not saved for this product: ${unknown.join(", ")}. facts_list gives the facts.`);
+  const proof = (idea.claims ?? []).flatMap((claim) => byId.get(claim.factId) ?? []);
+  const { length, truth } = wordFaults({ headline: idea.headline, subline: idea.subline, stage: idea.stage, ...(idea.footnote ? { footnote: idea.footnote } : {}) }, proof);
+  for (const fault of [...length, ...truth]) faults.push(`${name}: ${fault}.`);
+  if (!idea.shows || idea.shows.length === 0) faults.push(`${name} names no real photo in shows. Name the photo of each brand item and prop the picture shows.`);
+  const missing = (idea.shows ?? []).filter((photo) => !photoNames.includes(photo));
+  if (missing.length > 0) faults.push(`${name} shows ${missing.join(", ")}, and this product has no such photo. Its photos: ${photoNames.join(", ") || "none"}.`);
+  return faults;
+}
+
 /** The countable facts of a burst of ideas with words: its size, its spread over the funnel, and each idea's words. */
 export function burstFaults(ideas: IdeaInput[], facts: Fact[], photoNames: string[]): string[] {
   const faults: string[] = [];
@@ -106,22 +126,7 @@ export function burstFaults(ideas: IdeaInput[], facts: Fact[], photoNames: strin
     if (count < PER_STAGE_MIN) faults.push(`The burst has ${count} ideas for ${STAGE_NAMES[stage]}. Each stage needs ${PER_STAGE_MIN} or more.`);
   }
   const byId = new Map(facts.map((fact) => [fact.id, fact]));
-  for (const [index, idea] of ideas.entries()) {
-    const name = `Idea ${index + 1} ("${idea.title}")`;
-    faults.push(...sharedFaults(name, idea));
-    if (!idea.stage || !idea.headline || !idea.subline) {
-      faults.push(`${name} needs a stage, a headline and a subline.`);
-      continue;
-    }
-    const unknown = (idea.claims ?? []).filter((claim) => !byId.has(claim.factId)).map((claim) => claim.factId);
-    if (unknown.length > 0) faults.push(`${name} names a fact that is not saved for this product: ${unknown.join(", ")}. facts_list gives the facts.`);
-    const proof = (idea.claims ?? []).flatMap((claim) => byId.get(claim.factId) ?? []);
-    const { length, truth } = wordFaults({ headline: idea.headline, subline: idea.subline, stage: idea.stage, ...(idea.footnote ? { footnote: idea.footnote } : {}) }, proof);
-    for (const fault of [...length, ...truth]) faults.push(`${name}: ${fault}.`);
-    if (!idea.shows || idea.shows.length === 0) faults.push(`${name} names no real photo in shows. Name the photo of each brand item and prop the picture shows.`);
-    const missing = (idea.shows ?? []).filter((photo) => !photoNames.includes(photo));
-    if (missing.length > 0) faults.push(`${name} shows ${missing.join(", ")}, and this product has no such photo. Its photos: ${photoNames.join(", ") || "none"}.`);
-  }
+  for (const [index, idea] of ideas.entries()) faults.push(...wordedFaults(`Idea ${index + 1} ("${idea.title}")`, idea, byId, photoNames));
   return faults;
 }
 
@@ -133,4 +138,47 @@ export function photoNames(photos: { kind: string }[]): string[] {
     seen.set(photo.kind, number);
     return `${photo.kind}-${number}`;
   });
+}
+
+/**
+ * The countable facts of a set of concepts: its size, its territories, the insight each one stands
+ * on, and each concept's words and real photos. Whether a concept is good is not checked here.
+ */
+export function conceptFaults(ideas: IdeaInput[], insights: Pick<Insight, "id">[], facts: Fact[], photoNames: string[], most = CONCEPTS_MAX): string[] {
+  const faults: string[] = [];
+  if (ideas.length < CONCEPTS_MIN || ideas.length > most) faults.push(`A set holds ${CONCEPTS_MIN} to ${most} concepts. This one has ${ideas.length}.`);
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  const known = new Set(insights.map((insight) => insight.id));
+  /** The insights of each territory, by its name without case or outer space. */
+  const territories = new Map<string, Set<string>>();
+  for (const [index, idea] of ideas.entries()) {
+    const name = `Concept ${index + 1} ("${idea.title}")`;
+    faults.push(...wordedFaults(name, idea, byId, photoNames));
+    const part = idea.concept;
+    if (!part) {
+      faults.push(`${name} has no concept part.`);
+      continue;
+    }
+    if (!known.has(part.insightId)) faults.push(`${name} stands on insight ${part.insightId}, and the brief has no such insight. brief_get gives the insights.`);
+    const territory = part.territory.trim().toLowerCase();
+    territories.set(territory, (territories.get(territory) ?? new Set()).add(part.insightId));
+    const basis = part.sublineBasis;
+    if (basis.kind === "fact" && !(basis.factId && idea.claims?.some((claim) => claim.factId === basis.factId))) {
+      faults.push(`${name}: its subline is a fact, so sublineBasis names that fact, and claims holds it too.`);
+    }
+  }
+  // A round of more concepts may open a new territory, so the most holds for the first set only.
+  if (territories.size < TERRITORIES_MIN || (most === CONCEPTS_MAX && territories.size > TERRITORIES_MAX)) {
+    faults.push(`A set has ${TERRITORIES_MIN} to ${TERRITORIES_MAX} territories. This one has ${territories.size}.`);
+  }
+  const owner = new Map<string, string>();
+  for (const [territory, used] of territories) {
+    if (used.size > 1) faults.push(`The territory "${territory}" stands on ${used.size} insights. A territory stands on one.`);
+    for (const insightId of used) {
+      const first = owner.get(insightId);
+      if (first && first !== territory) faults.push(`The territories "${first}" and "${territory}" stand on the same insight ${insightId}. They are one territory.`);
+      else owner.set(insightId, territory);
+    }
+  }
+  return faults;
 }

@@ -282,6 +282,62 @@ export interface Idea {
   footnote?: string;
   /** The product's real photos of each brand item the picture shows: "pack-1", "food-2". */
   shows?: string[];
+  /** What makes the idea a concept. An idea of a v3 batch has it. */
+  concept?: ConceptPart;
+}
+
+export const INSIGHT_BASES = ["evidence", "interpretation", "hypothesis"] as const;
+/** How sure an insight is: a buyer said it, the agent reads it from what buyers said, or it is a guess to test. */
+export type InsightBasis = (typeof INSIGHT_BASES)[number];
+
+/** One thing a buyer thinks, feels or does. A concept stands on one. */
+export interface Insight {
+  id: string;
+  text: string;
+  basis: InsightBasis;
+  /** Where a buyer said it, and his words. An insight on evidence has both. */
+  sourceUrl?: string;
+  quote?: string;
+}
+
+/** What the studio knows before it writes concepts. A field with nothing known is left out, never filled in. */
+export interface Brief {
+  insights: Insight[];
+  /** What the ads of the category do. */
+  conventions: string[];
+  /** What the category leaves unused. */
+  openings: string[];
+  /** What the ads must not do or claim. */
+  constraints: string[];
+  /** What could not be verified. */
+  unknowns: string[];
+  version: number;
+  at: string;
+  by: string;
+}
+
+export const SUBLINE_BASES = ["fact", "second_beat", "none"] as const;
+export type SublineBasis = (typeof SUBLINE_BASES)[number];
+
+/** A concept is a pair: one picture device, and the line that points at it. `Idea.device` holds the device. */
+export interface ConceptPart {
+  /** The group of concepts that stand on one insight. */
+  territory: string;
+  insightId: string;
+  /** What the ad wants the buyer to understand. */
+  proposition: string;
+  /** How the picture and the line work together: the kind of device, and how it says the proposition. */
+  mechanism: { type: string; how: string };
+  /** Why the product must be in the picture. */
+  productRole: string;
+  /** What makes it this brand's ad. */
+  brandRole: string;
+  /** What the subline is: a saved fact, or a second beat that claims nothing. */
+  sublineBasis: { kind: SublineBasis; factId?: string };
+  /** The writer's own answers. The critic gives its own from the rough. */
+  pictureAlone: string;
+  headlineAlone: string;
+  risks: string[];
 }
 
 /** The buttons Meta offers that the studio uses. The text of an ad names one of them and no other. */
