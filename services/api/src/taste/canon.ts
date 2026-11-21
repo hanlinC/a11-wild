@@ -34,10 +34,12 @@ export class CanonStore {
     if (!reason) throw new Refusal("A canon save needs a reason: one line on what changed and why.");
     if (!text) throw new Refusal("The canon cannot be empty.");
     if (text.length > CANON_MAX_CHARS) throw new Refusal(`The canon is longer than ${CANON_MAX_CHARS} characters. Cut it: a short canon gets read.`);
+    // Two saves at the same moment each take their own number: a version is written only where none is yet.
+    let version = (await this.latest()) + 1;
+    const saved = (): CanonVersion => ({ version, text, reason, savedBy: input.by, savedAt: this.now().toISOString() });
+    while (!(await this.table.put({ pk: PK, sk: versionKey(version), ...saved() }, { ifNotExists: true }))) version += 1;
     await this.table.add(PK, "COUNT", "count", 1);
-    const saved: CanonVersion = { version: await this.latest(), text, reason, savedBy: input.by, savedAt: this.now().toISOString() };
-    await this.table.put({ pk: PK, sk: versionKey(saved.version), ...saved });
-    return saved;
+    return saved();
   }
 
   async version(version: number): Promise<CanonVersion> {

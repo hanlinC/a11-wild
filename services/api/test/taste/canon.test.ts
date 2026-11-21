@@ -31,6 +31,14 @@ describe("taste canon", () => {
     expect(versions[0]).not.toHaveProperty("text");
   });
 
+  it("gives two saves at the same moment their own versions", async () => {
+    const canon = studio.services.canon;
+    const saved = await Promise.all(["a", "b", "c"].map((text) => canon.save({ text, reason: `Save ${text}.`, by: "o" })));
+    expect(saved.map((version) => version.version).sort()).toEqual([1, 2, 3]);
+    expect((await canon.get()).version).toBe(3);
+    expect((await canon.versions()).map((version) => version.reason).sort()).toEqual(["Save a.", "Save b.", "Save c."]);
+  });
+
   it("lets only the owner change the canon", async () => {
     const saved = await callTool(studio, "canon_save", { text: "Mine now.", reason: "Because." }, { sub: "sub-member" });
     expect(saved).toEqual({ ok: false, error: expect.stringMatching(/Only the owner/) });

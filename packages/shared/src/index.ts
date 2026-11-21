@@ -148,3 +148,88 @@ export interface SwipeItem {
   savedBy: string;
   originId?: string;
 }
+
+/** The steps of a batch, in order. A batch's state is the last step that is done. */
+export const BATCH_STATES = [
+  "intake",
+  "truth",
+  "ideas",
+  "judged",
+  "priced",
+  "waiting_spend",
+  "drafting",
+  "checked",
+  "waiting_pick",
+  "finals",
+  "finished",
+  "done",
+  "spec_only",
+] as const;
+export type BatchState = (typeof BATCH_STATES)[number];
+
+export interface Batch {
+  id: string;
+  brandId: string;
+  productId: string;
+  /** `static_4x5` is the one picture the studio makes. Any other format gets a text spec. */
+  format: "static_4x5" | "other";
+  /** The owner's words for a format the studio does not render, such as "9:16 story". */
+  formatNote?: string;
+  label?: string;
+  state: BatchState;
+  /** The text spec of a batch whose format the studio does not render. */
+  spec?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+/** One number of a truth sheet. It has a saved fact as its source, or it is unverified. */
+export interface Measure {
+  /** What is measured: "pack height", "net weight", "cap diameter". */
+  name: string;
+  value: number;
+  unit: string;
+  status: "sourced" | "unverified";
+  /** The fact that proves it, with its quote and page, when it is sourced. */
+  source?: { factId: string; quote: string; url: string };
+}
+
+/** What is true about a product's body, so that a picture can be checked against it. */
+export interface TruthSheet {
+  productId: string;
+  /** The product's shape in plain words. */
+  shape: string;
+  /** What it is packed in, and what is printed where. */
+  packaging: string;
+  measures: Measure[];
+  /** For food: the brand's own photos of it and how it is cut or served. */
+  food?: { photoKeys: string[]; proportions: string };
+  savedAt: string;
+  savedBy: string;
+}
+
+export interface IdeaTest {
+  passed: boolean;
+  /** One line on why. */
+  note: string;
+}
+
+export interface Idea {
+  id: string;
+  title: string;
+  /** What the picture shows, in a few lines. */
+  visual: string;
+  /** The one thing the idea turns on. */
+  device: string;
+  /** Where the eye lands first. */
+  focalPoint: string;
+  /** Everything in the picture. Five or fewer. */
+  elements: string[];
+  /** Work from outside the product's category, each with what it does. */
+  references: { what: string; does: string; url?: string }[];
+  /** Cover the logo: is it still this brand's ad, and no other's? */
+  coverTest: IdeaTest;
+  /** Does it stay clear of every kill reason? */
+  killTest: IdeaTest;
+}
