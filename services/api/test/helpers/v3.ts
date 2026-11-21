@@ -101,3 +101,54 @@ export async function reviewConcepts(studio: Studio, batchId: string, recommend:
   const reviews = packet.value.concepts.map((entry: { id: string }) => review(entry.id, { recommend: recommend.includes(entry.id) }));
   return callTool(studio, "concept_review_save", { ...rules, batchId, ticket: packet.value.ticket, reviews });
 }
+
+export const PICKED = ["idea-2", "idea-4", "idea-5"];
+
+/** A v3 batch whose three concepts the owner picked, and whose words he approved. */
+export async function v3AtWorded(studio: Studio, create: object = {}) {
+  const made = await v3AtConcepts(studio, create);
+  for (const ideaId of PICKED) await roughOf(studio, made.batchId, ideaId);
+  await reviewConcepts(studio, made.batchId, PICKED);
+  const picked = await callTool(studio, "concept_pick", { ...rules, batchId: made.batchId, picks: PICKED.map((ideaId) => ({ ideaId, ownerSaid: `yes, ${ideaId} stops me` })) });
+  if (!picked.ok) throw new Error(picked.error);
+  const ideas = (await callTool(studio, "batch_get", { batchId: made.batchId })).value.ideas as { id: string; headline: string; subline: string }[];
+  const worded = await callTool(studio, "copy_approve", { ...rules, batchId: made.batchId, ideas: ideas.map((idea) => ({ ideaId: idea.id, headline: idea.headline, subline: idea.subline, ownerSaid: "yes" })) });
+  if (!worded.ok) throw new Error(worded.error);
+  return made;
+}
+
+const AXES = {
+  composition: "pouch dead centre",
+  productPosition: "flat on the floor",
+  scale: "pouch fills a third of the frame",
+  camera: "from above",
+  light: "one hard light from the left",
+  environment: "yellow seamless",
+  negativeSpace: "top third empty",
+  staging: "one pouch alone",
+};
+
+/** One draft of a direction. Each number changes composition, camera and scale against the others. */
+export const draftPlan = (n: number, axes: object = {}) => ({
+  question: `Question ${n}?`,
+  axes: { ...AXES, composition: `composition ${n}`, camera: `camera ${n}`, scale: `scale ${n}`, ...axes },
+});
+
+/** The direction of one picked concept. */
+export const directionOf = (ideaId: string, extra: object = {}) => ({
+  ideaId,
+  why: "The empty pouch alone on the brand's yellow says it is gone.",
+  risk: "low",
+  look: "The brand's yellow as a seamless, one hard shadow.",
+  lockup: "flush_left",
+  drafts: [draftPlan(1), draftPlan(2), draftPlan(3)],
+  ...extra,
+});
+
+/** A v3 batch with its direction saved. */
+export async function v3AtDirected(studio: Studio, create: object = {}) {
+  const made = await v3AtWorded(studio, create);
+  const saved = await callTool(studio, "direction_save", { ...rules, batchId: made.batchId, concepts: PICKED.map((ideaId) => directionOf(ideaId)) });
+  if (!saved.ok) throw new Error(saved.error);
+  return made;
+}
