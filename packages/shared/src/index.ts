@@ -692,6 +692,8 @@ export interface Render {
   /** A draft of a concept ad: which of the direction's three drafts it is, and the version of that direction. */
   draft?: number;
   directionVersion?: number;
+  /** A failed render that fal charged for all the same. Its price stays in what its stage came to. */
+  billed?: true;
   /** The earlier draft of the same number that this one is made again for, because its picture was rejected. */
   redoOf?: string;
   /** The pack photo the model was given, by its name ("pack-2"), when the render named one. The pack checks measure against it. */

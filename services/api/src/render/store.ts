@@ -70,7 +70,7 @@ export class RenderStore {
    * here saves its result in the end mark and returns true, so the ledger is settled or released a single time.
    * Every write of the render takes its result from that mark, so a second read cannot replace the first one's.
    */
-  async end(render: StoredRender, result: { status: "done"; imageId: string } | { status: "failed"; error: string }): Promise<boolean> {
+  async end(render: StoredRender, result: { status: "done"; imageId: string } | { status: "failed"; error: string; billed?: true }): Promise<boolean> {
     const mark = { pk: pk(render.batchId), sk: `ENDED#${render.id}` };
     const first = await this.table.put({ ...mark, result, updatedAt: this.now().toISOString() }, { ifNotExists: true });
     // A read that set the mark and then stopped left the render queued: this one writes its end, and leaves the ledger alone.
