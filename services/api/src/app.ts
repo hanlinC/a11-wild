@@ -26,6 +26,9 @@ export interface Deps {
   now: () => Date;
 }
 
+/** A path as a log line may carry it. The token of a pack link is the key to that pack, so it is never written. */
+export const loggedPath = (path: string): string => path.replace(/^\/api\/pack\/[^/]+/, "/api/pack/<token>");
+
 export function createApp(deps: Deps): Hono {
   const app = new Hono();
 
@@ -41,7 +44,7 @@ export function createApp(deps: Deps): Hono {
 
   app.notFound((c) => c.json({ error: "not_found" }, 404));
   app.onError((error, c) => {
-    log.error("request_failed", { path: c.req.path, name: error.name });
+    log.error("request_failed", { path: loggedPath(c.req.path), name: error.name });
     return c.json({ error: "server_error" }, 500);
   });
 
