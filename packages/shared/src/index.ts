@@ -121,7 +121,69 @@ export interface Fact {
 }
 
 /** One version of the owner's taste canon. Version 0 means none was written yet. */
+/** What a canon rule is about. The owner's taste holds for every brand; a brand's canon holds only for that brand. */
+export const CANON_SCOPES = ["owner", "brand", "craft", "performance"] as const;
+export type CanonScopeKind = (typeof CANON_SCOPES)[number];
+export interface CanonScope {
+  kind: CanonScopeKind;
+  /** Only for the scope of a brand. */
+  brandId?: string;
+}
+
+/** Something the studio saw and what it may teach. It proposes; it never changes a product fact or the canon. */
+export interface LearningRecord {
+  id: string;
+  observation: string;
+  /** Where it was seen: the owner's words, a batch, a results file. */
+  source: string;
+  scope: CanonScope;
+  lesson: string;
+  /** How many separate times it was seen. */
+  evidence: number;
+  confidence: "low" | "medium" | "high";
+  examples: string[];
+  counterexamples: string[];
+  expectedEffect: string;
+  testResult?: string;
+  batchId?: string;
+  savedBy: string;
+  savedAt: string;
+}
+
+/** A change to a canon that waits for the owner. It is not active until he says yes. */
+export interface CanonProposal {
+  id: string;
+  scope: CanonScope;
+  /** The whole canon of that scope as it would read. */
+  text: string;
+  reason: string;
+  /** The learning records it rests on. */
+  recordIds: string[];
+  /** The version of that canon the proposal was written against. */
+  baseVersion: number;
+  status: "proposed" | "approved" | "declined";
+  proposedBy: string;
+  proposedAt: string;
+  decidedAt?: string;
+  ownerSaid?: string;
+  /** The canon version an approval made. */
+  version?: number;
+}
+
+/** What the owner chose for one brand, in his words (for example the cap, not the pump). The next batch of that brand gets it. */
+export interface BrandNote {
+  id: string;
+  brandId: string;
+  note: string;
+  ownerSaid: string;
+  batchId?: string;
+  savedBy: string;
+  at: string;
+}
+
 export interface CanonVersion {
+  /** No scope means the owner's taste. */
+  scope?: CanonScope;
   version: number;
   text: string;
   /** One line on what changed and why. */
