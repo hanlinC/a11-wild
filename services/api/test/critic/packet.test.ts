@@ -45,7 +45,7 @@ describe("the blind judgement of the ideas", () => {
   it("moves the batch to judged when all three ideas are kept, and takes a ticket once", async () => {
     const { ticket } = (await open("ideas")).value;
     expect((await keepAll(ticket)).value).toMatchObject({ state: "judged" });
-    expect(await keepAll(ticket)).toEqual(refused(/already at judged|ticket is not valid/));
+    expect(await keepAll(ticket)).toEqual(refused(/already at "judged"|ticket is not valid/));
     expect((await callTool(studio, "batch_get", { batchId })).value.criticOnIdeas.verdicts).toHaveLength(3);
   });
 

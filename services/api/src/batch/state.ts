@@ -55,7 +55,9 @@ export function missingStep(from: BatchState, wanted: BatchState): string | unde
 /** Refuses a tool that belongs to a later state, and names the step that is missing. */
 export function requireMove(from: BatchState, wanted: BatchState, tool: string): void {
   const missing = missingStep(from, wanted);
-  if (missing) throw new StateError(`${tool} cannot run yet: the batch is at "${from}". The step that is missing: ${missing}.`);
+  if (!missing) return;
+  if (from !== "spec_only" && PATH.indexOf(wanted) <= PATH.indexOf(from)) throw new StateError(`${tool} cannot run now: its step is over, and the batch is already at "${from}".`);
+  throw new StateError(`${tool} cannot run yet: the batch is at "${from}". The step that is missing: ${missing}.`);
 }
 
 /** What the agent does next from a state, for a session that resumes a batch. */
