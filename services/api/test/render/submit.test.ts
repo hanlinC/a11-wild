@@ -143,15 +143,22 @@ describe("render_status", () => {
   });
 
   it("keeps the money spent when fal made the picture and the studio could not copy it", async () => {
-    await batchAtIdeas({ fal: (call) => (call.method === "GET" && call.url.includes("fal.media") ? { status: 404, json: {} } : undefined) });
+    let copies = false;
+    await batchAtIdeas({ fal: (call) => (!copies && call.method === "GET" && call.url.includes("fal.media") ? { status: 404, json: {} } : undefined) });
     const first = await draft();
     const failed = await callTool(studio, "render_status", { batchId, renderId: first.value.id });
     expect(failed.value).toMatchObject({ status: "failed", error: expect.stringMatching(/could not be copied/) });
     expect(await studio.spend.ledger.summary(batchId)).toMatchObject({ batchUsd: 0.009, lines: [expect.objectContaining({ status: "spent" })] });
     // The failed draft was charged, so its price stays in what the stage came to.
     expect(failed.value.billed).toBe(true);
-    await studio.spend.gate.price(batchId, "drafts", { firstUsd: 0.009, count: 9 });
-    expect((await draft()).ok).toBe(true);
+    copies = true;
+    // The draft sent in its place reads the price, and the quote counts the charge for the one that failed.
+    const second = await draft();
+    const done = await callTool(studio, "render_status", { batchId, renderId: second.value.id });
+    expect(done.value).toMatchObject({ status: "done", note: expect.stringMatching(/9 drafts come to about US\$0\.09/) });
+    expect((await studio.spend.gate.peek(batchId, "drafts"))?.estimateUsd).toBeCloseTo(0.009 * 10);
+    // The next draft does not move it.
+    expect((await draft({ ideaId: "idea-2" })).ok).toBe(true);
     expect((await studio.spend.gate.peek(batchId, "drafts"))?.estimateUsd).toBeCloseTo(0.009 * 10);
   });
 
