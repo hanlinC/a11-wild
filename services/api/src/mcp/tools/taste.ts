@@ -1,5 +1,10 @@
 import { z } from "zod";
+import { BATCH_KINDS } from "@a11-wild/shared";
 import type { BatchReads } from "../../batch/reads.js";
+import type { BatchStore } from "../../batch/store.js";
+import { copyPicture, type Pictures } from "../../pictures/store.js";
+import { REFERENCES_MAX, type References } from "../../taste/references.js";
+import type { Net } from "../../urlsafety.js";
 import type { CanonStore } from "../../taste/canon.js";
 import type { TasteLog } from "../../taste/log.js";
 import type { SwipeFile } from "../../taste/swipe.js";
@@ -10,11 +15,15 @@ export interface TasteToolDeps {
   tasteLog: TasteLog;
   swipe: SwipeFile;
   reads: BatchReads;
+  references: References;
+  batches: BatchStore;
+  pictures: Pictures;
+  net: Net;
 }
 
 const batchId = z.string().min(1).max(64).optional().describe("The batch you read this for. The studio records the read; ideas_save needs all three reads.");
 
-export function tasteTools({ canon, tasteLog, swipe, reads }: TasteToolDeps): ToolDefinition[] {
+export function tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }: TasteToolDeps): ToolDefinition[] {
   return [
     defineTool({
       name: "canon_get",
@@ -99,6 +108,48 @@ export function tasteTools({ canon, tasteLog, swipe, reads }: TasteToolDeps): To
       writes: true,
       handler: ({ title, why, source, sourceUrl, tags }, context) =>
         swipe.add({ title, why, source, savedBy: context.user.email, ...(sourceUrl ? { sourceUrl } : {}), ...(tags ? { tags } : {}) }),
+    }),
+    defineTool({
+      name: "references_get",
+      description:
+        "The owner's reference ads for this batch's kind of ad: finished ads he holds up as the bar, each with a link that opens the picture for a few minutes and a line on what it does. Free. Open each picture and look at it before you write ideas, before you write a render prompt, and before you judge. For an ad with words (v2) they are the bar for the idea, the words, the type and the craft, and ideas_save needs this read. For v1 they are loose examples of usable work, never a template. A reference shows a level, not a layout to copy: never reuse its idea, its words or its scene.",
+      input: { batchId: z.string().min(1).max(64) },
+      handler: async ({ batchId: forBatch }) => {
+        const batch = await batches.get(forBatch);
+        const found = await references.of(batch.kind);
+        await reads.mark(forBatch, "references");
+        return {
+          kind: batch.kind,
+          use:
+            batch.kind === "v1"
+              ? "Loose examples of usable v1 work. The owner has few v1 references: do not treat them as a strict guide."
+              : "The bar. New work is as clear, as bold and as well made as these, with its own idea.",
+          references: await Promise.all(
+            found.map(async ({ picture, savedBy: _savedBy, ...reference }) => ({ ...reference, viewUrl: await pictures.viewUrl(picture.key) })),
+          ),
+        };
+      },
+    }),
+    defineTool({
+      name: "reference_add",
+      description:
+        "Saves an ad as one of the owner's references, when he says a finished ad is the bar for a kind of ad. Owner only. The studio copies the picture to its private store.",
+      input: {
+        url: z.string().max(2000).describe("The picture's https address on a public host."),
+        kinds: z.array(z.enum(BATCH_KINDS)).min(1).max(3).describe("The kinds of ad it is a reference for."),
+        brand: z.string().min(1).max(80),
+        title: z.string().min(1).max(200).describe("The ad's headline, or a short name for an ad with no words."),
+        why: z.string().min(1).max(500).describe("What the ad does, in one or two lines."),
+        loose: z.boolean().default(false).describe("True for an example of usable work that is not a template."),
+      },
+      writes: true,
+      handler: async ({ url, kinds, brand, title, why, loose }, context) => {
+        if (context.user.role !== "owner") throw new Refusal("Only the owner can save a reference.");
+        if ((await references.count()) >= REFERENCES_MAX) throw new Refusal(`The studio keeps ${REFERENCES_MAX} references or fewer.`);
+        const stored = await copyPicture({ url, folder: "references", what: "The reference picture" }, net, pictures);
+        const { picture: _picture, ...saved } = await references.add({ kinds: [...new Set(kinds)], brand, title, why, ...(loose ? { loose } : {}), picture: { key: stored.key, sourceUrl: url }, savedBy: context.user.email });
+        return saved;
+      },
     }),
   ];
 }

@@ -27,6 +27,7 @@ import { SpendLedger } from "../../spend/ledger.js";
 import type { Table } from "../../store/table.js";
 import { CanonStore } from "../../taste/canon.js";
 import { TasteLog } from "../../taste/log.js";
+import { References } from "../../taste/references.js";
 import { SwipeFile } from "../../taste/swipe.js";
 import { TruthStore } from "../../truth/store.js";
 import type { Net } from "../../urlsafety.js";
@@ -82,6 +83,7 @@ export function studioTools(parts: StudioParts) {
   const picks = new PickStore(table, now);
   const criticStore = new CriticStore(table, now);
   const copy = new CopyStore(table, now);
+  const references = new References(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
   const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore });
@@ -95,7 +97,7 @@ export function studioTools(parts: StudioParts) {
     ...spendTools({ ledger, gate }),
     ...brandTools({ brands, parallel, pictures, net }),
     ...factTools({ brands, facts, parallel }),
-    ...tasteTools({ canon, tasteLog, swipe, reads }),
+    ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }),
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy }),
     ...copyTools({ batches, brands, facts, copy }),

@@ -40,7 +40,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       truth.get(batch.productId, batch.truthVersion),
       truth.get(batch.productId),
       batches.ideas(batch.id),
-      reads.missing(batch.id),
+      reads.missing(batch.id, batch.kind),
       critic.verdicts(batch.id),
     ]);
     const newer = sheet && newest && newest.version > sheet.version ? newest.version : undefined;
@@ -185,7 +185,7 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       handler: async ({ batchId, ideas }, context) => {
         const batch = await batches.get(batchId);
         if (batch.state !== "ideas") requireMove(batch, "ideas", "ideas_save");
-        const unread = await reads.missing(batchId);
+        const unread = await reads.missing(batchId, batch.kind);
         if (unread.length > 0) {
           throw new Refusal(`Read the owner's taste for this batch first. Not read yet: ${unread.join(", ")}. Call each with batchId "${batchId}".`);
         }

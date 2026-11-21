@@ -535,3 +535,20 @@ export interface DoneReport {
   /** What the studio cannot measure. The owner judges these himself. */
   strangerTest: string[];
 }
+
+/** An ad the owner holds up as the bar. A writer and a critic look at it before they judge new work. */
+export interface Reference {
+  id: string;
+  /** The kinds of ad it is a reference for. */
+  kinds: BatchKind[];
+  brand: string;
+  /** The ad's headline, or a short name for an ad with no words. */
+  title: string;
+  /** What the ad does, in one or two lines. */
+  why: string;
+  /** True for an example of "usable", not a template: new work is free to go elsewhere. */
+  loose?: boolean;
+  picture: PictureRef;
+  addedAt: string;
+  savedBy: string;
+}

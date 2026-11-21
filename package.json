@@ -21,7 +21,8 @@
     "check:public": "node scripts/check-public-repo.mjs",
     "check": "npm run lint && npm run typecheck && npm test && npm run build && npm run synth && npm run check:public",
     "probe": "node scripts/probe.mjs",
-    "user:invite": "node scripts/invite-user.mjs"
+    "user:invite": "node scripts/invite-user.mjs",
+    "references:load": "node scripts/load-references.mjs"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudformation": "3.1175.0",

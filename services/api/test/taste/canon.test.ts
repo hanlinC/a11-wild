@@ -65,18 +65,18 @@ describe("taste canon", () => {
   });
 
   it("records each read of the taste on the batch it was read for", async () => {
-    expect(await studio.services.reads.missing("b1")).toEqual(["canon_get", "taste_log", "swipe_search"]);
+    expect(await studio.services.reads.missing("b1", "v1")).toEqual(["canon_get", "taste_log", "swipe_search"]);
     await callTool(studio, "canon_get", { batchId: "b1" });
-    expect(await studio.services.reads.missing("b1")).toEqual(["taste_log", "swipe_search"]);
+    expect(await studio.services.reads.missing("b1", "v1")).toEqual(["taste_log", "swipe_search"]);
     await callTool(studio, "taste_log", { batchId: "b1" });
     await callTool(studio, "swipe_search", { batchId: "b1" });
-    expect(await studio.services.reads.missing("b1")).toEqual([]);
-    expect(await studio.services.reads.missing("b2")).toHaveLength(3);
+    expect(await studio.services.reads.missing("b1", "v1")).toEqual([]);
+    expect(await studio.services.reads.missing("b2", "v1")).toHaveLength(3);
   });
 
   it("does not count a read of an old version as reading the canon", async () => {
     await callTool(studio, "canon_save", { text: "One clever object.", reason: "First canon." });
     await callTool(studio, "canon_get", { batchId: "b1", version: 1 });
-    expect(await studio.services.reads.missing("b1")).toContain("canon_get");
+    expect(await studio.services.reads.missing("b1", "v1")).toContain("canon_get");
   });
 });

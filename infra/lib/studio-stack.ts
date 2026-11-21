@@ -70,5 +70,6 @@ export class StudioStack extends Stack {
     new CfnOutput(this, "PublicOrigin", { value: web.publicOrigin });
     new CfnOutput(this, "UserPoolId", { value: auth.userPool.userPoolId });
     new CfnOutput(this, "TableName", { value: data.table.tableName });
+    new CfnOutput(this, "PicturesBucketName", { value: data.pictures.bucketName });
   }
 }
