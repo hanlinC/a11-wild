@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Deps } from "../app.js";
 import { challenge, protectedResourceMetadata } from "../auth/metadata.js";
 import { findActiveUser } from "../auth/users.js";
+import { log } from "../log.js";
 import { rpcError, RPC_CODES } from "../mcp/server.js";
 
 /** JSON-RPC code in the range the protocol leaves to servers. */
@@ -23,18 +24,21 @@ export function mcpRoutes(deps: Deps): Hono {
     }
     const verified = await deps.tokens.verify(token);
     if (!verified.ok) {
+      log.warn("mcp_refused", { reason: verified.reason });
       c.header("www-authenticate", challenge(config, verified.error));
       return c.json({ error: verified.error }, verified.status);
     }
 
     const user = await findActiveUser(deps.table, verified.claims.sub);
     if (!user) {
+      log.warn("mcp_refused", { reason: "not_invited", client: verified.claims.clientId });
       return c.json(rpcError(null, NOT_ALLOWED, "This account is not invited to the studio."), 403);
     }
 
     const { clientId } = verified.claims;
     const status = await deps.approvals.statusOf(clientId, user.email);
     if (status !== "approved") {
+      log.warn("mcp_refused", { reason: `client_${status}`, client: clientId, user: user.sub });
       const message = {
         pending: `This client waits for the owner's approval. The owner approves it at ${config.publicOrigin}/connections and you then connect again.`,
         revoked: "The owner revoked this client.",

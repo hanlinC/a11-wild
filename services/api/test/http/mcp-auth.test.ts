@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { approvedClient, config, createStudio, json, ORIGIN, type Studio } from "../helpers/deps.js";
 
 let studio: Studio;
@@ -122,6 +122,28 @@ describe("sign-in for MCP clients", () => {
 
     await studio.table.put({ pk: "USER", sk: "sub-owner", email: "owner@example.com", role: "owner", disabled: true });
     expect((await post(await studio.signer.accessToken(config))).status).toBe(403);
+  });
+
+  it("logs why a call was refused, and never the token", async () => {
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      await post("not-a-token");
+      studio.cognito.register("client-1", { name: "Devin" });
+      const token = await studio.signer.accessToken(config);
+      await post(token);
+
+      const refusals = written.filter((line) => line.includes("mcp_refused")).map((line) => JSON.parse(line));
+      expect(refusals.map((refusal) => refusal.reason)).toEqual([expect.stringMatching(/^Jwt\w+Error$/), "client_pending"]);
+      expect(refusals[1].client).toBe("client-1");
+      expect(written.join("")).not.toContain(token);
+      expect(written.join("")).not.toContain("not-a-token");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("offers only POST on the MCP address", async () => {

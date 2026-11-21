@@ -9,8 +9,8 @@ export interface AccessClaims {
 
 export type TokenResult =
   | { ok: true; claims: AccessClaims }
-  | { ok: false; status: 401; error: "invalid_token" }
-  | { ok: false; status: 403; error: "insufficient_scope" };
+  | { ok: false; status: 401; error: "invalid_token"; reason: string }
+  | { ok: false; status: 403; error: "insufficient_scope"; reason: string };
 
 export interface AccessTokenVerifier {
   verify(token: string): Promise<TokenResult>;
@@ -35,16 +35,17 @@ export function createAccessTokenVerifier(config: Config, jwks?: Jwks): AccessTo
       let payload;
       try {
         payload = await verifier.verify(token);
-      } catch {
-        return { ok: false, status: 401, error: "invalid_token" };
+      } catch (error) {
+        // The error's class says which check failed. Its message can quote the token, so it is not kept.
+        return { ok: false, status: 401, error: "invalid_token", reason: error instanceof Error ? error.constructor.name : "unknown" };
       }
       const { sub, client_id: clientId, token_use: tokenUse, scope } = payload;
       if (tokenUse !== "access" || typeof sub !== "string" || typeof clientId !== "string") {
-        return { ok: false, status: 401, error: "invalid_token" };
+        return { ok: false, status: 401, error: "invalid_token", reason: "not_a_user_access_token" };
       }
       const scopes = typeof scope === "string" ? scope.split(" ") : [];
       if (!scopes.includes(config.mcpScope)) {
-        return { ok: false, status: 403, error: "insufficient_scope" };
+        return { ok: false, status: 403, error: "insufficient_scope", reason: "scope_missing" };
       }
       return { ok: true, claims: { sub, clientId } };
     },
