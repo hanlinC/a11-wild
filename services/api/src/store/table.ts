@@ -102,6 +102,8 @@ export class DynamoTable implements Table {
           TableName: this.tableName,
           KeyConditionExpression: "pk = :pk",
           ExpressionAttributeValues: { ":pk": pk },
+          // A gate reads right after a write: it must see that write, as `get` does.
+          ConsistentRead: true,
           ExclusiveStartKey: startKey,
         }),
       );
