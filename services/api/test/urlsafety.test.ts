@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPublicHost, isPublicHttpsUrl, publicFetch, readCapped, UnsafeUrlError } from "../src/urlsafety.js";
+import { isPublicHost, isPublicHttpsUrl, publicFetch, publicOnlyLookup, readCapped, UnsafeUrlError } from "../src/urlsafety.js";
 import { fakeNet } from "./helpers/net.js";
 
 describe("public hosts", () => {
@@ -90,5 +90,27 @@ describe("readCapped", () => {
   it("reads a body under the limit and refuses one over it", async () => {
     expect(new TextDecoder().decode(await readCapped(new Response("abc"), "The page", 10))).toBe("abc");
     await expect(readCapped(new Response("x".repeat(50)), "The page", 10)).rejects.toThrow(/larger than/);
+  });
+});
+
+describe("the lookup a connection uses", () => {
+  type Resolve = Parameters<typeof publicOnlyLookup>[0];
+  const answers = (...addresses: string[]) =>
+    ((_host: string, _options: unknown, done: (error: Error | null, list: { address: string; family: number }[]) => void) =>
+      done(null, addresses.map((address) => ({ address, family: address.includes(":") ? 6 : 4 })))) as unknown as Resolve;
+  const connect = (resolve: Resolve, all: boolean) =>
+    new Promise<{ error: Error | null; address: unknown }>((done) =>
+      publicOnlyLookup(resolve)("rebind.example", { all }, (error, address) => done({ error, address })),
+    );
+
+  it("gives a public address to the socket", async () => {
+    expect(await connect(answers("93.184.216.34"), false)).toEqual({ error: null, address: "93.184.216.34" });
+    expect(await connect(answers("93.184.216.34", "2606:2800:220:1::1"), true)).toMatchObject({ error: null, address: [{ address: "93.184.216.34" }, { address: "2606:2800:220:1::1" }] });
+  });
+
+  it("refuses a name whose answer at the moment of the connection is private, even among public ones", async () => {
+    for (const list of [["127.0.0.1"], ["10.0.0.5"], ["169.254.169.254"], ["93.184.216.34", "192.168.1.1"], ["::1"], []]) {
+      expect((await connect(answers(...list), true)).error?.message).toMatch(/does not fetch/);
+    }
   });
 });

@@ -1,4 +1,7 @@
+import { lookup as lookupForSocket } from "node:dns";
 import { lookup } from "node:dns/promises";
+import type { LookupFunction } from "node:net";
+import { Agent, fetch as fetchThrough } from "undici";
 import { Refusal } from "./mcp/registry.js";
 
 /**
@@ -49,8 +52,29 @@ export interface Net {
   resolve: (hostname: string) => Promise<string[]>;
 }
 
+/**
+ * The lookup that the connection itself uses. The check before a fetch resolves the name once, and
+ * the connection would resolve it again; a name that changes its answer between the two would pass
+ * the check and connect to a private address. Here each address is checked at the moment of the
+ * connection, and one private address refuses them all.
+ */
+export function publicOnlyLookup(resolve: typeof lookupForSocket = lookupForSocket): LookupFunction {
+  return (hostname, options, callback) => {
+    resolve(hostname, { ...options, all: true }, (error, addresses) => {
+      if (error) return callback(error, [], undefined);
+      if (addresses.length === 0 || !addresses.every((entry) => isPublicHost(entry.address))) {
+        return callback(new Error("The host name points at an address the studio does not fetch."), [], undefined);
+      }
+      if (options.all) return callback(null, addresses, undefined);
+      callback(null, addresses[0]!.address, addresses[0]!.family);
+    });
+  };
+}
+
+const publicOnly = new Agent({ connect: { lookup: publicOnlyLookup() } });
+
 export const realNet: Net = {
-  fetch: (input, init) => fetch(input, init),
+  fetch: ((input: string, init?: object) => fetchThrough(input, { ...init, dispatcher: publicOnly })) as unknown as typeof fetch,
   resolve: async (hostname) => (await lookup(hostname, { all: true })).map((entry) => entry.address),
 };
 
