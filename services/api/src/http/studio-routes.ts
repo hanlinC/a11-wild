@@ -7,6 +7,8 @@ import { Refusal } from "../mcp/registry.js";
 import type { SessionEnv } from "./guards.js";
 
 const CANON = z.strictObject({ text: z.string().max(40_000), reason: z.string().max(500) });
+const SAID = z.strictObject({ ideaId: z.string().min(1).max(64), ownerSaid: z.string().min(1).max(1000) });
+const CONCEPT_PICK = z.strictObject({ picks: z.array(SAID).length(3), passes: z.array(SAID).max(30).optional() });
 const PICK = z.strictObject({ ideaId: z.string().min(1).max(64), imageId: z.string().min(1).max(64).nullable(), ownerSaid: z.string().min(1).max(2000) });
 
 /** The dashboard's read of what the studio knows: brands, facts, truth sheets, taste and spend. */
@@ -16,7 +18,7 @@ export function studioRoutes(
   session: MiddlewareHandler<SessionEnv>,
   ownerWrite: readonly [MiddlewareHandler<SessionEnv>, MiddlewareHandler, MiddlewareHandler<SessionEnv>],
 ): void {
-  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board, calibration, done } = deps.studio;
+  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board, calibration, done, conceptBoard, conceptPicks } = deps.studio;
   const logoUrl = (brand: BrandKit) => (brand.logo ? deps.pictures.viewUrl(brand.logo.key) : null);
 
   routes.get("/api/brands", session, async (c) => {
@@ -104,6 +106,30 @@ export function studioRoutes(
       return c.json(await board.board(c.req.param("batchId")));
     } catch (error) {
       if (error instanceof Refusal) return c.json({ error: "not_found" }, 404);
+      throw error;
+    }
+  });
+
+  routes.get("/api/batches/:batchId/concepts", session, async (c) => {
+    try {
+      return c.json(await conceptBoard.show(c.req.param("batchId")));
+    } catch (error) {
+      if (error instanceof Refusal) return c.json({ error: "not_found" }, 404);
+      throw error;
+    }
+  });
+
+  routes.post("/api/batches/:batchId/concept-pick", ...ownerWrite, async (c) => {
+    const body = CONCEPT_PICK.safeParse(await c.req.json().catch(() => undefined));
+    if (!body.success) return c.json({ error: "bad_request", message: "Pick three concepts, and say why for each in your own words." }, 400);
+    const { sub, email, role } = c.get("session");
+    try {
+      const { picks, passes } = body.data;
+      const saved = await conceptPicks.save(c.req.param("batchId"), { picks, ...(passes ? { passes } : {}) }, { email, role });
+      log.info("concept_pick_saved", { batch: c.req.param("batchId"), concepts: picks.map((pick) => pick.ideaId).join(","), by: sub });
+      return c.json(saved);
+    } catch (error) {
+      if (error instanceof Refusal) return c.json({ error: "refused", message: error.message }, 400);
       throw error;
     }
   });

@@ -355,6 +355,19 @@ export interface ConceptPick {
   at: string;
 }
 
+/** The concept board: every concept of a batch with its roughs and the critic's review, for the owner's pick of three. */
+export interface ConceptBoard {
+  batch: Batch;
+  brand: { id: string; name: string };
+  product: { id: string; name: string };
+  insights: Insight[];
+  /** "not_yet": the critic has not reviewed the set as it is now. "closed": the owner approved the words of his pick. */
+  picking: "not_yet" | "open" | "closed";
+  reviewedAt: string | null;
+  concepts: { idea: Idea; roughs: { imageId: string; viewUrl: string }[]; review: ConceptReview | null }[];
+  pick: ConceptPick | null;
+}
+
 export const SUBLINE_BASES = ["fact", "second_beat", "none"] as const;
 export type SublineBasis = (typeof SUBLINE_BASES)[number];
 

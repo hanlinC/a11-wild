@@ -19,6 +19,9 @@ const STAGES = [
   { name: "Finals", detail: "High quality, re-measured, with a real-camera finish.", ready: true },
 ] as const;
 
+/** A batch of concept ads opens on its concepts until its drafts are made. */
+const CONCEPT_STATES = ["truth", "briefed", "ideas", "reviewed", "judged", "worded", "directed"];
+
 export function Home() {
   const mcpAddress = `${window.location.origin}/mcp`;
   const [buildId, setBuildId] = useState<string>();
@@ -78,7 +81,7 @@ export function Home() {
             {batches.map(({ batch, brand, product }) => (
               <li key={batch.id}>
                 <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <Link to={`/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
+                  <Link to={batch.kind === "v3" && CONCEPT_STATES.includes(batch.state) ? `/batches/${batch.id}/concepts` : `/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
                     {batch.label ?? "Batch"}
                   </Link>
                   <span className="text-body text-muted-foreground">

@@ -5,6 +5,7 @@ import { requireMove, stepAfter } from "../../batch/state.js";
 import type { BatchStore } from "../../batch/store.js";
 import type { BrandStore } from "../../brand/store.js";
 import type { BriefStore } from "../../brief/store.js";
+import type { ConceptBoardService } from "../../concepts/board.js";
 import { CONCEPTS_PICKED, type ConceptPicks } from "../../concepts/pick.js";
 import type { FactStore } from "../../facts/store.js";
 import { conceptFaults, CONCEPTS_MAX, CONCEPTS_MIN, ELEMENTS_MAX, INSIGHTS_MIN, photoNames, TERRITORIES_MAX, TERRITORIES_MIN } from "../../ideas/checks.js";
@@ -17,6 +18,7 @@ export interface ConceptToolDeps {
   reads: BatchReads;
   briefs: BriefStore;
   conceptPicks: ConceptPicks;
+  conceptBoard: ConceptBoardService;
 }
 
 /** The most concepts one batch keeps, with every round of more concepts counted. */
@@ -32,7 +34,7 @@ const usable = (insight: Pick<Insight, "basis">) => insight.basis !== "hypothesi
 
 const NOT_V3 = "Only a batch of concept ads (v3) has a brief and concepts. A v1 or v2 batch saves its ideas with ideas_save.";
 
-export function conceptTools({ batches, brands, facts, reads, briefs, conceptPicks }: ConceptToolDeps): ToolDefinition[] {
+export function conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }: ConceptToolDeps): ToolDefinition[] {
   return [
     defineTool({
       name: "brief_save",
@@ -185,6 +187,13 @@ export function conceptTools({ batches, brands, facts, reads, briefs, conceptPic
           nextStep: `make a rough of each concept worth one (render_submit with kind "rough"), then ${stepAfter(moved)}`,
         };
       },
+    }),
+    defineTool({
+      name: "concept_board",
+      description:
+        "Returns the concept board of a v3 batch, after the critic's review: every concept with its words, a link to each of its roughs and the critic's scores and notes. Free. The main agent calls it to show the owner the whole set before he picks three: show every concept, not only the ones the critic recommends, and look at each rough yourself before you show it. The same board is in the dashboard. The links last a short time.",
+      input: { batchId: id },
+      handler: ({ batchId }) => conceptBoard.show(batchId),
     }),
     defineTool({
       name: "concept_pick",

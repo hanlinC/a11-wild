@@ -1,4 +1,4 @@
-import type { BatchSummary, Board, BrandPage, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { BatchSummary, Board, BrandPage, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -47,6 +47,13 @@ export const api = {
   board: (batchId: string) => request<Board>(`/api/batches/${encodeURIComponent(batchId)}/board`),
   pick: (batchId: string, pick: { ideaId: string; imageId: string | null; ownerSaid: string }) =>
     request<{ pick: Pick; note?: string }>(`/api/batches/${encodeURIComponent(batchId)}/picks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(pick),
+    }),
+  concepts: (batchId: string) => request<ConceptBoard>(`/api/batches/${encodeURIComponent(batchId)}/concepts`),
+  pickConcepts: (batchId: string, pick: { picks: { ideaId: string; ownerSaid: string }[] }) =>
+    request<{ state: string; warnings?: string[] }>(`/api/batches/${encodeURIComponent(batchId)}/concept-pick`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(pick),

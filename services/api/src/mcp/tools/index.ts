@@ -40,6 +40,7 @@ import type { ToolDefinition } from "../registry.js";
 import { batchTools } from "./batch.js";
 import { boardTools } from "./board.js";
 import { brandTools } from "./brand.js";
+import { ConceptBoardService } from "../../concepts/board.js";
 import { ConceptPicks } from "../../concepts/pick.js";
 import { conceptTools } from "./concepts.js";
 import { copyTools } from "./copy.js";
@@ -100,6 +101,7 @@ export function studioTools(parts: StudioParts) {
   const calibration = new Calibration({ batches, picks, critic: criticStore });
   const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore, images, pictures });
   const conceptPicks = new ConceptPicks({ table, now, batches, brands, briefs, critic, tasteLog });
+  const conceptBoard = new ConceptBoardService({ batches, brands, briefs, critic, images, pictures, conceptPicks });
   const done = new DoneGate({ batches, brands, facts, truth, board, copy });
   const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
@@ -107,7 +109,7 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, done, copy, meta, packs, pack, results };
+  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, done, copy, meta, packs, pack, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -116,7 +118,7 @@ export function studioTools(parts: StudioParts) {
     ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }),
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
-    ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks }),
+    ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }),
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),

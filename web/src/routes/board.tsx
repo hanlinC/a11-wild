@@ -46,6 +46,11 @@ export function Board() {
         <Link to={`/brands/${brand.id}`} className="underline underline-offset-2">
           Brand, facts and photos
         </Link>
+        {batch.kind === "v3" ? (
+          <Link to={`/batches/${batch.id}/concepts`} className="underline underline-offset-2">
+            Concepts and the critic's notes
+          </Link>
+        ) : null}
       </p>
 
       <Section title="What is true about the product">

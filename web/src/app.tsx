@@ -8,6 +8,7 @@ import { Board } from "@/routes/board";
 import { Brand } from "@/routes/brand";
 import { Brands } from "@/routes/brands";
 import { Calibration } from "@/routes/calibration";
+import { Concepts } from "@/routes/concepts";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
 import { Pack } from "@/routes/pack";
@@ -54,6 +55,7 @@ function Dashboard() {
           <Route path="brands" element={<Brands />} />
           <Route path="brands/:brandId" element={<Brand />} />
           <Route path="batches/:batchId" element={<Board />} />
+          <Route path="batches/:batchId/concepts" element={<Concepts />} />
           <Route path="taste" element={<Taste />} />
           <Route path="packs" element={<Packs />} />
           <Route path="calibration" element={<Calibration />} />
