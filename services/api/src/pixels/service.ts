@@ -12,6 +12,8 @@ import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { Pictures } from "../pictures/store.js";
 import type { PixelRunner } from "./runner.js";
+import { lockupLayout } from "../direction/lockup.js";
+import type { DirectionStore } from "../direction/store.js";
 import { type JobStore, jobView, type StoredJob } from "./store.js";
 
 /** A job with no result after this long did not run to its end. */
@@ -29,6 +31,7 @@ interface Deps {
   jobs: JobStore;
   pictures: Pictures;
   copy: CopyStore;
+  directions: DirectionStore;
   /** Missing where the pixel function is not deployed. */
   runner: PixelRunner | undefined;
   now: () => Date;
@@ -265,11 +268,15 @@ export class PixelService {
       throw new Refusal(`The studio holds no font file of "${input.subFamily}" for this brand. Save it with font_save, or leave subFamily out and the subline takes the headline font.`);
     }
     if (input.logo && !brand.logo) throw new Refusal("This brand has no saved logo. Save one with brand_save, or send logo false and tell the owner the ad has no logo yet.");
+    // The words of a concept ad stand where its direction says: the place follows the picture, not a habit.
+    const plan = batch.kind === "v3" ? (await this.deps.directions.get(input.batchId))?.concepts.find((concept) => concept.ideaId === root.ideaId) : undefined;
+    if (batch.kind === "v3" && !plan) throw new Refusal(`Concept ${root.ideaId} has no direction, so the studio does not know where its words stand. Save it first (direction_save).`);
+    const layout = plan && root.ideaId ? lockupLayout(plan.lockup, root.ideaId, input.layout) : input.layout;
     return this.start(
       "headline",
       input.batchId,
       {
-        ...input.layout,
+        ...layout,
         headline: words.headline,
         subline: words.subline,
         ...(words.footnote ? { footnote: words.footnote } : {}),
