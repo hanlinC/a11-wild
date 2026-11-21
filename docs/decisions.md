@@ -14,3 +14,9 @@ Each owner decision, newest last. Dates are day-month-year.
 | 21-11-2026 | Spend gate: under US$1 continue, otherwise the owner says yes. | Applies to Parallel and fal, per batch. |
 | 21-11-2026 | The shape, print, cap and real-camera checks of a11-adgen stay. | They run as server tools at fixed points of the pipeline. |
 | 21-11-2026 | Fluid components stay as the registry ships them. | The dashboard turns off two strict type checks that the registry code does not pass. |
+| 21-11-2026 | The owner gets an email when a new program waits for approval. | The studio publishes one notice per new program to a topic that emails the cost-alert address. The owner confirms the subscription once. |
+| 22-11-2026 | A brand or a product is saved only from what the server itself read. | `brand_save` and `product_save` take an offer id from `brand_extract` or `product_extract`. An agent cannot save a kit it made up. |
+| 22-11-2026 | A fact is kept only when its exact words are on the page it names. | The server reads the page again at save time. A number in a truth sheet with no such fact is marked `unverified`. |
+| 22-11-2026 | The taste canon is plain text with versions. | Each save needs a reason and makes a new version. Old versions stay readable. Only the owner saves. |
+| 22-11-2026 | The taste data of a11-adgen is copied once, through the two MCP servers. | Each record keeps its a11-adgen id, so a second copy changes nothing. Private picture links are not copied. The gold set waits for the judging slice. |
+| 22-11-2026 | Caps: US$25 a month, US$5 a batch. | A paid call holds its price first. A call that would pass a cap is refused. A call with an unknown result stays counted. |

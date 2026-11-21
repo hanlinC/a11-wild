@@ -33,7 +33,7 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | `GET /api/health` | 200, `ok: true` |
 | `POST /mcp` with no token | 401, with `resource_metadata` in `WWW-Authenticate` |
 | `GET /.well-known/oauth-protected-resource/mcp` | 200, names this server and one authorization server |
-| `GET /api/me`, `/api/clients` with no session | 401 each |
+| `GET /api/me`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste` with no session | 401 each |
 | `POST /api/clients/<id>/approve` from another origin | 401 or 403 |
 | `GET /` and `GET /api/health` | HSTS, CSP with `frame-ancestors 'none'`, `nosniff`, `X-Frame-Options: DENY` |
 | `GET /api/<unknown>` | 404 as JSON, not the dashboard page |

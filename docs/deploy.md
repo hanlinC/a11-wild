@@ -19,8 +19,9 @@ Run these once, signed in to AWS with the owner's browser sign-in (`aws login`),
 2. **Cost alert address.** The address that gets the US$10 alert is kept out of the repository:
    `aws ssm put-parameter --name /a11-wild/alert-email --type String --value <address>`
 3. **First deploy.** `npm run build && cd infra && npx cdk deploy A11WildStudio A11WildGithubDeploy`.
-4. **Invite the owner.** `npm run user:invite -- <address> owner`. The user pool emails a temporary password. The owner sets their own at first sign-in.
-5. **Let GitHub deploy.** In the repository settings, under Secrets and variables, Actions, add:
+4. **Confirm the notices.** After the first deploy, AWS emails the cost-alert address a "Subscription confirmation". The owner opens its link once. Until then the email about a program that waits for approval is not delivered.
+5. **Invite the owner.** `npm run user:invite -- <address> owner`. The user pool emails a temporary password. The owner sets their own at first sign-in.
+6. **Let GitHub deploy.** In the repository settings, under Secrets and variables, Actions, add:
    - Secret `AWS_DEPLOY_ROLE_ARN`: the `DeployRoleArn` output of `A11WildGithubDeploy`.
    - Variable `AWS_REGION`: the Region.
 
@@ -51,7 +52,7 @@ Inviting or stopping a person needs the owner's yes.
 
 ## Provider keys
 
-The Parallel and fal keys are SecureString parameters in Parameter Store. The owner gives each one through a secure form at the step that first needs it. They are never in the repository, a workflow or a log.
+The Parallel and fal keys are SecureString parameters in Parameter Store, at `/a11-wild/keys/parallel` and `/a11-wild/keys/fal`. Only the API function may read them. Until a key is there, each tool that needs it refuses and says so. The owner gives each one through a secure form at the step that first needs it. They are never in the repository, a workflow or a log.
 
 ## Rollback
 
