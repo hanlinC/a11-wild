@@ -30,17 +30,20 @@ async function loadConfig(): Promise<Config> {
   return buildConfig(JSON.parse(result.Parameter?.Value ?? "null"), process.env.BUILD_ID ?? "dev");
 }
 
-export interface Wired {
+export interface WiredClients {
   config: Config;
   cognito: UserPoolClients;
   approvals: ClientApprovals;
   table: DynamoTable;
+}
+
+export interface Wired extends WiredClients {
   keys: ProviderKeys;
   pictures: Pictures;
 }
 
-/** Connects the real AWS services. Runs once for each function instance. */
-export async function wire(): Promise<Wired> {
+/** The clients and their approvals. The daily clean-up needs these only, and it has no key and no picture to read. */
+export async function wireClients(): Promise<WiredClients> {
   const config = await loadConfig();
   const table = new DynamoTable(new DynamoDBClient({}), env("TABLE_NAME"));
   const cognito = new UserPoolClients(new CognitoIdentityProviderClient({}), config.userPoolId);
@@ -48,9 +51,15 @@ export async function wire(): Promise<Wired> {
   const topic = process.env.OWNER_TOPIC_ARN;
   const notifier = topic ? new SnsNotifier(new SNSClient({}), topic, config.publicOrigin) : undefined;
   const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, () => new Date(), notifier);
+  return { config, cognito, approvals, table };
+}
+
+/** Connects the real AWS services for the API. Runs once for each function instance. */
+export async function wire(): Promise<Wired> {
+  const clients = await wireClients();
   const keys = new ParameterKeys(new SSMClient({}), env("KEYS_PREFIX"));
   const pictures = new S3Pictures(new S3Client({}), env("PICTURES_BUCKET"));
-  return { config, cognito, approvals, table, keys, pictures };
+  return { ...clients, keys, pictures };
 }
 
 export function appDeps({ config, table, approvals, keys, pictures }: Wired): Deps {
