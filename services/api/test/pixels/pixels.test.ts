@@ -89,12 +89,21 @@ describe("pack_check and cap_check", () => {
     expect(looked.value.checks.items).toEqual([{ code: "D11", note: expect.stringContaining("FAIL at 2%"), tool: "pack_check" }]);
   });
 
+  it("cuts the pack out for a check and a repair the same way as for the skeleton", async () => {
+    const tuned = { box: [10, 20, 600, 900], cutout: { darkMax: 60, edges: "top,left" } };
+    const imageId = await draft("idea-1", { bg: "E83C28", ...tuned });
+    await run("pack_check", { imageId, at: [512, 900], bg: "E83C28", box: [300, 600, 724, 1100] });
+    expect(studio.pixels.events.at(-1)!.input).toMatchObject({ ...tuned, around: [300, 600, 724, 1100] });
+    await run("product_swap", { imageId, old: [400, 620, 500, 1100] });
+    expect(studio.pixels.events.at(-1)!.input).toMatchObject(tuned);
+  });
+
   it("takes a box for a pack that stands on something", async () => {
     const imageId = await draft();
     await run("pack_check", { imageId, at: [512, 900], bg: "E83C28", box: [300, 600, 724, 1100] });
-    expect(studio.pixels.events.at(-1)!.input).toMatchObject({ box: [300, 600, 724, 1100] });
+    expect(studio.pixels.events.at(-1)!.input).toMatchObject({ around: [300, 600, 724, 1100] });
     await run("pack_check", { imageId, at: [512, 900], bg: "E83C28" });
-    expect(studio.pixels.events.at(-1)!.input).not.toHaveProperty("box");
+    expect(studio.pixels.events.at(-1)!.input).not.toHaveProperty("around");
   });
 
   it("clears its own D11 with a later pass, and keeps the cap's", async () => {

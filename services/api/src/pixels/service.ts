@@ -110,8 +110,9 @@ export class PixelService {
 
   async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[] }): Promise<PixelView> {
     const image = await this.rendered(input.batchId, input.imageId);
-    const { batchId: _batchId, imageId: _imageId, ...rest } = input;
-    return this.start("pack_check", input.batchId, { ...rest, packKey: await this.packKey(input.batchId), renderKey: image.key }, { imageId: image.id });
+    const { batchId: _batchId, imageId: _imageId, box: around, ...rest } = input;
+    // `box` in a job is the pack's box in the pack photo, so the box round the drawn pack goes as `around`.
+    return this.start("pack_check", input.batchId, { ...rest, ...(around ? { around } : {}), ...(await this.packOf(input.batchId, image)), renderKey: image.key }, { imageId: image.id });
   }
 
   async capCheck(input: { batchId: string; imageId: string; box: number[]; split: number }): Promise<PixelView> {
@@ -119,12 +120,22 @@ export class PixelService {
     return this.start("cap_check", input.batchId, { box: input.box, split: input.split, renderKey: image.key }, { imageId: image.id });
   }
 
-  /** The plan of the skeleton that a picture was built round, through its draft when it is a final or a repair. */
-  private async planOf(batchId: string, image: BatchImage): Promise<unknown> {
+  /** What the skeleton of a picture was made with, through its draft when the picture is a final or a repair. */
+  private async skeletonOf(batchId: string, image: BatchImage): Promise<Record<string, unknown>> {
     const { images, jobs } = this.deps;
     let at: BatchImage | undefined = image;
     for (let step = 0; at && at.kind !== "skeleton" && step < 6; step += 1) at = at.fromId ? await images.get(batchId, at.fromId) : undefined;
-    const plan = at ? (await jobs.get(batchId, at.id)).input.plan : undefined;
+    return at ? (await jobs.get(batchId, at.id)).input : {};
+  }
+
+  /** The pack photo, cut out the same way as for the picture's skeleton: its tuning and its box are carried to each later tool. */
+  private async packOf(batchId: string, image: BatchImage): Promise<Record<string, unknown>> {
+    const { cutout, box } = await this.skeletonOf(batchId, image);
+    return { packKey: await this.packKey(batchId), ...(cutout ? { cutout } : {}), ...(box ? { box } : {}) };
+  }
+
+  private async planOf(batchId: string, image: BatchImage): Promise<unknown> {
+    const { plan } = await this.skeletonOf(batchId, image);
     if (!plan) throw new Refusal("A reprint needs the plan of the skeleton the picture was built round. This picture's skeleton was made without a plan: repair it with product_swap, or render it again.");
     return plan;
   }
@@ -135,7 +146,7 @@ export class PixelService {
     return this.start(
       "reprint",
       input.batchId,
-      { face: input.face, plan, packKey: await this.packKey(input.batchId), renderKey: image.key },
+      { face: input.face, plan, ...(await this.packOf(input.batchId, image)), renderKey: image.key },
       { imageId: image.id, out: { kind: "reprint", fromId: image.id, rootId: this.root(image), ...(image.ideaId ? { ideaId: image.ideaId } : {}) } },
     );
   }
@@ -146,7 +157,7 @@ export class PixelService {
     return this.start(
       "swap",
       input.batchId,
-      { ...rest, packKey: await this.packKey(input.batchId), renderKey: image.key },
+      { ...rest, ...(await this.packOf(input.batchId, image)), renderKey: image.key },
       { imageId: image.id, out: { kind: "swap", fromId: image.id, rootId: this.root(image), ...(image.ideaId ? { ideaId: image.ideaId } : {}) } },
     );
   }

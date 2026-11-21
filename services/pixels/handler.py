@@ -211,9 +211,9 @@ def check_pack(job):
     render = job.fetch("renderKey")
     four_by_five(render, "The render")
     at = numbers(job.input.get("at"), 2, "at")
-    if job.input.get("box") is not None:
+    if job.input.get("around") is not None:
         # A pack that stands on something: measure inside a box that ends at its base, so the thing below is not taken as pack.
-        x0, y0, x1, y1 = (int(v) for v in numbers(job.input["box"], 4, "box").split(","))
+        x0, y0, x1, y1 = (int(v) for v in numbers(job.input["around"], 4, "box").split(","))
         x, y = (int(v) for v in at.split(","))
         with Image.open(render) as picture:
             if not (0 <= x0 < x1 <= picture.width and 0 <= y0 < y1 <= picture.height and x0 <= x < x1 and y0 <= y < y1):

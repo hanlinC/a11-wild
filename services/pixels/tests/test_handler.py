@@ -128,9 +128,9 @@ class Handler(unittest.TestCase):
         self.store.add("batches/b1/drafts/plinth.png", Image.fromarray(on_plinth))
         args = dict(packKey="products/p/pack.png", renderKey="batches/b1/drafts/plinth.png", at=[512, 900], bg="E83C28")
         self.assertFalse(self.job("pack_check", **args)["passed"])  # the plinth is taken as pack
-        boxed = self.job("pack_check", **args, box=[300, 600, 724, 1100])
+        boxed = self.job("pack_check", **args, around=[300, 600, 724, 1100])
         self.assertTrue(boxed["ok"] and boxed["passed"], boxed)
-        outside = self.job("pack_check", **args, box=[600, 600, 724, 1100])
+        outside = self.job("pack_check", **args, around=[600, 600, 724, 1100])
         self.assertIn("box must lie inside the picture and hold the point", outside["error"])
 
     def test_cap_check_fails_a_cap_that_sits_off_centre(self):
