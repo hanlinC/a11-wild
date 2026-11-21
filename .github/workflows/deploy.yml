@@ -1,0 +1,44 @@
+name: deploy
+
+# A merge to main is a deploy. The job takes a short-lived AWS role through
+# OpenID Connect; the repository holds no AWS key.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skipped until the owner sets the two repository variables (docs/deploy.md).
+    if: vars.AWS_DEPLOY_ROLE_ARN != '' && vars.AWS_REGION != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: a11-wild-deploy
+      - name: Deploy the studio
+        working-directory: infra
+        run: npx cdk deploy A11WildStudio --require-approval never --outputs-file ../cdk-outputs.json
+      - name: Probe the live studio
+        run: npm run probe -- "$(node -p "require('./cdk-outputs.json').A11WildStudio.PublicOrigin")"

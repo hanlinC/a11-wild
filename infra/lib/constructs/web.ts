@@ -88,7 +88,6 @@ export class Web extends Construct {
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
       comment: "a11-wild studio",
       defaultRootObject: "index.html",
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_ALL,
       defaultBehavior: {
