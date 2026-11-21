@@ -92,7 +92,9 @@ export function Brand() {
             {batches.map((batch) => (
               <li key={batch.id}>
                 <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="text-body font-medium">{batch.label ?? "Batch"}</span>
+                  <Link to={`/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
+                    {batch.label ?? "Batch"}
+                  </Link>
                   <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
                     {batch.state.replace("_", " ")}
                   </Badge>

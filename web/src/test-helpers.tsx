@@ -28,7 +28,8 @@ export function renderSignedIn(ui: ReactNode, me: Me = OWNER, path = "/") {
   );
 }
 
-type Handler = () => { status?: number; body: unknown };
+/** A handler gets what the page sent as JSON, when it sent any. */
+type Handler = (sent?: unknown) => { status?: number; body: unknown };
 
 /** Replaces fetch with a table of "METHOD /path" answers and records the calls made. */
 export function stubApi(routes: Record<string, Handler>) {
@@ -38,7 +39,7 @@ export function stubApi(routes: Record<string, Handler>) {
     calls.push(key);
     const handler = routes[key];
     if (!handler) return Response.json({ error: "not_found" }, { status: 404 });
-    const { status = 200, body } = handler();
+    const { status = 200, body } = handler(typeof init?.body === "string" ? JSON.parse(init.body) : undefined);
     return Response.json(body, { status });
   });
   return calls;

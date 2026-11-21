@@ -4,6 +4,7 @@ import { Route, Routes } from "react-router";
 import { Shell } from "@/components/shell";
 import { ApiError, api } from "@/lib/api";
 import { SessionProvider } from "@/lib/session";
+import { Board } from "@/routes/board";
 import { Brand } from "@/routes/brand";
 import { Brands } from "@/routes/brands";
 import { Connections } from "@/routes/connections";
@@ -39,6 +40,7 @@ export function App() {
           <Route index element={<Home />} />
           <Route path="brands" element={<Brands />} />
           <Route path="brands/:brandId" element={<Brand />} />
+          <Route path="batches/:batchId" element={<Board />} />
           <Route path="taste" element={<Taste />} />
           <Route path="spend" element={<Spend />} />
           <Route path="connections" element={<Connections />} />
