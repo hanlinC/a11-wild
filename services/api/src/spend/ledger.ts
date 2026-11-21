@@ -15,7 +15,7 @@ export class BudgetError extends Refusal {}
  * Any other failure (a timeout, a broken connection, a reply that cannot be read) has an unknown outcome,
  * so its reserve stays counted for the rest of the month.
  */
-export class NotBilledError extends Error {}
+export class NotBilledError extends Refusal {}
 
 export interface PaidCall {
   service: SpendService;

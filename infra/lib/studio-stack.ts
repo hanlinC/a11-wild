@@ -11,6 +11,9 @@ import { Web } from "./constructs/web.js";
 /** The functions read this parameter at start. Its name is fixed so that they need no reference to it. */
 export const CONFIG_PARAMETER = "/a11-wild/runtime-config";
 
+/** The owner stores each provider key under this path, as an encrypted parameter. No key is in the stack or the repository. */
+export const KEYS_PREFIX = "/a11-wild/keys";
+
 export interface StudioStackProps extends StackProps {
   buildId: string;
 }
@@ -23,6 +26,8 @@ export class StudioStack extends Stack {
     const api = new Api(this, "Api", {
       table: data.table,
       configParameterName: CONFIG_PARAMETER,
+      pictures: data.pictures,
+      keysPrefix: KEYS_PREFIX,
       buildId: props.buildId,
     });
     const web = new Web(this, "Web", { apiOriginDomainName: api.originDomainName });

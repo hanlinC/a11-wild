@@ -48,3 +48,55 @@ export interface SpendSummary {
   batchUsd?: number;
   lines: SpendLine[];
 }
+
+export interface PictureRef {
+  /** Where the picture sits in the studio's private store. */
+  key: string;
+  /** The page address it was copied from. */
+  sourceUrl: string;
+}
+
+export const PALETTE_ROLES = ["primary", "secondary", "accent", "background", "text"] as const;
+export type PaletteRole = (typeof PALETTE_ROLES)[number];
+
+export interface BrandKit {
+  id: string;
+  name: string;
+  /** The brand's home page. */
+  url: string;
+  logo: PictureRef | null;
+  palette: { role: PaletteRole; hex: string }[];
+  fonts: string[];
+  createdAt: string;
+  savedBy: string;
+  /** The record's id in a11-adgen, when it was copied from there. */
+  originId?: string;
+}
+
+export interface ProductPhoto extends PictureRef {
+  /** `pack` shows the product as sold. `food` shows the brand's own photo of the food itself. */
+  kind: "pack" | "food";
+}
+
+export interface Product {
+  id: string;
+  brandId: string;
+  name: string;
+  /** The product's own page. */
+  url: string;
+  photos: ProductPhoto[];
+  createdAt: string;
+  savedBy: string;
+}
+
+/** One claim about a product, proven by words copied exactly from a page. */
+export interface Fact {
+  id: string;
+  productId: string;
+  claim: string;
+  quote: string;
+  url: string;
+  /** When the studio last read the page and found the quote in it. */
+  checkedAt: string;
+  savedBy: string;
+}

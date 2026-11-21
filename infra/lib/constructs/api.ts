@@ -9,6 +9,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
+import type * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
 const REPO_ROOT = path.join(import.meta.dirname, "../../..");
@@ -18,6 +19,10 @@ export interface ApiProps {
   table: dynamodb.ITableV2;
   /** Name of the parameter that holds the values known only after deploy. */
   configParameterName: string;
+  /** Where the studio keeps its pictures. Only the API function reads and writes it. */
+  pictures: s3.IBucket;
+  /** The path under which the owner stores the provider keys, as encrypted parameters. */
+  keysPrefix: string;
   buildId: string;
 }
 
@@ -71,6 +76,22 @@ export class Api extends Construct {
     };
 
     this.apiFunction = makeFunction("ApiFunction", "handler.ts", Duration.seconds(29));
+    this.apiFunction.addEnvironment("KEYS_PREFIX", props.keysPrefix);
+    this.apiFunction.addEnvironment("PICTURES_BUCKET", props.pictures.bucketName);
+    props.pictures.grantReadWrite(this.apiFunction);
+    // The provider keys are read by this one function, at the moment a call needs one.
+    this.apiFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: [
+          Stack.of(this).formatArn({
+            service: "ssm",
+            resource: "parameter",
+            resourceName: `${props.keysPrefix.replace(/^\//, "")}/*`,
+          }),
+        ],
+      }),
+    );
     this.pruneFunction = makeFunction("PruneFunction", "prune-handler.ts", Duration.minutes(5));
 
     this.httpApi = new apigwv2.HttpApi(this, "HttpApi", {

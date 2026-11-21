@@ -75,6 +75,22 @@ describe("studio stack", () => {
     }
   });
 
+  it("lets only the API function read the provider keys and use the picture bucket", () => {
+    const policies = Object.entries(template.findResources("AWS::IAM::Policy"));
+    const holds = (...texts: string[]) =>
+      policies.filter(([, policy]) => texts.every((text) => JSON.stringify(policy).includes(text))).map(([id]) => id);
+    const keyReaders = holds("parameter/a11-wild/keys/*");
+    expect(keyReaders).toHaveLength(1);
+    expect(keyReaders[0]).toMatch(/ApiFunction/);
+    expect(holds("DataPictures")).toEqual(keyReaders);
+
+    const functions = Object.entries(template.findResources("AWS::Lambda::Function"));
+    const withKeys = functions.filter(([, fn]) => fn.Properties.Environment?.Variables?.KEYS_PREFIX !== undefined);
+    expect(withKeys.map(([id]) => id)).toEqual([expect.stringMatching(/ApiFunction/)]);
+    // The key's place is named, never the key.
+    expect(withKeys[0]?.[1].Properties.Environment.Variables.KEYS_PREFIX).toBe("/a11-wild/keys");
+  });
+
   it("has no sign-up: only an administrator creates users, and errors hide whether a user exists", () => {
     template.hasResourceProperties("AWS::Cognito::UserPool", {
       AdminCreateUserConfig: { AllowAdminCreateUserOnly: true },

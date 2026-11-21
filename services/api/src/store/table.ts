@@ -17,6 +17,12 @@ export interface Item {
 }
 
 /** The few table operations the studio needs. Tests use an in-memory version. */
+/** The stored record without its table keys. */
+export function record<T>(item: Item & T): T {
+  const { pk: _pk, sk: _sk, expiresAt: _expiresAt, ...rest } = item;
+  return rest as T;
+}
+
 export interface Table {
   get<T extends Item>(pk: string, sk: string): Promise<T | undefined>;
   /** Returns false when `ifNotExists` is set and the item is already there. */
