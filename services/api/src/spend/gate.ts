@@ -6,7 +6,7 @@ import { showUsd, toMicro, toUsd } from "./money.js";
 /** The estimate at which a batch waits for the owner's yes. */
 export const ASK_FROM_USD = 1;
 
-export type GateStage = "drafts" | "finals";
+export type GateStage = "research" | "drafts" | "finals";
 
 /** The stage cannot continue yet. The message says what it waits for. */
 export class GateError extends Refusal {}
@@ -73,6 +73,23 @@ export class SpendGate {
     };
     await this.table.put(approved);
     return this.view(approved);
+  }
+
+  /**
+   * The same rule for research, which has no count to estimate from: a batch's research goes on
+   * freely while its total stays under US$1, and each further US$1 waits for the owner's yes.
+   */
+  async research(batchId: string, usedMicro: number, nextMicro: number): Promise<void> {
+    const [pk, sk] = key(batchId, "research");
+    const item = await this.table.get<GateItem>(pk, sk);
+    const step = toMicro(ASK_FROM_USD);
+    const allowed = Math.max(step, item?.approvedMicro ?? 0);
+    if (usedMicro + nextMicro < allowed) return;
+    const asked = allowed + step;
+    if (item?.estimateMicro !== asked) await this.table.put({ ...item, pk, sk, count: 0, estimateMicro: asked });
+    throw new GateError(
+      `This batch waits for the owner's yes: its research has used ${showUsd(usedMicro)}, and this call needs about ${showUsd(nextMicro)}. The batch may spend under ${showUsd(allowed)} on research so far. Show the owner these amounts. His yes lets research go on up to ${showUsd(asked)}. Only the owner can approve (spend_approve with stage "research"). Nothing was sent.`,
+    );
   }
 
   /** Passes when the rest of the stage may be sent. Throws a GateError that says what is missing. */

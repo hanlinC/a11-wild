@@ -20,3 +20,4 @@ Each owner decision, newest last. Dates are day-month-year.
 | 22-11-2026 | The taste canon is plain text with versions. | Each save needs a reason and makes a new version. Old versions stay readable. Only the owner saves. |
 | 22-11-2026 | The taste data of a11-adgen is copied once, through the two MCP servers. | Each record keeps its a11-adgen id, so a second copy changes nothing. Private picture links are not copied. The gold set waits for the judging slice. |
 | 22-11-2026 | Caps: US$25 a month, US$5 a batch. | A paid call holds its price first. A call that would pass a cap is refused. A call with an unknown result stays counted. |
+| 22-11-2026 | Research in a batch waits for the owner at each US$1. | Research has no count to estimate from, so the gate reads the batch's total: under US$1 it goes on, and each further US$1 needs a new yes (`spend_approve`, stage `research`). Research for no batch has only the month's cap. |

@@ -41,7 +41,7 @@ export function studioTools(parts: StudioParts) {
   const { config, table, now, pictures, net } = parts;
   const ledger = new SpendLedger(table, now);
   const gate = new SpendGate(table, now);
-  const parallel = new ParallelClient(parts.keys, ledger, parts.parallelFetch);
+  const parallel = new ParallelClient(parts.keys, ledger, parts.parallelFetch, gate);
   const brands = new BrandStore(table, now);
   const facts = new FactStore(table, parallel, now);
   const canon = new CanonStore(table, now);

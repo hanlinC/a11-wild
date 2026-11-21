@@ -146,6 +146,14 @@ export class SpendLedger {
     }
   }
 
+  /** What a batch has spent or still holds in reserve with one service this month, in micro-dollars. */
+  async batchMicro(batchId: string, service: SpendService): Promise<number> {
+    const items = await this.table.query<LineItem>(monthKey(this.month()));
+    return items
+      .filter((item) => item.sk.startsWith("LINE#") && item.batchId === batchId && item.service === service && item.status !== "released")
+      .reduce((sum, item) => sum + item.micro, 0);
+  }
+
   /** This month's total, the caps and the lines; with a batch id, that batch's total and lines. */
   async summary(batchId?: string): Promise<SpendSummary> {
     const month = this.month();

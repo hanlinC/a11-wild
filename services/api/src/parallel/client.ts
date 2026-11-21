@@ -1,6 +1,8 @@
 import { Refusal } from "../mcp/registry.js";
 import type { ProviderKeys } from "../secrets.js";
+import type { SpendGate } from "../spend/gate.js";
 import { NotBilledError, type SpendLedger } from "../spend/ledger.js";
+import { toMicro } from "../spend/money.js";
 
 const BASE = "https://api.parallel.ai";
 
@@ -62,6 +64,8 @@ export class ParallelClient {
     private readonly keys: ProviderKeys,
     private readonly ledger: SpendLedger,
     private readonly fetchFn: typeof fetch = (input, init) => fetch(input, init),
+    /** Holds a batch's research at each US$1 until the owner says yes. */
+    private readonly gate?: SpendGate,
     private readonly timeoutMs = 25_000,
   ) {}
 
@@ -98,6 +102,7 @@ export class ParallelClient {
   ): Promise<T> {
     // Read the key first: with no key there is nothing to send, so nothing to reserve.
     await this.keys.get("parallel");
+    if (batchId && this.gate) await this.gate.research(batchId, await this.ledger.batchMicro(batchId, "parallel"), toMicro(usd));
     return this.ledger.paid({ service: "parallel", kind, ref, usd, ...(batchId ? { batchId } : {}) }, async () => ({
       value: await call(),
     }));

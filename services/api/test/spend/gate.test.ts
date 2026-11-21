@@ -56,4 +56,15 @@ describe("spend gate", () => {
   it("has no yes to give before a price is known", async () => {
     await expect(gate.approve("batch-1", "drafts", owner)).rejects.toThrow(/no estimate/);
   });
+
+  it("lets research go on under US$1 and asks again at each further US$1", async () => {
+    const owner = { email: "owner@example.com", role: "owner" as const };
+    await gate.research("b1", 900_000, 99_999);
+    await expect(gate.research("b1", 900_000, 100_000)).rejects.toThrow(/up to US\$2\.00/);
+    await gate.approve("b1", "research", owner);
+    await gate.research("b1", 1_000_000, 999_999);
+    await expect(gate.research("b1", 1_900_000, 100_000)).rejects.toThrow(/up to US\$3\.00/);
+    // The yes for US$2 does not cover the next question.
+    await expect(gate.research("b1", 1_900_000, 100_000)).rejects.toThrow(GateError);
+  });
 });

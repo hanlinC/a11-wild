@@ -82,6 +82,22 @@ describe("fact tools", () => {
     expect((await studio.spend.ledger.summary()).monthUsd).toBe(0.01);
   });
 
+  it("holds a batch's research at US$1 until the owner says yes", async () => {
+    const ask = { question: "How tall is the WonGi seaweed crisps pack, in mm?", processor: "core", batchId: "b1" };
+    for (let sent = 0; sent < 39; sent++) expect((await callTool(studio, "research_start", ask)).ok).toBe(true);
+    const calls = studio.parallelCalls.length;
+
+    const held = await callTool(studio, "research_start", ask);
+    expect(held).toEqual({ ok: false, error: expect.stringMatching(/waits for the owner's yes.*US\$0\.975.*up to US\$2\.00.*Nothing was sent/) });
+    expect(studio.parallelCalls).toHaveLength(calls);
+    expect((await studio.spend.ledger.summary("b1")).batchUsd).toBe(0.975);
+    // Another batch, and research for no batch, are not held by this one.
+    expect((await callTool(studio, "research_start", { ...ask, batchId: "b2" })).ok).toBe(true);
+
+    expect((await callTool(studio, "spend_approve", { batchId: "b1", stage: "research" })).value).toMatchObject({ estimateUsd: 2, approvedBy: "owner@example.com" });
+    expect((await callTool(studio, "research_start", ask)).ok).toBe(true);
+  });
+
   it("gives a plain message and releases the reserve when Parallel fails", async () => {
     studio = await createStudio({ parallel: () => ({ status: 503, text: "upstream exploded" }) });
     await approvedClient(studio);
