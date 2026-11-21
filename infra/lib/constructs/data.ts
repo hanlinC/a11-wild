@@ -27,6 +27,9 @@ export class Data extends Construct {
       enforceSSL: true,
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       removalPolicy: RemovalPolicy.RETAIN,
+      // A client sends a results file from the pack page straight to a link the server signed for that one file.
+      // The link is the key, and no cookie goes with it, so any origin may use it; only PUT is opened.
+      cors: [{ allowedMethods: [s3.HttpMethods.PUT], allowedOrigins: ["*"], allowedHeaders: ["content-type"], maxAge: 300 }],
     });
   }
 }

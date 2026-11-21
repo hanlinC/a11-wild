@@ -190,6 +190,14 @@ describe("studio stack", () => {
     // The bucket's own regional host name, made at deploy: no wildcard and no other host.
     expect(csp).toMatch(/img-src 'self' data: blob: https:\/\/",\{"Fn::GetAtt":\["DataPictures[A-Z0-9]+","RegionalDomainName"\]\},"; font-src/);
     expect(csp).not.toMatch(/\*/);
+    // A results file goes from the pack page to that same bucket, and nowhere else.
+    expect(csp).toMatch(/connect-src 'self' https:\/\/",\{"Fn::GetAtt":\["DataPictures[A-Z0-9]+","RegionalDomainName"\]\},"; frame-ancestors/);
+  });
+
+  it("opens the pictures bucket to a signed upload from a page, and to nothing else from a page", () => {
+    template.hasResourceProperties("AWS::S3::Bucket", {
+      CorsConfiguration: { CorsRules: [{ AllowedMethods: ["PUT"], AllowedOrigins: ["*"], AllowedHeaders: ["content-type"], MaxAge: 300 }] },
+    });
   });
 
   it("limits the request rate on the API stage and keeps logs for a month", () => {

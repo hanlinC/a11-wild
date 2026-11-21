@@ -20,7 +20,8 @@ const contentSecurityPolicy = (picturesDomainName: string) =>
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob: https://${picturesDomainName}`,
     "font-src 'self'",
-    "connect-src 'self'",
+    // The pack page sends a client's results file to a signed link of the picture store.
+    `connect-src 'self' https://${picturesDomainName}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
