@@ -88,6 +88,14 @@ describe("pack_check and cap_check", () => {
     expect(looked.value.checks.items).toEqual([{ code: "D11", note: expect.stringContaining("FAIL at 2%"), tool: "pack_check" }]);
   });
 
+  it("takes a box for a pack that stands on something", async () => {
+    const imageId = await draft();
+    await run("pack_check", { imageId, at: [512, 900], bg: "E83C28", box: [300, 600, 724, 1100] });
+    expect(studio.pixels.events.at(-1)!.input).toMatchObject({ box: [300, 600, 724, 1100] });
+    await run("pack_check", { imageId, at: [512, 900], bg: "E83C28" });
+    expect(studio.pixels.events.at(-1)!.input).not.toHaveProperty("box");
+  });
+
   it("clears its own D11 with a later pass, and keeps the cap's", async () => {
     let pass = false;
     await start((event) => (event.tool === "pack_check" ? { ok: true, passed: pass } : event.tool === "cap_check" ? { ok: true, passed: false, line: "cap centre 5.5 px right" } : { ok: true }));

@@ -64,16 +64,17 @@ export function pixelTools({ pixels }: { pixels: PixelService }): ToolDefinition
     defineTool({
       name: "pack_check",
       description:
-        "Measures whether the pack in a picture is as tall and as wide as the real pack, within 2%. Free. Run it on every draft and every final of a product with a pack photo: the batch does not move on without it. The pack must stand on a plain stage of one colour. A fail is saved on the picture as D11, and only a later pass of this tool on the same picture clears it. The reply is a job: pixel_status gives the measure.",
+        "Measures whether the pack in a picture is as tall and as wide as the real pack, within 2%. Free. Run it on every draft and every final of a product with a pack photo: the batch does not move on without it. The pack needs a plain stage of one colour round it; when it stands on something, give a box that ends at its base. A fail is saved on the picture as D11, and only a later pass of this tool on the same picture clears it. The reply is a job: pixel_status gives the measure.",
       input: {
         batchId: id,
         imageId,
         at: z.tuple([px, px]).describe("X,Y of a point inside the pack, in pixels of the picture."),
         bg: colour.describe("The stage colour as RRGGBB."),
         sideways: z.boolean().default(false).describe("The pack lies on its side."),
+        box: box.optional().describe("X0,Y0,X1,Y1 in pixels, for a pack that stands on something: a box round the pack with plain stage on its other sides, ending at the pack's base. The measure then stops at the base, so set it within a few pixels."),
       },
       writes: true,
-      handler: (input) => pixels.packCheck(input),
+      handler: ({ box: around, ...input }) => pixels.packCheck({ ...input, ...(around ? { box: around } : {}) }),
     }),
     defineTool({
       name: "cap_check",

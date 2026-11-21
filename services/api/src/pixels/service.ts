@@ -108,7 +108,7 @@ export class PixelService {
     return this.start("skeleton", batch.id, { ...placement, packKey: await this.packKey(batch.id) }, { out: { kind: "skeleton", ideaId: input.ideaId } });
   }
 
-  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean }): Promise<PixelView> {
+  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[] }): Promise<PixelView> {
     const image = await this.rendered(input.batchId, input.imageId);
     const { batchId: _batchId, imageId: _imageId, ...rest } = input;
     return this.start("pack_check", input.batchId, { ...rest, packKey: await this.packKey(input.batchId), renderKey: image.key }, { imageId: image.id });

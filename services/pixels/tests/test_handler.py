@@ -122,6 +122,17 @@ class Handler(unittest.TestCase):
         self.assertIn("FAIL", squat["line"])
         self.assertNotIn("imageKey", squat)
 
+    def test_pack_check_measures_a_pack_that_stands_on_something_inside_a_box(self):
+        on_plinth = np.asarray(render(150, 450)).copy()
+        on_plinth[1100:1250, 300:724] = (120, 110, 100)  # a plinth under the pack
+        self.store.add("batches/b1/drafts/plinth.png", Image.fromarray(on_plinth))
+        args = dict(packKey="products/p/pack.png", renderKey="batches/b1/drafts/plinth.png", at=[512, 900], bg="E83C28")
+        self.assertFalse(self.job("pack_check", **args)["passed"])  # the plinth is taken as pack
+        boxed = self.job("pack_check", **args, box=[300, 600, 724, 1100])
+        self.assertTrue(boxed["ok"] and boxed["passed"], boxed)
+        outside = self.job("pack_check", **args, box=[600, 600, 724, 1100])
+        self.assertIn("box must lie inside the picture and hold the point", outside["error"])
+
     def test_cap_check_fails_a_cap_that_sits_off_centre(self):
         self.store.add("batches/b1/finals/centred.png", bottle(0))
         self.store.add("batches/b1/finals/shifted.png", bottle(6))
