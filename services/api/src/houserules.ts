@@ -81,6 +81,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
   {
     id: "drafts",
     roles: ["main", "art_director"],
+    kinds: ["v1", "v2"],
     text: "Make three drafts for each idea, each from its own skeleton. Change the camera, the crop and the scale, not only the backdrop.",
   },
   {
