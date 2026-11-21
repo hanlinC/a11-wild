@@ -44,7 +44,7 @@ export class Pixels extends Construct {
     this.pixelFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["s3:GetObject"],
-        resources: [props.pictures.arnForObjects("brands/*"), props.pictures.arnForObjects("batches/*")],
+        resources: ["brands/*", "products/*", "batches/*"].map((prefix) => props.pictures.arnForObjects(prefix)),
       }),
     );
     this.pixelFunction.addToRolePolicy(

@@ -67,7 +67,7 @@ def bottle(shift):
 class Handler(unittest.TestCase):
     def setUp(self):
         self.store = MemoryStore()
-        self.store.add("brands/b/products/p/pack.png", packshot())
+        self.store.add("products/p/pack.png", packshot())
 
     def job(self, tool, **input):
         event = {"jobId": "j1", "batchId": "b1", "tool": tool, "input": input, "resultKey": "jobs/b1/j1.json", "outKey": "batches/b1/pixels/j1.jpg"}
@@ -76,7 +76,7 @@ class Handler(unittest.TestCase):
         return answer
 
     def test_a_skeleton_holds_the_real_pack_at_its_real_proportions(self):
-        answer = self.job("skeleton", packKey="brands/b/products/p/pack.png", bg="#E83C28", height=0.5)
+        answer = self.job("skeleton", packKey="products/p/pack.png", bg="#E83C28", height=0.5)
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(answer["imageKey"], "batches/b1/pixels/j1.jpg")
         box = answer["box"]
@@ -93,30 +93,30 @@ class Handler(unittest.TestCase):
         alpha = np.zeros((400, 200), np.uint8)
         alpha[50:350, 50:150] = 255
         rgba.putalpha(Image.fromarray(alpha))
-        self.store.add("brands/b/products/p/cut.png", rgba)
-        answer = self.job("skeleton", packKey="brands/b/products/p/cut.png", bg="#E83C28", height=0.4)
+        self.store.add("products/p/cut.png", rgba)
+        answer = self.job("skeleton", packKey="products/p/cut.png", bg="#E83C28", height=0.4)
         self.assertTrue(answer["ok"], answer)
         self.assertEqual(answer["box"], [50, 50, 150, 350])
 
     def test_a_skeleton_from_a_plan_places_each_pack(self):
         plan = {"size": [1024, 1280], "bg": "#E83C28", "products": [{"cx": 0.3, "base": 0.8, "height": 0.3}, {"cx": 0.7, "base": 0.8, "height": 0.3}]}
-        answer = self.job("skeleton", packKey="brands/b/products/p/pack.png", plan=plan)
+        answer = self.job("skeleton", packKey="products/p/pack.png", plan=plan)
         self.assertTrue(answer["ok"], answer)
         blue = np.asarray(self.store.picture(answer["imageKey"]).convert("RGB"))[..., 2] > 120
         self.assertTrue(blue[:, :512].any() and blue[:, 512:].any())
 
     def test_a_plan_cannot_name_a_file(self):
         plan = {"products": [{"cx": 0.5, "base": 0.8, "height": 0.3, "photo": "/etc/passwd"}]}
-        answer = self.job("skeleton", packKey="brands/b/products/p/pack.png", plan=plan)
+        answer = self.job("skeleton", packKey="products/p/pack.png", plan=plan)
         self.assertFalse(answer["ok"])
         self.assertIn("cannot name its own file", answer["error"])
 
     def test_pack_check_passes_the_real_proportions_and_fails_a_squat_pack(self):
         self.store.add("batches/b1/drafts/good.png", render(150, 450))
         self.store.add("batches/b1/drafts/squat.png", render(170, 450))
-        good = self.job("pack_check", packKey="brands/b/products/p/pack.png", renderKey="batches/b1/drafts/good.png", at=[512, 900], bg="E83C28")
+        good = self.job("pack_check", packKey="products/p/pack.png", renderKey="batches/b1/drafts/good.png", at=[512, 900], bg="E83C28")
         self.assertTrue(good["ok"] and good["passed"], good)
-        squat = self.job("pack_check", packKey="brands/b/products/p/pack.png", renderKey="batches/b1/drafts/squat.png", at=[512, 900], bg="E83C28")
+        squat = self.job("pack_check", packKey="products/p/pack.png", renderKey="batches/b1/drafts/squat.png", at=[512, 900], bg="E83C28")
         self.assertTrue(squat["ok"], squat)
         self.assertFalse(squat["passed"])
         self.assertIn("FAIL", squat["line"])
@@ -177,7 +177,7 @@ class Handler(unittest.TestCase):
         self.assertIn("no pixel tool", self.job("rm_rf")["error"])
 
     def test_a_picture_is_written_only_inside_its_batch(self):
-        event = {"jobId": "j1", "batchId": "b1", "tool": "skeleton", "input": {"packKey": "brands/b/products/p/pack.png", "bg": "#E83C28"}, "resultKey": "jobs/b1/j1.json", "outKey": "batches/b2/pixels/j1.jpg"}
+        event = {"jobId": "j1", "batchId": "b1", "tool": "skeleton", "input": {"packKey": "products/p/pack.png", "bg": "#E83C28"}, "resultKey": "jobs/b1/j1.json", "outKey": "batches/b2/pixels/j1.jpg"}
         self.assertFalse(handler.work(event, self.store)["ok"])
         self.assertNotIn("batches/b2/pixels/j1.jpg", self.store.files)
 

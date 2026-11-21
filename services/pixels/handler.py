@@ -40,7 +40,7 @@ class Refused(Exception):
 
 
 def read_prefix_ok(key):
-    return isinstance(key, str) and ".." not in key and (key.startswith("brands/") or key.startswith("batches/"))
+    return isinstance(key, str) and ".." not in key and key.startswith(("brands/", "products/", "batches/"))
 
 
 class S3Store:

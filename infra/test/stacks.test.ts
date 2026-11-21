@@ -99,11 +99,13 @@ describe("studio stack", () => {
     expect(statements.map((statement) => asList(statement.Action))).toEqual([["s3:GetObject"], ["s3:PutObject"]]);
     const text = JSON.stringify(statements);
     expect(text).toContain("/brands/*");
+    expect(text).toContain("/products/*");
     expect(text).toContain("/batches/*");
     expect(text).toContain("/jobs/*");
     // Brand pictures are read, never written.
     const writes = statements.filter((statement) => asList(statement.Action).some((action) => action.startsWith("s3:PutObject")));
     expect(JSON.stringify(writes)).not.toContain("/brands/*");
+    expect(JSON.stringify(writes)).not.toContain("/products/*");
 
     const functions = Object.entries(template.findResources("AWS::Lambda::Function"));
     const pixel = functions.find(([id]) => /PixelsPixelFunction/.test(id))!;
