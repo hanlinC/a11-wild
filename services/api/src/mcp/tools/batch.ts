@@ -49,7 +49,9 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
         ? `read the owner's taste for this batch (${unread.join(", ")} with batchId), then ${stepAfter({ kind: batch.kind, state: "truth" })}`
         : batch.state === "ideas" && batch.format === "other"
           ? "save the text spec (spec_save)"
-          : stepAfter(batch);
+          : batch.test && batch.state === "finished"
+            ? "nothing: this is a test batch, and a test batch is never marked done"
+            : stepAfter(batch);
     return { batch, nextStep: next, brand, product, factCount: (await facts.list(product.id)).length, truthSheet: sheet ?? null,
       ...(newer
         ? { truthNote: `This batch keeps version ${sheet?.version} of the truth sheet, which it saved. The product's sheet is now at version ${newer} (truth_get reads it).` }

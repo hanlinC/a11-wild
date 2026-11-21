@@ -84,5 +84,6 @@ describe("a test batch", () => {
     const report = (await callTool(studio, "batch_done", { batchId })).value;
     expect(report.conditions.filter((entry: { passed: boolean }) => !entry.passed)).toEqual([]);
     expect(report).toMatchObject({ done: false, batch: { state: "finished", test: true }, nextStep: expect.stringMatching(/test batch.*never marked done.*Every condition holds/) });
+    expect((await callTool(studio, "batch_get", { batchId })).value.nextStep).toMatch(/test batch is never marked done/);
   });
 });
