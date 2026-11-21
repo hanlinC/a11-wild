@@ -12,12 +12,13 @@ const PRODUCT_TEXT = `# Seaweed crisps\n\n![pack](${PACK})\n\nNet weight: 40 g. 
 
 let studio: Studio;
 
-function net() {
+function net(pages: Parameters<typeof fakeNet>[0] = {}) {
   const base = wongiNet();
   const pictures = fakeNet({
     [LOGO]: { body: PNG, headers: { "content-type": "image/png" } },
     [PACK]: { body: PNG, headers: { "content-type": "image/png" } },
     "https://wongi.example/": { body: HOME, headers: { "content-type": "text/html" } },
+    ...pages,
   });
   return { ...base, fetch: pictures.fetch, requested: pictures.requested };
 }
@@ -91,6 +92,31 @@ describe("brand tools", () => {
     // The page asked for a spend approval. Nothing was approved and nothing but the read was charged.
     await expect(studio.spend.gate.check("any", "drafts")).rejects.toThrow();
     expect((await studio.spend.ledger.summary()).lines).toHaveLength(1);
+  });
+
+  it("finds the product's pictures in the page's own markup, because Parallel returns words only", async () => {
+    const food = "https://cdn.wongi.example/files/crisps-bowl.jpg";
+    const markup = `<html><head><meta property="og:image" content="${PACK}"></head><body>
+      <img src="/img/cart-icon.png" width="24"><img srcset="//cdn.wongi.example/files/crisps-bowl.jpg?width=400 400w, //cdn.wongi.example/files/crisps-bowl.jpg?width=1600 1600w"></body></html>`;
+    studio = await createStudio({
+      net: net({ [PRODUCT_PAGE]: { body: markup, headers: { "content-type": "text/html" } } }),
+      parallel: extractReply({ [PRODUCT_PAGE]: "# Seaweed crisps\n\nNet weight: 40 g." }),
+    });
+    await approvedClient(studio);
+    const brand = await savedBrand();
+
+    const extract = await callTool(studio, "product_extract", { brandId: brand.id, url: PRODUCT_PAGE });
+    expect(extract.value.photoCandidates).toEqual([PACK, `${food}?width=1600`]);
+    expect(extract.value.note).toBeUndefined();
+  });
+
+  it("says to search for pictures when the page gives none", async () => {
+    studio = await createStudio({ net: net(), parallel: extractReply({ [PRODUCT_PAGE]: "# Seaweed crisps\n\nNet weight: 40 g." }) });
+    await approvedClient(studio);
+    const brand = await savedBrand();
+    const extract = await callTool(studio, "product_extract", { brandId: brand.id, url: PRODUCT_PAGE });
+    expect(extract.value.photoCandidates).toEqual([]);
+    expect(extract.value.note).toMatch(/image_search/);
   });
 
   it("saves a product with pictures the studio found, and refuses one it did not find", async () => {

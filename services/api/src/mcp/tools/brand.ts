@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { PALETTE_ROLES, type ProductPhoto } from "@a11-wild/shared";
-import { brandExtract } from "../../brand/extract.js";
+import { brandExtract, fetchText } from "../../brand/extract.js";
 import type { BrandStore } from "../../brand/store.js";
 import type { ParallelClient } from "../../parallel/client.js";
 import { copyPicture, type Pictures } from "../../pictures/store.js";
 import { asPageData, isPublicHttpsUrl, type Net, UnsafeUrlError } from "../../urlsafety.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
+import { productPictures } from "../../brand/product-pictures.js";
 
 export interface BrandToolDeps {
   brands: BrandStore;
@@ -98,12 +99,25 @@ export function brandTools({ brands, parallel, pictures, net }: BrandToolDeps): 
       handler: async ({ brandId, url }) => {
         await brands.brand(brandId);
         if (!isPublicHttpsUrl(url)) throw new UnsafeUrlError("The product page must be an https address on a public host.");
-        const { pages } = await parallel.extract({ urls: [url], objective: "The product: its name, size, weight, pack, ingredients and pictures." });
+        // Parallel gives the page's words without its pictures, so the studio reads the page's own markup for those.
+        const [{ pages }, markup] = await Promise.all([
+          parallel.extract({ urls: [url], objective: "The product: its name, size, weight, pack, ingredients and pictures." }),
+          fetchText(net, url, 3_000_000, /^(text\/html|application\/xhtml\+xml)$/),
+        ]);
         const page = pages[0];
         if (!page) throw new Refusal("Parallel could not read that page. Check the address, or try the page the shop links to.");
-        const photos = pictureLinks(page.text);
+        const photos = [...new Set([...(markup ? productPictures(markup.text, markup.url) : []), ...pictureLinks(page.text)])].slice(0, 40);
         const offer = await brands.offer({ kind: "product", url, logos: [], photos, productPages: [], colours: [] });
-        return { extractId: offer.id, url, title: page.title, photoCandidates: photos, page: asPageData(page.text) };
+        return {
+          extractId: offer.id,
+          url,
+          title: page.title,
+          photoCandidates: photos,
+          ...(photos.length === 0
+            ? { note: "The studio found no picture on this page. Find the product's real photos with image_search, then give its searchId as fromId in product_save." }
+            : {}),
+          page: asPageData(page.text),
+        };
       },
     }),
     defineTool({

@@ -13,7 +13,7 @@ const GENERIC = new Set(["serif", "sans-serif", "monospace", "cursive", "fantasy
 const decode = (s: string) => s.replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
 
 /** An https fetch of text from a public host. Returns null on any failure: one bad sheet must not stop the report. */
-async function fetchText(net: Net, url: string, max: number, type: RegExp): Promise<{ url: string; text: string } | null> {
+export async function fetchText(net: Net, url: string, max: number, type: RegExp): Promise<{ url: string; text: string } | null> {
   try {
     const { url: at, response } = await publicFetch(url, "The page", net, { headers: UA, signal: AbortSignal.timeout(12_000) });
     if (!response.ok || !type.test(contentType(response))) {
