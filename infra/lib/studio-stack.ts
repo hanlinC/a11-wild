@@ -30,7 +30,7 @@ export class StudioStack extends Stack {
       keysPrefix: KEYS_PREFIX,
       buildId: props.buildId,
     });
-    const web = new Web(this, "Web", { apiOriginDomainName: api.originDomainName });
+    const web = new Web(this, "Web", { apiOriginDomainName: api.originDomainName, picturesDomainName: data.pictures.bucketRegionalDomainName });
     const auth = new Auth(this, "Auth", { publicOrigin: web.publicOrigin });
     const alerts = new Alerts(this, "Alerts");
     alerts.ownerNotices.grantPublish(api.apiFunction);

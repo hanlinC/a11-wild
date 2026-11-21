@@ -150,12 +150,18 @@ describe("studio stack", () => {
           StrictTransportSecurity: Match.objectLike({ AccessControlMaxAgeSec: 31536000 }),
           ContentTypeOptions: { Override: true },
           FrameOptions: { FrameOption: "DENY", Override: true },
-          ContentSecurityPolicy: Match.objectLike({
-            ContentSecurityPolicy: Match.stringLikeRegexp("default-src 'self'.*frame-ancestors 'none'"),
-          }),
         }),
       },
     });
+  });
+
+  it("lets the dashboard load pictures from itself and the pictures bucket only", () => {
+    const [policy] = Object.values(template.findResources("AWS::CloudFront::ResponseHeadersPolicy"));
+    const csp = JSON.stringify(policy?.Properties.ResponseHeadersPolicyConfig.SecurityHeadersConfig.ContentSecurityPolicy.ContentSecurityPolicy);
+    expect(csp).toMatch(/default-src 'self'.*frame-ancestors 'none'/);
+    // The bucket's own regional host name, made at deploy: no wildcard and no other host.
+    expect(csp).toMatch(/img-src 'self' data: blob: https:\/\/",\{"Fn::GetAtt":\["DataPictures[A-Z0-9]+","RegionalDomainName"\]\},"; font-src/);
+    expect(csp).not.toMatch(/\*/);
   });
 
   it("limits the request rate on the API stage and keeps logs for a month", () => {

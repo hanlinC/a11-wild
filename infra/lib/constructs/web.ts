@@ -12,21 +12,25 @@ const WEB_DIST = path.join(import.meta.dirname, "../../../web/dist");
 /** Paths that go to the API. Everything else is the dashboard. */
 export const API_PATHS = ["/mcp", "/api/*", "/auth/*", "/.well-known/*"] as const;
 
-const CONTENT_SECURITY_POLICY = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join("; ");
+/** Pictures come from the studio's own private bucket, through links that the API signs for a short time. */
+const contentSecurityPolicy = (picturesDomainName: string) =>
+  [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    `img-src 'self' data: blob: https://${picturesDomainName}`,
+    "font-src 'self'",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join("; ");
 
 export interface WebProps {
   apiOriginDomainName: string;
+  /** The regional host name of the pictures bucket: the only other host the dashboard may load a picture from. */
+  picturesDomainName: string;
 }
 
 /** The one public origin: dashboard files from a private bucket, API paths to the HTTP API. */
@@ -56,7 +60,7 @@ export class Web extends Construct {
         contentTypeOptions: { override: true },
         frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
         referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.NO_REFERRER, override: true },
-        contentSecurityPolicy: { contentSecurityPolicy: CONTENT_SECURITY_POLICY, override: true },
+        contentSecurityPolicy: { contentSecurityPolicy: contentSecurityPolicy(props.picturesDomainName), override: true },
       },
     });
 
