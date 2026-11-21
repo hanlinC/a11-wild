@@ -80,9 +80,11 @@ Step 8. Words. Show him the words of his three concepts as text and wait for his
 
 Step 9. Direction. Save the direction of each picked concept (direction_save): its look, its risk, where the words stand, and three drafts that each ask the owner one question. No draft is made before it.
 
-Step 10. Drafts. Send each draft with its number from the direction (render_submit with draft 1, 2 or 3) and the real photo of each thing the concept shows. The studio gives the model the rough first. Measure each draft (pack_check) and look at it (checks_save).
+Step 10. Drafts. Send each draft with its number from the direction (render_submit with draft 1, 2 or 3) and the real photo of each thing the concept shows. The studio gives the model the rough first. Measure each draft (pack_check) and look at it (checks_save). A draft its checks reject is made again once with the same number; after that, a lower-risk direction.
 
-Step 11. Follow batch_get: its nextStep names what comes next, from the words on each draft to the owner's pick of a draft and the finals.
+Step 11. Words, rank and pick. Set the approved words on each draft where the direction says (type_set) and look at it. The fresh critic ranks the drafts blind. Show the owner the board (board_show): he picks one draft of each concept, each with the question it asks.
+
+Step 12. Finals. Render each picked draft as a final, check it, finish it (photo_finish), set its words (type_set), then look at it at full size and at phone size and save the eight points (final_points_save). A final with a failed point is not delivered. Then follow batch_get: its nextStep names the delivery.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
 

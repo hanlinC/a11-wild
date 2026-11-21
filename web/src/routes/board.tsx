@@ -227,6 +227,7 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
         {draft.words ? <Badge color="green">Words set</Badge> : null}
         {draft.checks === null || draft.words?.checks === null ? <span className="text-muted-foreground">Not checked yet</span> : null}
       </figcaption>
+      {draft.question ? <p className="mt-1 text-caption text-muted-foreground">{draft.question}</p> : null}
       {items.length > 0 ? (
         <ul className="mt-1 grid gap-1 text-caption">
           {items.map((item, index) => (

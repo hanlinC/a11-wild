@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.8";
+export const RULES_VERSION = "2026-11-22.9";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -151,7 +151,13 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     id: "v3-drafts",
     roles: MAKERS,
     kinds: CONCEPTS,
-    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows. Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong.",
+    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows. Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong. A draft that its checks reject (a D item, or two F items) is made again once, with the same number and a prompt that names the fault. With fewer than two drafts of a concept that pass after that, save a new direction with a lower risk; do not send a third.",
+  },
+  {
+    id: "v3-finals",
+    roles: MAKERS,
+    kinds: CONCEPTS,
+    text: "A final of a concept ad is the picture the owner would send: after photo_finish and type_set. Look at it twice, at full size and at phone size (about 320 wide), and save the eight points (final_points_save): concept, product truth, brand identity, copy accuracy, food, composition, craft, render checklist. Say what you saw for a point that fails. A final with a failed point is not delivered and never enters a pack: make it again, or tell the owner. When the owner changes his mind about a concept he passed on, save his newer words (pick_save): the newer verdict stands.",
   },
   {
     id: "concept",

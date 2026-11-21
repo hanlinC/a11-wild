@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { fakeNet } from "../helpers/net.js";
 import { directionOf, PICKED, rules, v3AtWorded } from "../helpers/v3.js";
