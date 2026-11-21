@@ -101,6 +101,8 @@ describe("a v2 batch: the burst", () => {
     expect(early).toMatchObject({ ok: false, error: expect.stringMatching(/Not read yet: references_get/) });
     expect((await callTool(studio, "references_get", { batchId })).value).toMatchObject({ kind: "v2", references: [] });
     const ok = await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+    // The next step names the choice of an ad with words, not the keep-or-cut of a v1 batch.
+    expect(ok.value.nextStep).toMatch(/critic_select/);
     expect(ok.ok ? "" : ok.error).toBe("");
   });
 

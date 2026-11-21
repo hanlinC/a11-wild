@@ -1,6 +1,9 @@
 import type { BatchKind, BatchState } from "@a11-wild/shared";
 import { Refusal } from "../mcp/registry.js";
 
+/** A kind with words stops for the owner's approval of them before any draft. */
+export const hasWords = (kind: BatchKind): boolean => kind !== "v1";
+
 /** What must be done to reach each state: the words a refusal gives the agent. */
 const STEP: Record<BatchState, string> = {
   intake: "choose a saved brand and product (batch_create)",
@@ -18,6 +21,14 @@ const STEP: Record<BatchState, string> = {
   done: "pass the done gate (batch_done)",
   spec_only: "save the text spec (spec_save)",
 };
+
+/** The steps that read differently for an ad with words. */
+const STEP_WITH_WORDS: Partial<Record<BatchState, string>> = {
+  ideas: "save the whole burst of 24 to 30 ideas, 8 or more for each of tof, mof and bof (ideas_save)",
+  judged: 'the blind choice of one idea for each of tof, mof and bof, by a fresh helper that gets the batch id only: critic_open with step "ideas", then critic_select',
+};
+
+const stepTo = (kind: BatchKind, state: BatchState): string => (hasWords(kind) ? STEP_WITH_WORDS[state] : undefined) ?? STEP[state];
 
 /** The states that follow each state. `waiting_spend` is skipped when the estimate is under the gate. */
 const NEXT: Record<BatchState, BatchState[]> = {
@@ -41,9 +52,6 @@ const NEXT: Record<BatchState, BatchState[]> = {
 
 export class StateError extends Refusal {}
 
-/** A kind with words stops for the owner's approval of them before any draft. */
-export const hasWords = (kind: BatchKind): boolean => kind !== "v1";
-
 function nextOf(kind: BatchKind, state: BatchState): BatchState[] {
   if (state === "judged" && hasWords(kind)) return ["worded"];
   return NEXT[state];
@@ -58,10 +66,10 @@ export function missingStep(kind: BatchKind, from: BatchState, wanted: BatchStat
   if (allowed.includes(wanted)) return undefined;
   if (from === "spec_only") return "nothing: this batch ended with a text spec, and the studio does not render its format";
   const next = allowed[0];
-  if (wanted === "spec_only" || !next) return STEP[wanted];
+  if (wanted === "spec_only" || !next) return stepTo(kind, wanted);
   // A move backwards or sideways is named by the step the caller asked for.
   if (PATH.indexOf(wanted) <= PATH.indexOf(from)) return `nothing: the batch is already at ${from}`;
-  return STEP[next];
+  return stepTo(kind, next);
 }
 
 /** Refuses a tool that belongs to a later state, and names the step that is missing. */
@@ -75,5 +83,5 @@ export function requireMove({ kind, state: from }: { kind: BatchKind; state: Bat
 /** What the agent does next from a state, for a session that resumes a batch. */
 export const stepAfter = ({ kind, state }: { kind: BatchKind; state: BatchState }): string => {
   const next = state === "done" ? undefined : nextOf(kind, state)[0];
-  return next ? STEP[next] : "nothing: the batch is at its end";
+  return next ? stepTo(kind, next) : "nothing: the batch is at its end";
 };
