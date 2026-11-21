@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { RULES_VERSION } from "../../src/houserules.js";
 import { missingStep, requireMove, stepAfter } from "../../src/batch/state.js";
 import { batchAtTruth, idea, savedProduct, sheet } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
@@ -62,15 +63,15 @@ describe("batch state", () => {
   it("refuses ideas before the truth sheet, and names it", async () => {
     const { brand, product } = await savedProduct(studio);
     const made = await callTool(studio, "batch_create", { brandId: brand.id, productId: product.id });
-    const saved = await callTool(studio, "ideas_save", { batchId: made.value.batch.id, ideas: [idea(1), idea(2), idea(3)] });
+    const saved = await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId: made.value.batch.id, ideas: [idea(1), idea(2), idea(3)] });
     expect(saved).toEqual({ ok: false, error: expect.stringMatching(/batch is at "intake".*truth_save/) });
   });
 
   it("ends a 9:16 story batch in spec_only and names rendering as the step it cannot do", async () => {
     const { batchId } = await batchAtTruth(studio, { format: "other", formatNote: "9:16 story" });
-    const ideas = await callTool(studio, "ideas_save", { batchId, ideas: [idea(1), idea(2), idea(3)] });
+    const ideas = await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1), idea(2), idea(3)] });
     expect(ideas.value).toMatchObject({ state: "ideas", nextStep: expect.stringMatching(/spec_save/), note: expect.stringMatching(/cannot do is rendering/) });
-    const spec = await callTool(studio, "spec_save", { batchId, spec: "Panel 1: the pack on the rock." });
+    const spec = await callTool(studio, "spec_save", { rulesVersion: RULES_VERSION, batchId, spec: "Panel 1: the pack on the rock." });
     expect(spec.value).toEqual({ state: "spec_only", note: expect.stringMatching(/cannot do is rendering/) });
     const got = await callTool(studio, "batch_get", { batchId });
     expect(got.value.batch).toMatchObject({ state: "spec_only", spec: "Panel 1: the pack on the rock.", formatNote: "9:16 story" });
@@ -79,8 +80,8 @@ describe("batch state", () => {
 
   it("refuses a text spec for a static 4:5 batch, and a format with no words for it", async () => {
     const { batchId, brand, product } = await batchAtTruth(studio);
-    await callTool(studio, "ideas_save", { batchId, ideas: [idea(1), idea(2), idea(3)] });
-    expect(await callTool(studio, "spec_save", { batchId, spec: "x" })).toEqual({ ok: false, error: expect.stringMatching(/the studio renders it/) });
+    await callTool(studio, "ideas_save", { rulesVersion: RULES_VERSION, batchId, ideas: [idea(1), idea(2), idea(3)] });
+    expect(await callTool(studio, "spec_save", { rulesVersion: RULES_VERSION, batchId, spec: "x" })).toEqual({ ok: false, error: expect.stringMatching(/the studio renders it/) });
     const made = await callTool(studio, "batch_create", { brandId: brand.id, productId: product.id, format: "other" });
     expect(made).toEqual({ ok: false, error: expect.stringMatching(/formatNote/) });
   });

@@ -139,6 +139,7 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
           .max(10),
       },
       writes: true,
+      needsRules: true,
       handler: async ({ batchId, ideas }, context) => {
         const batch = await batches.get(batchId);
         if (batch.state !== "ideas") requireMove(batch.state, "ideas", "ideas_save");
@@ -166,6 +167,7 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
         "Saves the text spec of a batch whose format is not a static 4:5 picture: the layout, the shot list or the panel script, from the saved ideas. The batch ends there. The studio does not render it.",
       input: { batchId: id, spec: line(20_000) },
       writes: true,
+      needsRules: true,
       handler: async ({ batchId, spec }) => {
         const batch = await batches.get(batchId);
         if (batch.format !== "other") throw new Refusal("This batch is a static 4:5 picture: the studio renders it. A text spec is for the other formats.");
