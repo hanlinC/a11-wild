@@ -27,20 +27,29 @@ const CANNOT_RENDER =
 export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDeps): ToolDefinition[] {
   /** What a session needs to go on with a batch, from its id alone. */
   async function view(batch: Batch) {
-    const [brand, product, sheet, ideas, unread] = await Promise.all([
+    // A batch that saved a sheet keeps that version. A batch that has not yet sees the product's newest.
+    const [brand, product, sheet, newest, ideas, unread] = await Promise.all([
       brands.brand(batch.brandId),
       brands.product(batch.productId),
+      truth.get(batch.productId, batch.truthVersion),
       truth.get(batch.productId),
       batches.ideas(batch.id),
       reads.missing(batch.id),
     ]);
+    const newer = sheet && newest && newest.version > sheet.version ? newest.version : undefined;
     const next =
       batch.state === "truth" && unread.length > 0
         ? `read the owner's taste for this batch (${unread.join(", ")} with batchId), then ${stepAfter("truth")}`
         : batch.state === "ideas" && batch.format === "other"
           ? "save the text spec (spec_save)"
           : stepAfter(batch.state);
-    return { batch, nextStep: next, brand, product, factCount: (await facts.list(product.id)).length, truthSheet: sheet ?? null, ideas, tasteNotRead: unread };
+    return { batch, nextStep: next, brand, product, factCount: (await facts.list(product.id)).length, truthSheet: sheet ?? null,
+      ...(newer
+        ? { truthNote: `This batch keeps version ${sheet?.version} of the truth sheet, which it saved. The product's sheet is now at version ${newer} (truth_get reads it).` }
+        : {}),
+      ideas,
+      tasteNotRead: unread,
+    };
   }
 
   return [
@@ -81,7 +90,7 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
     defineTool({
       name: "truth_save",
       description:
-        "Saves the product's truth sheet: its real shape, its packaging, and every number a picture must get right (heights, widths, weights, cap sizes). Give factId for a number that a saved fact proves; the sheet then carries the fact's quote and page. A number with no factId is kept and marked unverified: never guess a factId. For food, give the keys of the brand's own food photos and how the food is cut or served.",
+        "Saves the product's truth sheet: its real shape, its packaging, and every number a picture must get right (heights, widths, weights, cap sizes). Give factId for a number that a saved fact proves; the sheet then carries the fact's quote and page. A number with no factId is kept and marked unverified: never guess a factId. For food, give the keys of the brand's own food photos and how the food is cut or served. A product has one sheet, shared by its batches: batch_get shows the newest before this batch saves one. A save that changes it makes a new version and the earlier ones stay; a save that changes nothing keeps the version. The batch keeps the version it saved.",
       input: {
         batchId: id,
         shape: line(1000).describe("The product's shape in plain words."),
@@ -110,9 +119,21 @@ export function batchTools({ batches, brands, facts, truth, reads }: BatchToolDe
           { shape, packaging, measures: measures.map(({ factId, ...rest }) => ({ ...rest, ...(factId ? { factId } : {}) })), ...(food ? { food } : {}) },
           context.user.email,
         );
-        const moved = await batches.move(batch, "truth", "truth_save");
+        const moved = await batches.move(batch, "truth", "truth_save", { truthVersion: sheet.version });
         const unverified = sheet.measures.filter((measure) => measure.status === "unverified").map((measure) => measure.name);
         return { state: moved.state, truthSheet: sheet, unverified };
+      },
+    }),
+    defineTool({
+      name: "truth_get",
+      description:
+        "A product's truth sheet and the list of its versions. Free. Without version, the newest. Each save that changes the sheet makes a new version and the earlier ones stay, so a batch can keep the version its ideas were written from.",
+      input: { productId: id, version: z.number().int().min(1).optional() },
+      handler: async ({ productId, version }) => {
+        await brands.product(productId);
+        const sheet = await truth.get(productId, version);
+        if (!sheet && version !== undefined) throw new Refusal(`This product's truth sheet has no version ${version}.`);
+        return { truthSheet: sheet ?? null, versions: await truth.versions(productId) };
       },
     }),
     defineTool({

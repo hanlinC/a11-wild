@@ -97,6 +97,7 @@ export function Brand() {
                     {batch.state.replace("_", " ")}
                   </Badge>
                   <span className="text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
+                  {batch.truthVersion ? <span className="text-caption text-muted-foreground">Truth sheet version {batch.truthVersion}</span> : null}
                   <span className="ml-auto font-mono text-caption text-muted-foreground">{batch.id}</span>
                 </Card>
               </li>
@@ -130,7 +131,10 @@ function ProductSection({ entry }: { entry: BrandPage["products"][number] }) {
         </Card>
 
         <Card>
-          <h3 className="text-body font-medium">Truth sheet</h3>
+          <h3 className="text-body font-medium">
+            Truth sheet
+            {truthSheet ? <span className="ml-2 text-caption font-normal text-muted-foreground">Version {truthSheet.version}</span> : null}
+          </h3>
           {truthSheet === null ? (
             <p className="mt-2 text-caption text-muted-foreground">Not written yet. It is saved when a batch starts for this product.</p>
           ) : (

@@ -33,7 +33,7 @@ export class BatchStore {
   }
 
   /** Moves a batch to a state the diagram allows from where it is. A save of the same step again keeps the state. */
-  async move(batch: Batch, to: BatchState, tool: string, fields: Partial<Pick<Batch, "spec">> = {}): Promise<Batch> {
+  async move(batch: Batch, to: BatchState, tool: string, fields: Partial<Pick<Batch, "spec" | "truthVersion">> = {}): Promise<Batch> {
     if (batch.state !== to) requireMove(batch.state, to, tool);
     const moved: Batch = { ...batch, ...fields, state: to, updatedAt: this.now().toISOString() };
     await this.table.put({ pk: PK, sk: moved.id, ...moved });

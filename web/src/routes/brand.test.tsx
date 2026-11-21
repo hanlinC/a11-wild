@@ -17,6 +17,7 @@ function brandPage(overrides: Partial<BrandPage["products"][number]> = {}): Bran
         facts: [{ id: "f1", productId: "p1", claim: "A pack holds 40 g", quote: "Net weight: 40 g.", url: PAGE, checkedAt: "2026-11-21T10:00:00.000Z", savedBy: "owner@example.com" }],
         truthSheet: {
           productId: "p1",
+          version: 2,
           shape: "A flat pouch with a zip top.",
           packaging: "Matt black pouch.",
           measures: [
@@ -63,6 +64,11 @@ describe("Brand page", () => {
     const weight = screen.getByText("net weight").closest("li")!;
     expect(within(weight).queryByText("unverified")).not.toBeInTheDocument();
     expect(within(weight).getByRole("link", { name: "source" })).toHaveAttribute("href", PAGE);
+  });
+
+  it("shows the version of the truth sheet", async () => {
+    show(brandPage());
+    expect(await screen.findByText("Version 2")).toBeInTheDocument();
   });
 
   it("says plainly when a product has no fact and no truth sheet yet", async () => {

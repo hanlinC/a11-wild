@@ -177,6 +177,8 @@ export interface Batch {
   formatNote?: string;
   label?: string;
   state: BatchState;
+  /** The version of the product's truth sheet that this batch saved. Its ideas are written from it. */
+  truthVersion?: number;
   /** The text spec of a batch whose format the studio does not render. */
   spec?: string;
   createdAt: string;
@@ -198,6 +200,8 @@ export interface Measure {
 /** What is true about a product's body, so that a picture can be checked against it. */
 export interface TruthSheet {
   productId: string;
+  /** Counts from 1. A save that changes the sheet makes a new version, and no version is changed or removed. */
+  version: number;
   /** The product's shape in plain words. */
   shape: string;
   /** What it is packed in, and what is printed where. */
