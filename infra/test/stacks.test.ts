@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { App } from "aws-cdk-lib";
 import { Match, Template } from "aws-cdk-lib/assertions";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -181,4 +184,25 @@ describe("GitHub deploy stack", () => {
     expect(statements[0]!.Action).toBe("sts:AssumeRole");
     expect(JSON.stringify(statements[0]!.Resource)).toContain(":role/cdk-hnb659fds-*");
   });
+});
+
+describe("function code", () => {
+  // The runtime's own AWS SDK is older than the one the tests run with. It dropped
+  // the field that marks a self-registered client, so every agent was "unknown".
+  it("ships its own AWS SDK and imports none from the runtime", () => {
+    const outdir = mkdtempSync(path.join(tmpdir(), "a11-wild-bundle-"));
+    try {
+      new StudioStack(new App({ outdir }), "Studio", { buildId: "test" });
+      const bundles = readdirSync(outdir)
+        .filter((name) => name.startsWith("asset."))
+        .map((name) => path.join(outdir, name, "index.mjs"))
+        .filter((file) => existsSync(file));
+      expect(bundles.length).toBeGreaterThanOrEqual(2);
+      for (const file of bundles) {
+        expect(readFileSync(file, "utf8")).not.toMatch(/from\s*"@aws-sdk\//);
+      }
+    } finally {
+      rmSync(outdir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

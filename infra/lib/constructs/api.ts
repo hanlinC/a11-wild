@@ -58,6 +58,9 @@ export class Api extends Construct {
           target: "node22",
           minify: true,
           mainFields: ["module", "main"],
+          // Ship the AWS SDK the tests ran with. The copy built into the runtime is
+          // older and drops fields it does not know, such as a client's type.
+          externalModules: [],
           // Some bundled packages still call require().
           banner: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
         },
