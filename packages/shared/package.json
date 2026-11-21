@@ -1,0 +1,9 @@
+{
+  "name": "@a11-wild/shared",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
