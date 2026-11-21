@@ -37,6 +37,8 @@ const REFERENCE_LINK_SECONDS = 3600;
 export interface FinalRule {
   /** Refuses unless the owner picked this draft and it has no D item. Returns how many finals the batch will make, and the picture the final is made from: the draft, or its repair. */
   allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<{ finals: number; source: BatchImage }>;
+  /** Why a draft's picture is rejected by its checks, or nothing when it is not. */
+  rejection(batchId: string, imageId: string): Promise<string | undefined>;
 }
 
 export interface RenderRequest {
@@ -141,7 +143,9 @@ export class RenderService {
 
     const [product, brand, all] = await Promise.all([brands.product(batch.productId), brands.brand(batch.brandId), renders.list(batch.id)]);
     const sent = all.filter((render) => render.kind === input.kind && live(render));
-    const mine = sent.filter((render) => render.ideaId === idea.id);
+    const redone = new Set(sent.map((render) => render.redoOf));
+    // A draft that was made again does not count: its redo stands in its place.
+    const mine = sent.filter((render) => render.ideaId === idea.id && !redone.has(render.id));
     let from: BatchImage | undefined;
     /** The picture the model sees in place of `from`: a picked draft's repair. */
     let source: BatchImage | undefined;
@@ -149,6 +153,7 @@ export class RenderService {
     /** A draft of a concept ad starts from its rough: the picture the critic and the owner judged the concept by. */
     let rough: BatchImage | undefined;
     let directionVersion: number | undefined;
+    let redoOf: string | undefined;
 
     if (input.kind === "rough") {
       if (!["ideas", "reviewed"].includes(batch.state)) requireMove(batch, "ideas", "render_submit");
@@ -173,8 +178,16 @@ export class RenderService {
         if (!direction || !plan) throw new Refusal(`Concept ${idea.id} has no direction. Save it first (direction_save): a draft answers one of its three questions.`);
         const asked = plan.drafts.find((draft) => draft.number === input.draft);
         if (!asked) throw new Refusal(`Say which draft of the direction this is: draft ${plan.drafts.map((draft) => draft.number).join(", ")} of ${idea.id} (direction_get gives each one's question and axes).`);
-        if (mine.some((render) => render.draft === asked.number)) {
-          throw new Refusal(`Draft ${asked.number} of ${idea.id} ("${asked.question}") is already sent. Each of the three drafts answers its own question. A draft that failed can be sent again; one that is done cannot.`);
+        const before = mine.find((render) => render.draft === asked.number);
+        if (before) {
+          const already = `Draft ${asked.number} of ${idea.id} ("${asked.question}") is already sent.`;
+          if (before.status !== "done") throw new Refusal(`${already} Read it with render_status.`);
+          if (before.redoOf) {
+            throw new Refusal(`${already} It has had its one redo. With fewer than two drafts of ${idea.id} that pass their checks, save a new direction with a lower risk (direction_save).`);
+          }
+          const fault = await finals.rejection(batch.id, before.id);
+          if (!fault) throw new Refusal(`${already} A draft is made again once, and only when its checks reject it (a D item, or two F items).`);
+          redoOf = before.id;
         }
         directionVersion = direction.version;
         rough = (await images.list(batch.id, "rough")).filter((image) => image.ideaId === idea.id).at(-1);
@@ -188,7 +201,7 @@ export class RenderService {
       } else if (input.draft !== undefined) {
         throw new Refusal("Only a draft of a concept ad (v3) has a number from its direction.");
       }
-      if (mine.length >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
+      if (mine.length - (redoOf ? 1 : 0) >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
       const hasPack = product.photos.some((photo) => photo.kind === "pack");
       if (input.fromId) {
         from = await images.get(batch.id, input.fromId);
@@ -255,6 +268,7 @@ export class RenderService {
       prompt: input.prompt.trim(),
       ...(from ? { fromId: from.id } : {}),
       ...(directionVersion !== undefined && input.draft !== undefined ? { draft: input.draft, directionVersion } : {}),
+      ...(redoOf ? { redoOf } : {}),
       usd,
       fal: job,
       reservation,

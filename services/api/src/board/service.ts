@@ -73,8 +73,11 @@ export class BoardService implements FinalRule {
     const { renders, images } = this.deps;
     const byId = new Map((await images.list(batchId, kind)).map((image) => [image.id, image]));
     const byIdea = new Map<string, BatchImage[]>();
-    for (const render of await renders.list(batchId)) {
-      const image = render.kind === kind && render.status === "done" && render.imageId ? byId.get(render.imageId) : undefined;
+    const all = await renders.list(batchId);
+    // A draft that was made again and finished: the redo stands in its place.
+    const redone = new Set(all.filter((render) => render.status === "done").map((render) => render.redoOf));
+    for (const render of all) {
+      const image = render.kind === kind && render.status === "done" && render.imageId && !redone.has(render.id) ? byId.get(render.imageId) : undefined;
       if (image) byIdea.set(render.ideaId, [...(byIdea.get(render.ideaId) ?? []), image]);
     }
     return byIdea;
@@ -297,6 +300,15 @@ export class BoardService implements FinalRule {
     });
     const defect = defectOf(draft?.checks ?? undefined) ?? defectOf(draft?.words?.checks ?? undefined);
     return { pick, ...(defect ? { note: `The picked draft has ${defect.code} (${defect.note}), so no final can be made from it. Tell the owner.` } : {}) };
+  }
+
+  /** Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not. */
+  async rejection(batchId: string, imageId: string): Promise<string | undefined> {
+    const { images, checks } = this.deps;
+    const counted = countedOf(await images.get(batchId, imageId), await images.list(batchId));
+    const found = await checks.get(batchId, counted.id);
+    const defect = defectOf(found);
+    return defect ? `${defect.code} (${defect.note})` : rejected(found) ? "two F items or more" : undefined;
   }
 
   /** A final is made only from the draft the owner picked, and never from a draft with a D item. */

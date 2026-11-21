@@ -15,7 +15,7 @@ export function renderTools({ render }: { render: RenderService }): ToolDefiniti
         kind: z.enum(["rough", "draft", "final"]),
         prompt: z.string().min(20).max(4000).describe("The scene, in plain words: camera, light, surface, props. No words to paint."),
         fromId: id.optional().describe("The skeleton of a draft, or the picked draft of a final. A draft of a concept ad (v3) needs none: the model draws the product from its real photos, and pack_check measures the shape."),
-        draft: z.number().int().min(1).max(DRAFTS_PER_IDEA).optional().describe("For a draft of a concept ad (v3): which of the direction's three drafts this is. Its prompt changes only what that draft's question asks; the studio gives the model the concept's rough first."),
+        draft: z.number().int().min(1).max(DRAFTS_PER_IDEA).optional().describe("For a draft of a concept ad (v3): which of the direction's three drafts this is. Its prompt changes only what that draft's question asks; the studio gives the model the concept's rough first. A draft whose checks reject it (a D item, or two F items) is made again once with the same number, and its prompt names the fault."),
         references: z
           .array(z.string().regex(/^(logo|(pack|food|prop)-\d{1,2})$/))
           .max(REFERENCES_MAX)

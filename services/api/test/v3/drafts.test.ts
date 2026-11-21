@@ -102,3 +102,46 @@ describe("a real-photo plan", () => {
     expect(studio.pixels.events.at(-1)!.input).not.toHaveProperty("packKey");
   });
 });
+
+describe("a draft that its checks reject", () => {
+  /** Sends a draft and reads it until it is done. Returns its picture id. */
+  async function made(ideaId: string, draft: number): Promise<string> {
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const sent = await send(ideaId, draft, { prompt: `${SCENE} Draft ${draft}.` });
+    if (!sent.ok) throw new Error(sent.error);
+    const read = await callTool(studio, "render_status", { batchId, renderId: sent.value.id });
+    if ((await callTool(studio, "batch_get", { batchId })).value.batch.state === "waiting_spend") await callTool(studio, "spend_approve", { ...rules, batchId, ownerSaid: "yes" });
+    return read.value.image.id as string;
+  }
+  const look = (imageId: string, items: object[]) => callTool(studio, "checks_save", { ...rules, batchId, imageId, items });
+  const shown = async () => (await studio.services.board.board(batchId)).ideas.find((entry) => entry.idea.id === "idea-2")!.drafts.map((draft) => draft.image.id);
+
+  it("is made again once, and the redo stands in its place", async () => {
+    const first = await made("idea-2", 1);
+    // A draft that passes, or that no one has looked at, is not made again.
+    expect(await send("idea-2", 1)).toMatchObject({ ok: false, error: expect.stringMatching(/made again once, and only when its checks reject it/) });
+    await look(first, []);
+    expect((await send("idea-2", 1)).ok).toBe(false);
+    await look(first, [{ code: "D11", note: "The pouch is too wide." }]);
+    const before = studio.fal.submits().length;
+    const redo = await made("idea-2", 1);
+    expect(studio.fal.submits()).toHaveLength(before + 1);
+    expect((await studio.services.renders.get(batchId, redo)).redoOf).toBe(first);
+    expect(await shown()).toEqual([redo]);
+    // The other two drafts are still made: the rejected one does not take a place.
+    await made("idea-2", 2);
+    await made("idea-2", 3);
+    expect(await shown()).toHaveLength(3);
+    expect(await shown()).not.toContain(first);
+  });
+
+  it("is not made a third time", async () => {
+    const first = await made("idea-2", 1);
+    await look(first, [{ code: "F1", note: "The pouch is as big as the hand." }, { code: "F6", note: "Seven things in the frame." }]);
+    const redo = await made("idea-2", 1);
+    await look(redo, [{ code: "D2", note: "The crisps look like wax." }]);
+    const before = studio.fal.submits().length;
+    expect(await send("idea-2", 1)).toMatchObject({ ok: false, error: expect.stringMatching(/It has had its one redo.*save a new direction with a lower risk/) });
+    expect(studio.fal.submits()).toHaveLength(before);
+  });
+});

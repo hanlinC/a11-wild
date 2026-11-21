@@ -676,6 +676,8 @@ export interface Render {
   /** A draft of a concept ad: which of the direction's three drafts it is, and the version of that direction. */
   draft?: number;
   directionVersion?: number;
+  /** The earlier draft of the same number that this one is made again for, because its picture was rejected. */
+  redoOf?: string;
   /** The price held for it in the ledger, in US dollars. */
   usd: number;
   /** The picture it made. */
