@@ -275,6 +275,9 @@ export class PixelService {
         ...(words.footnote ? { footnote: words.footnote } : {}),
         fontKey: font.key,
         ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
+        // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
+        weight: input.weight,
+        ...(input.subWeight ? { subWeight: input.subWeight } : {}),
         ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
         renderKey: on.key,
       },

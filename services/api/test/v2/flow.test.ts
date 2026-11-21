@@ -260,11 +260,14 @@ describe("a v2 batch: the type", () => {
     const second = await callTool(studio, "font_save", { brandId, family: "Inter", weight: 500 });
     expect(second.ok ? "" : second.error).toBe("");
     const draft = await render(ideas[0]!.id, "draft", await skeleton(ideas[0]!.id));
-    const set = await typeSet(draft, { subFamily: "Inter" });
+    const set = await typeSet(draft, { subFamily: "Inter", subWeight: 500 });
     expect(set.ok ? "" : set.error).toBe("");
     expect(studio.pixels.events.findLast((entry) => entry.tool === "headline")?.input).toMatchObject({
       fontKey: `brands/${brandId}/fonts/archivo-800.ttf`,
       subFontKey: `brands/${brandId}/fonts/inter-500.ttf`,
+      // The weights go to the tool too: a variable font takes them on its weight axis.
+      weight: 800,
+      subWeight: 500,
     });
     expect(await typeSet(draft, { subFamily: "Papyrus" })).toMatchObject({ ok: false, error: expect.stringMatching(/no font file of "Papyrus".*font_save/) });
   });
