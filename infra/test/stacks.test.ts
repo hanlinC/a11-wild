@@ -91,6 +91,14 @@ describe("studio stack", () => {
     expect(withKeys[0]?.[1].Properties.Environment.Variables.KEYS_PREFIX).toBe("/a11-wild/keys");
   });
 
+  it("lets only the API function publish a notice to the owner, to an address that is in no file", () => {
+    template.hasResourceProperties("AWS::SNS::Subscription", { Protocol: "email", Endpoint: { Ref: Match.stringLikeRegexp("SsmParameterValuea11wildalertemail") } });
+    const publishers = Object.entries(template.findResources("AWS::IAM::Policy")).filter(([, policy]) => JSON.stringify(policy).includes("sns:Publish"));
+    expect(publishers.map(([id]) => id)).toEqual([expect.stringMatching(/ApiFunction/)]);
+    const statement = (publishers[0]![1].Properties.PolicyDocument.Statement as Statement[]).find((s) => asList(s.Action).includes("sns:Publish"))!;
+    expect(JSON.stringify(statement.Resource)).toContain("AlertsOwnerNotices");
+  });
+
   it("has no sign-up: only an administrator creates users, and errors hide whether a user exists", () => {
     template.hasResourceProperties("AWS::Cognito::UserPool", {
       AdminCreateUserConfig: { AllowAdminCreateUserOnly: true },

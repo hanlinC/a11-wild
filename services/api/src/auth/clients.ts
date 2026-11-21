@@ -1,5 +1,7 @@
 import type { ClientRecord, ClientStatus } from "@a11-wild/shared";
 import type { Item, Table } from "../store/table.js";
+import { log } from "../log.js";
+import type { Notifier } from "../notify.js";
 
 const PK = "CLIENT";
 
@@ -41,6 +43,7 @@ export class ClientApprovals {
     private readonly cognito: CognitoClients,
     private readonly dashboardClientId: string,
     private readonly now: () => Date = () => new Date(),
+    private readonly notifier?: Notifier,
   ) {}
 
   /**
@@ -55,7 +58,7 @@ export class ClientApprovals {
 
     const info = await this.cognito.describe(clientId);
     if (!info) return "unknown";
-    await this.table.put(
+    const first = await this.table.put(
       {
         pk: PK,
         sk: clientId,
@@ -67,6 +70,12 @@ export class ClientApprovals {
       } satisfies ClientItem,
       { ifNotExists: true },
     );
+    // One email, for the first sight only. A failed email must not stop the sign-in: the page still shows the client.
+    if (first) {
+      await this.notifier
+        ?.clientWaiting({ name: info.name, callbackUrls: info.callbackUrls, seenBy })
+        .catch((error: unknown) => log.error("client_waiting_notice_failed", { client: clientId, error: error instanceof Error ? error.name : "unknown" }));
+    }
     return (await this.table.get<ClientItem>(PK, clientId))?.status ?? "pending";
   }
 

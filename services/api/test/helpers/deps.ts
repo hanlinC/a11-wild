@@ -11,6 +11,7 @@ import { defineTool, ToolRegistry } from "../../src/mcp/registry.js";
 import { McpServer } from "../../src/mcp/server.js";
 import { createSession, SESSION_COOKIE } from "../../src/auth/session.js";
 import { studioTools } from "../../src/mcp/tools/index.js";
+import type { WaitingClient } from "../../src/notify.js";
 import type { Net } from "../../src/urlsafety.js";
 import { fakeNet } from "./net.js";
 import { fakeParallel, type ParallelCall, testKeys } from "./parallel.js";
@@ -77,7 +78,15 @@ export async function createStudio(options: StudioOptions = {}) {
   await table.put(userItem({ sub: "sub-owner", email: "owner@example.com", role: "owner" }));
   await table.put(userItem({ sub: "sub-member", email: "member@example.com", role: "member" }));
 
-  const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, now);
+  const notices: WaitingClient[] = [];
+  const notifier = {
+    fails: false,
+    async clientWaiting(client: WaitingClient) {
+      if (this.fails) throw new Error("topic is down");
+      notices.push(client);
+    },
+  };
+  const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, now, notifier);
   const pictures = new MemoryPictures();
   const parallel = fakeParallel(options.parallel ?? ((_call: ParallelCall) => ({ status: 500 })));
   const { tools, services } = studioTools({
@@ -115,6 +124,8 @@ export async function createStudio(options: StudioOptions = {}) {
     signer,
     clock,
     approvals,
+    notices,
+    notifier,
     spend,
     services,
     pictures,

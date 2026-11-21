@@ -1,6 +1,7 @@
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { S3Client } from "@aws-sdk/client-s3";
+import { SNSClient } from "@aws-sdk/client-sns";
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";
 import type { Deps } from "./app.js";
 import { ClientApprovals } from "./auth/clients.js";
@@ -12,6 +13,7 @@ import { PROMPTS } from "./mcp/prompts.js";
 import { ToolRegistry } from "./mcp/registry.js";
 import { McpServer } from "./mcp/server.js";
 import { studioTools } from "./mcp/tools/index.js";
+import { SnsNotifier } from "./notify.js";
 import { type Pictures, S3Pictures } from "./pictures/store.js";
 import { ParameterKeys, type ProviderKeys } from "./secrets.js";
 import { DynamoTable } from "./store/table.js";
@@ -42,7 +44,10 @@ export async function wire(): Promise<Wired> {
   const config = await loadConfig();
   const table = new DynamoTable(new DynamoDBClient({}), env("TABLE_NAME"));
   const cognito = new UserPoolClients(new CognitoIdentityProviderClient({}), config.userPoolId);
-  const approvals = new ClientApprovals(table, cognito, config.dashboardClientId);
+  // Only the API function has the topic: the daily clean-up meets no new client.
+  const topic = process.env.OWNER_TOPIC_ARN;
+  const notifier = topic ? new SnsNotifier(new SNSClient({}), topic, config.publicOrigin) : undefined;
+  const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, () => new Date(), notifier);
   const keys = new ParameterKeys(new SSMClient({}), env("KEYS_PREFIX"));
   const pictures = new S3Pictures(new S3Client({}), env("PICTURES_BUCKET"));
   return { config, cognito, approvals, table, keys, pictures };

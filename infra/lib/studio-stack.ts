@@ -32,7 +32,9 @@ export class StudioStack extends Stack {
     });
     const web = new Web(this, "Web", { apiOriginDomainName: api.originDomainName });
     const auth = new Auth(this, "Auth", { publicOrigin: web.publicOrigin });
-    new Alerts(this, "Alerts");
+    const alerts = new Alerts(this, "Alerts");
+    alerts.ownerNotices.grantPublish(api.apiFunction);
+    api.apiFunction.addEnvironment("OWNER_TOPIC_ARN", alerts.ownerNotices.topicArn);
 
     // A separate policy, not the functions' default one: the user pool depends on
     // the public address, which depends on the API function. A default policy
