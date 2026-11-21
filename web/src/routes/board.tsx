@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
+import { KIND_NAMES } from "@/lib/kinds";
 import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
@@ -40,6 +41,7 @@ export function Board() {
         <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
           {batch.state.replace("_", " ")}
         </Badge>
+        <Badge color="gray">{KIND_NAMES[batch.kind]}</Badge>
         <Link to={`/brands/${brand.id}`} className="underline underline-offset-2">
           Brand, facts and photos
         </Link>
@@ -92,7 +94,7 @@ export function Board() {
 
 function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: string; entry: Entry; number: number; canPick: boolean; onSaved: () => Promise<void> }) {
   const picks = useMe().role === "owner" && canPick;
-  const { idea, drafts, pick, rank, finals } = entry;
+  const { idea, copy, drafts, pick, rank, finals } = entry;
   const [chosen, setChosen] = useState<string | null | undefined>();
   const [said, setSaid] = useState("");
   const [saving, setSaving] = useState(false);
@@ -119,6 +121,20 @@ function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: st
     <Section title={`Idea ${number}: ${idea.title}`}>
       <Card>
         <p className="text-body">{idea.visual}</p>
+        {copy ? (
+          <dl className="mt-4 grid gap-x-6 gap-y-1 text-caption sm:grid-cols-[max-content_1fr]">
+            <dt className="text-muted-foreground">Headline you approved</dt>
+            <dd className="font-medium">{copy.headline.replaceAll(" | ", " ")}</dd>
+            <dt className="text-muted-foreground">Subline</dt>
+            <dd>{copy.subline}</dd>
+            {copy.footnote ? (
+              <>
+                <dt className="text-muted-foreground">Footnote</dt>
+                <dd>{copy.footnote}</dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
         {drafts.length === 0 ? (
           <p className="mt-4 text-caption text-muted-foreground">No draft yet.</p>
         ) : (
@@ -188,8 +204,8 @@ function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: st
 }
 
 function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string; alt: string; picked: boolean }) {
-  // A final is shown as it is delivered: after the real-camera finish.
-  const url = draft.finish?.viewUrl ?? draft.viewUrl;
+  // A picture is shown as it is delivered: with its approved words when it has them, and a final after the real-camera finish.
+  const url = draft.words?.viewUrl ?? draft.finish?.viewUrl ?? draft.viewUrl;
   return (
     <figure>
       <a href={url} target="_blank" rel="noopener noreferrer">
@@ -200,6 +216,7 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
         {picked ? <Badge color="green">Your pick</Badge> : null}
         {draft.shown.id !== draft.image.id ? <Badge color="gray">Repaired</Badge> : null}
         {draft.finish ? <Badge color="green">Finished</Badge> : null}
+        {draft.words ? <Badge color="green">Words set</Badge> : null}
         {draft.checks === null ? <span className="text-muted-foreground">Not checked yet</span> : null}
       </figcaption>
       {draft.checks && draft.checks.items.length > 0 ? (

@@ -1,3 +1,4 @@
+import { KIND_NAMES } from "@/lib/kinds";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Loading } from "@/components/loading";
@@ -86,6 +87,7 @@ export function Home() {
                   <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
                     {batch.state.replace("_", " ")}
                   </Badge>
+                  <Badge color="gray">{KIND_NAMES[batch.kind]}</Badge>
                   <span className="ml-auto text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
                 </Card>
               </li>

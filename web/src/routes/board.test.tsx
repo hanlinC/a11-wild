@@ -89,6 +89,17 @@ describe("Pick board", () => {
     await waitFor(() => expect(sent).toEqual([{ ideaId: "idea-1", imageId: "idea-1-d3", ownerSaid: "calm" }]));
   });
 
+  it("shows an ad with words as it is delivered: the picture with the approved words, and the words as text", async () => {
+    const withWords = { ...draft("idea-1", 1), words: { image: { ...draft("idea-1", 1).image, id: "idea-1-t1", kind: "typeset" as const }, viewUrl: "https://pictures.example/typeset-1.jpg" } };
+    const copy = { ideaId: "idea-1", headline: "ONCE YOU | START.", subline: "You cannot stop.", ownerSaid: "yes", version: 1, at, by: "owner@example.com" };
+    show(board({ batch: { ...board().batch, kind: "v2" }, ideas: [{ idea: idea(1), copy, drafts: [withWords, draft("idea-1", 2)], pick: null, rank: null, finals: [] }] }));
+    expect(await screen.findByText("ONCE YOU START.")).toBeInTheDocument();
+    expect(screen.getByText("You cannot stop.")).toBeInTheDocument();
+    expect(screen.getByText("Headline ad")).toBeInTheDocument();
+    expect(screen.getByAltText("Rock 1, draft 1")).toHaveAttribute("src", "https://pictures.example/typeset-1.jpg");
+    expect(screen.getAllByText("Words set")).toHaveLength(1);
+  });
+
   it("saves a pass on all three, and shows a saved pick in the owner's words", async () => {
     const sent = show(board({ ideas: [{ idea: idea(1), drafts: [draft("idea-1", 1), draft("idea-1", 2), draft("idea-1", 3)], pick: { ideaId: "idea-1", imageId: "idea-1-d2", ownerSaid: "the rock reads at once", at, by: "owner@example.com" }, rank: null, finals: [] }] }));
     expect(await screen.findByText(/You picked draft 2/)).toHaveTextContent("the rock reads at once");

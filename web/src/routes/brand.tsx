@@ -47,7 +47,12 @@ export function Brand() {
                   ))}
             </dd>
             <dt className="text-muted-foreground">Fonts</dt>
-            <dd>{brand.fonts.length === 0 ? "None chosen" : brand.fonts.join(", ")}</dd>
+            <dd>
+              {brand.fonts.length === 0 ? "None chosen" : brand.fonts.join(", ")}
+              {brand.fontFiles && brand.fontFiles.length > 0 ? (
+                <span className="block text-muted-foreground">Files held: {brand.fontFiles.map((file) => `${file.family} ${file.weight}`).join(", ")}</span>
+              ) : null}
+            </dd>
             {brand.voice ? (
               <>
                 <dt className="text-muted-foreground">Voice</dt>
