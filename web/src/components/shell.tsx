@@ -33,11 +33,12 @@ export function Shell() {
   return (
     <div className="min-h-dvh">
       <header className="sticky top-0 z-(--z-sticky) border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-5">
-          <span className="text-title font-semibold tracking-tight">
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-5 sm:gap-6">
+          <span className="shrink-0 text-title font-semibold tracking-tight">
             a11 <span className="text-muted-foreground">wild</span>
           </span>
-          <nav aria-label="Sections" className="flex items-center gap-1">
+          {/* On a phone the sections scroll sideways inside the bar; the page itself never does. */}
+          <nav aria-label="Sections" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
@@ -45,7 +46,7 @@ export function Shell() {
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   cn(
-                    "rounded-md px-2.5 py-1.5 text-body transition-colors",
+                    "shrink-0 rounded-md px-2.5 py-1.5 text-body whitespace-nowrap transition-colors",
                     isActive ? "bg-(--tint) text-foreground" : "text-muted-foreground hover:text-foreground",
                   )
                 }
@@ -54,7 +55,7 @@ export function Shell() {
               </NavLink>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-3">
             <span className="hidden text-caption text-muted-foreground sm:inline">
               {me.email} · {me.role}
             </span>

@@ -45,7 +45,7 @@ function PackCard({ pack }: { pack: PackSummary }) {
         </p>
         {current ? (
           <div>
-            <h3 className="mb-3 flex items-center gap-2 text-body font-medium">
+            <h3 className="mb-3 flex flex-wrap items-center gap-2 text-body font-medium">
               Version {current.version} <Badge color="green">The link shows this</Badge>
               <span className="text-caption font-normal text-muted-foreground">{when(current.at)}</span>
             </h3>
@@ -104,8 +104,9 @@ function PackCard({ pack }: { pack: PackSummary }) {
 
 function ResultsTable({ results }: { results: AdResult[] }) {
   return (
+    // Seven columns do not fit a phone: the table keeps its width and scrolls sideways inside the card.
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-caption">
+      <table className="w-full min-w-[44rem] text-left text-caption">
         <thead className="text-muted-foreground">
           <tr>
             <th className="py-1 pr-4 font-medium">Ad</th>
@@ -120,7 +121,7 @@ function ResultsTable({ results }: { results: AdResult[] }) {
         <tbody>
           {results.map((result) => (
             <tr key={result.id} className="border-t border-border align-top">
-              <td className="py-2 pr-4 break-all font-mono">{result.adName}</td>
+              <td className="py-2 pr-4 font-mono whitespace-nowrap">{result.adName}</td>
               <td className="py-2 pr-4 whitespace-nowrap">
                 {result.from} to {result.to}
               </td>
