@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { userItem } from "../../src/auth/users.js";
 import { approvedClient, config, createStudio, json, ORIGIN, type Studio } from "../helpers/deps.js";
 
 let studio: Studio;
@@ -177,6 +178,30 @@ describe("connections", () => {
     expect((await write("/api/clients/client-1/approve", cookie, "https://evil.example.com")).status).toBe(403);
     expect((await studio.app.request("/api/clients/client-1/approve", { method: "POST", headers: { cookie } })).status).toBe(403);
     expect(await studio.approvals.statusOf("client-1", "owner@example.com")).toBe("pending");
+  });
+
+  it("ends a person's session at once when they are disabled", async () => {
+    const { cookie } = await signIn();
+    await studio.table.put({ ...userItem({ sub: "sub-owner", email: "owner@example.com", role: "owner" }), disabled: true });
+
+    expect((await studio.app.request("/api/me", { headers: { cookie } })).status).toBe(401);
+    const approve = await studio.app.request("/api/clients/client-1/approve", {
+      method: "POST",
+      headers: { cookie, origin: ORIGIN },
+    });
+    expect(approve.status).toBe(401);
+  });
+
+  it("uses the person's current role, not the one at sign-in", async () => {
+    const { cookie } = await signIn();
+    await studio.table.put(userItem({ sub: "sub-owner", email: "owner@example.com", role: "member" }));
+
+    const approve = await studio.app.request("/api/clients/client-1/approve", {
+      method: "POST",
+      headers: { cookie, origin: ORIGIN },
+    });
+    expect(approve.status).toBe(403);
+    expect((await json(await studio.app.request("/api/me", { headers: { cookie } }))).role).toBe("member");
   });
 
   it("refuses an approval by a member", async () => {

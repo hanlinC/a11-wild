@@ -1,16 +1,21 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 import { readSession, SESSION_COOKIE, type Session } from "../auth/session.js";
+import { findActiveUser } from "../auth/users.js";
 import type { Deps } from "../app.js";
 
 export type SessionEnv = { Variables: { session: Session } };
 
-/** Lets the request pass only with a live dashboard session. */
+/**
+ * Lets the request pass only with a live dashboard session. The person is read
+ * again each time, so disabling them or changing their role takes effect at once.
+ */
 export function requireSession(deps: Deps): MiddlewareHandler<SessionEnv> {
   return async (c, next) => {
     const session = await readSession(deps.table, getCookie(c, SESSION_COOKIE), deps.now());
-    if (!session) return c.json({ error: "signed_out" }, 401);
-    c.set("session", session);
+    const user = session && (await findActiveUser(deps.table, session.sub));
+    if (!user) return c.json({ error: "signed_out" }, 401);
+    c.set("session", { sub: user.sub, email: user.email, role: user.role });
     await next();
   };
 }
