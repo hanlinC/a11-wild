@@ -97,7 +97,7 @@ export function studioTools(parts: StudioParts) {
   const meta = new MetaStore(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
-  const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore });
+  const critic = new CriticService({ batches, brands, truth, facts, board, critic: criticStore, images, pictures });
   const done = new DoneGate({ batches, brands, facts, truth, board, copy });
   const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);

@@ -10,7 +10,7 @@ const STEP: Record<BatchState, string> = {
   truth: "save the product's truth sheet (truth_save)",
   briefed: "save the brief with the buyer insights (brief_save)",
   ideas: "save three ideas (ideas_save)",
-  reviewed: "the review of every concept, by a fresh helper that gets the batch id only (concept_packet, then concept_review_save)",
+  reviewed: 'the review of every concept, by a fresh helper that gets the batch id only: critic_open with step "concepts", then concept_review_save',
   judged: 'the blind pick, by a fresh helper that gets the batch id only: critic_open with step "ideas", then critic_pick',
   worded: "the owner's yes to the words of each idea, saved with his exact words (copy_approve)",
   directed: "save the direction of each picked concept (direction_save)",

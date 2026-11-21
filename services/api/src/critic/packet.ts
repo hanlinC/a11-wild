@@ -55,6 +55,21 @@ export function burstPacket(common: Common, ideas: Idea[]) {
   };
 }
 
+/** What a critic gets to review the concepts of a batch: each one with its roughs as pictures. The order is not the author's. */
+export function conceptsPacket(common: Common, concepts: { idea: Idea; roughs: { imageId: string; viewUrl: string }[] }[]) {
+  return {
+    step: "concepts" satisfies CriticStep,
+    readFirst: `${READ_FIRST} Also read references_get with this batch's kind, and look at each picture it gives: the owner's own proud ads are the bar.`,
+    ...about(common),
+    concepts: concepts.map(({ idea, roughs }) => ({
+      ...blindIdea(idea),
+      ...(idea.concept ? { territory: idea.concept.territory, proposition: idea.concept.proposition, mechanism: idea.concept.mechanism, productRole: idea.concept.productRole, brandRole: idea.concept.brandRole } : {}),
+      roughs,
+    })),
+    task: 'Review every concept, and send all of them in one concept_review_save call with the ticket. Look at each rough as a picture, at the size of a phone screen, beside the owner\'s reference ads, and ask in this order: does it stop me, do I get it in a second, do I want it. A concept is a pair: one picture device and the line that points at it; neither half works alone. Score each of the nine from 1 to 5. Originality and appropriateness are both needed. Give your own answers from the rough: the point test (the headline points at something you can see), the local-truth test (a buyer in Singapore lives this moment), the cover test (with the words covered, the rough still says the idea), and the pay question (would the owner pay for this from his own pocket and be proud of it, beside his reference ads). A concept with no rough was judged from words: you cannot recommend it. You may recommend none: do not lower the bar to fill three places. You advise; the owner sees your notes beside every concept and chooses.',
+  };
+}
+
 /** A draft as a critic sees it: the picture that counts, and what a pixel tool measured in it. */
 export interface BlindDraft {
   imageId: string;

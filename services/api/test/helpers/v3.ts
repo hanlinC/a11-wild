@@ -70,3 +70,34 @@ export async function v3AtConcepts(studio: Studio, create: object = {}) {
   if (!saved.ok) throw new Error(saved.error);
   return made;
 }
+
+const SCENE = "One empty pouch lies flat on a yellow seamless, one hard shadow to its right, camera from above.";
+
+/** Makes one rough of a concept and reads it until it is done. Returns its picture id. */
+export async function roughOf(studio: Studio, batchId: string, ideaId: string): Promise<string> {
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+  const sent = await callTool(studio, "render_submit", { ...rules, batchId, ideaId, kind: "rough", prompt: SCENE, references: ["pack-1"] });
+  if (!sent.ok) throw new Error(sent.error);
+  return (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id as string;
+}
+
+/** One concept's review, as a fresh critic gives it. */
+export const review = (ideaId: string, extra: object = {}) => ({
+  ideaId,
+  scores: { originality: 4, appropriateness: 4, insight: 4, headline: 4, visual: 4, product: 4, brand: 4, commercial: 4, execution: 4 },
+  pointTest: { passed: true, note: "The headline points at the empty pouch." },
+  localTruth: { passed: true, note: "People here finish a pack in the car." },
+  coverTest: { passed: true, note: "The empty pouch alone says it is gone." },
+  wouldPay: true,
+  recommend: false,
+  note: "The empty pouch reads at once on the yellow stage.",
+  ...extra,
+});
+
+/** A fresh critic reviews every concept of the packet, and recommends the ones named. */
+export async function reviewConcepts(studio: Studio, batchId: string, recommend: string[] = []) {
+  const packet = await callTool(studio, "critic_open", { batchId, step: "concepts", freshHelper: true });
+  if (!packet.ok) return packet;
+  const reviews = packet.value.concepts.map((entry: { id: string }) => review(entry.id, { recommend: recommend.includes(entry.id) }));
+  return callTool(studio, "concept_review_save", { ...rules, batchId, ticket: packet.value.ticket, reviews });
+}

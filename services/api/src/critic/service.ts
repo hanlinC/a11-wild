@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
-import { type Batch, type CriticRank, FUNNEL_STAGES, type Idea, type IdeaVerdict, type StagePick } from "@a11-wild/shared";
+import { type Batch, type ConceptReview, type CriticRank, FUNNEL_STAGES, type Idea, type IdeaVerdict, type StagePick } from "@a11-wild/shared";
 import { hasWords, requireMove } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BoardService } from "../board/service.js";
 import type { BrandStore } from "../brand/store.js";
 import type { FactStore } from "../facts/store.js";
+import type { ImageStore } from "../images/store.js";
+import type { Pictures } from "../pictures/store.js";
 import { Refusal } from "../mcp/registry.js";
 import { DRAFTS_PER_IDEA } from "../render/service.js";
 import type { TruthStore } from "../truth/store.js";
-import { burstPacket, draftsPacket, ideasPacket, rankable } from "./packet.js";
+import { burstPacket, conceptsPacket, draftsPacket, ideasPacket, rankable } from "./packet.js";
 import type { CriticStep, CriticStore, Ticket } from "./store.js";
 
 interface Deps {
@@ -18,7 +20,12 @@ interface Deps {
   facts: FactStore;
   board: BoardService;
   critic: CriticStore;
+  images: ImageStore;
+  pictures: Pictures;
 }
+
+/** The lowest score for the picture of a concept that the critic recommends. */
+export const RECOMMEND_VISUAL_MIN = 4;
 
 export const BLIND_NEEDED =
   "A blind critic is needed: a fresh helper that gets the batch id and nothing else. The session that wrote the ideas or made the drafts cannot judge them. If you cannot start a fresh helper, tell the owner and stop.";
@@ -51,6 +58,21 @@ export class CriticService {
       truthSheet: (await truth.get(batch.productId, batch.truthVersion)) ?? null,
       facts: await facts.list(product.id),
     };
+    if (step === "concepts") {
+      if (batch.kind !== "v3") throw new Refusal('Only a batch of concept ads (v3) has concepts to review. Use step "ideas" for a v1 or v2 batch.');
+      if (batch.state !== "ideas") requireMove(batch, "reviewed", "critic_open");
+      const { concepts, roughs, stamp } = await this.conceptsNow(batchId);
+      if (concepts.length === 0) throw new Refusal("This batch has no concepts yet. The main agent saves them first (concepts_save).");
+      const { pictures } = this.deps;
+      const shown = await Promise.all(
+        shuffled(concepts, stamp).map(async (idea) => ({
+          idea,
+          roughs: await Promise.all((roughs.get(idea.id) ?? []).map(async (image) => ({ imageId: image.id, viewUrl: await pictures.viewUrl(image.key) }))),
+        })),
+      );
+      return { ...conceptsPacket(common, shown), ...(await critic.issue(batchId, { step, ideaIds: concepts.map((idea) => idea.id), stamp })) };
+    }
+    if (step === "ideas" && batch.kind === "v3") throw new Refusal('A batch of concept ads is reviewed with step "concepts".');
     const ideas = await this.judgedAt(batch, step);
     const stamp = stampOf(ideas);
 
@@ -69,6 +91,66 @@ export class CriticService {
     }
     const shown = Object.fromEntries(open.flatMap(({ drafts }) => drafts.map((draft) => [draft.imageId, draft.shownId])));
     return { ...draftsPacket(common, open), ...(await critic.issue(batchId, { step, ideaIds: open.map(({ idea }) => idea.id), stamp, shown })) };
+  }
+
+  /** The concepts of a batch and the roughs of each, with a stamp that changes when a concept or a rough is added. */
+  private async conceptsNow(batchId: string) {
+    const concepts = await this.deps.batches.burst(batchId);
+    const roughs = new Map<string, { id: string; key: string }[]>();
+    for (const image of await this.deps.images.list(batchId, "rough")) {
+      if (image.ideaId) roughs.set(image.ideaId, [...(roughs.get(image.ideaId) ?? []), image]);
+    }
+    const seen = [...roughs.values()].flat().map((image) => image.id).sort();
+    return { concepts, roughs, stamp: createHash("sha256").update(JSON.stringify([concepts, seen])).digest("hex").slice(0, 32) };
+  }
+
+  /** The newest review of the concepts, and whether a concept or a rough was added after the critic looked. */
+  async conceptReviewsOf(batchId: string) {
+    const saved = await this.deps.critic.conceptReviews(batchId);
+    if (!saved) return undefined;
+    const { concepts, roughs } = await this.conceptsNow(batchId);
+    const current =
+      same(saved.reviews.map((entry) => entry.ideaId), concepts.map((idea) => idea.id)) &&
+      saved.reviews.every((entry) => same(entry.roughs, (roughs.get(entry.ideaId) ?? []).map((image) => image.id)) || (entry.roughs.length === 0 && !roughs.has(entry.ideaId)));
+    return { ...saved, current };
+  }
+
+  /** The critic's review of every concept, from its rough. It advises: the owner sees it and chooses. */
+  async reviewConcepts(batchId: string, ticket: string, reviews: Omit<ConceptReview, "roughs">[]) {
+    const { batches, critic } = this.deps;
+    const batch = await batches.get(batchId);
+    if (batch.kind !== "v3") throw new Refusal("Only a batch of concept ads (v3) has concepts to review.");
+    if (batch.state !== "ideas") requireMove(batch, "reviewed", "concept_review_save");
+    const found = await critic.read(batchId, ticket);
+    if (!found || found.step !== "concepts") throw new Refusal(BAD_TICKET);
+    const { roughs, stamp } = await this.conceptsNow(batchId);
+    if (found.stamp !== stamp) throw new Refusal("A concept or a rough was added after this ticket was made. Start a fresh helper and call critic_open again.");
+    if (!same(reviews.map((review) => review.ideaId), found.ideaIds)) throw new Refusal(`Review each concept of the packet once, and no other: ${found.ideaIds.join(", ")}.`);
+    const faults = reviews.flatMap((review) => {
+      if (!review.recommend) return [];
+      const why = [
+        ...((roughs.get(review.ideaId) ?? []).length === 0 ? ["it has no rough, so it was judged from words"] : []),
+        ...(review.scores.visual < RECOMMEND_VISUAL_MIN ? [`its picture scores ${review.scores.visual}, under ${RECOMMEND_VISUAL_MIN}`] : []),
+        ...(review.pointTest.passed ? [] : ["it fails the point test"]),
+      ];
+      return why.length > 0 ? [`${review.ideaId} cannot be recommended: ${why.join(", ")}.`] : [];
+    });
+    if (faults.length > 0) throw new Refusal(`The review is not saved. ${faults.join(" ")} Say what you see in the note; the owner still sees the concept.`);
+    if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
+    const saved = await critic.saveConceptReviews(
+      batchId,
+      reviews.map((review) => ({ ...review, roughs: (roughs.get(review.ideaId) ?? []).map((image) => image.id) })),
+    );
+    const moved = await batches.move(batch, "reviewed", "concept_review_save");
+    const recommended = saved.reviews.filter((review) => review.recommend).map((review) => review.ideaId);
+    return {
+      state: moved.state,
+      recommended,
+      nextStep:
+        recommended.length === 0
+          ? "Report that no concept reaches the bar, and what is missing. The main agent tells the owner, and writes more concepts (concepts_save) unless he picks from these."
+          : "Report what you recommend and why. The main agent shows the owner every concept with its rough and your notes, and he picks three (concept_pick).",
+    };
   }
 
   /** The ideas a step judges: the whole burst when a critic chooses from many, else the batch's ideas. */

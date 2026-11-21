@@ -316,6 +316,35 @@ export interface Brief {
   by: string;
 }
 
+export const CONCEPT_SCORES = ["originality", "appropriateness", "insight", "headline", "visual", "product", "brand", "commercial", "execution"] as const;
+/** What the critic scores a concept on, each from 1 to 5. `visual`: the picture says the idea. `product`: the product is needed. `execution`: it can be made true to the product. */
+export type ConceptScore = (typeof CONCEPT_SCORES)[number];
+
+/** What a fresh critic said of one concept, from its rough beside the owner's reference ads. The owner sees it before he picks. */
+export interface ConceptReview {
+  ideaId: string;
+  scores: Record<ConceptScore, number>;
+  /** The headline points at something the picture shows. */
+  pointTest: IdeaTest;
+  /** A buyer in Singapore lives this moment. */
+  localTruth: IdeaTest;
+  /** With the words covered, the rough still says the idea. */
+  coverTest: IdeaTest;
+  /** Would the owner pay for this ad from his own pocket and be proud of it, beside his reference ads? */
+  wouldPay: boolean;
+  /** The critic's advice. The owner chooses. */
+  recommend: boolean;
+  note: string;
+  /** The roughs the critic saw. With none, it judged from words. */
+  roughs: string[];
+}
+
+/** The critic's review of every concept of a batch, as the set stood when it looked. */
+export interface ConceptReviews {
+  reviews: ConceptReview[];
+  at: string;
+}
+
 export const SUBLINE_BASES = ["fact", "second_beat", "none"] as const;
 export type SublineBasis = (typeof SUBLINE_BASES)[number];
 

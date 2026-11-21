@@ -1,17 +1,18 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { CriticRank, IdeaVerdict, StagePick } from "@a11-wild/shared";
+import type { CriticRank, IdeaVerdict, StagePick, ConceptReview, ConceptReviews } from "@a11-wild/shared";
 import { type Item, record, type Table } from "../store/table.js";
 
 const pk = (batchId: string) => `BATCH#${batchId}`;
 const ticketSk = (ticket: string) => `TICKET#${createHash("sha256").update(ticket).digest("hex")}`;
 const VERDICTS_SK = "CRITIC#IDEAS";
 const STAGES_SK = "CRITIC#STAGES";
+const CONCEPTS_SK = "CRITIC#CONCEPTS";
 const OPEN = "open";
 
 /** A critic has this long to judge after it opens a packet. */
 export const TICKET_MINUTES = 120;
 
-export type CriticStep = "ideas" | "drafts";
+export type CriticStep = "ideas" | "concepts" | "drafts";
 
 export interface Ticket {
   step: CriticStep;
@@ -84,6 +85,18 @@ export class CriticStore {
   async stages(batchId: string): Promise<SavedStages | undefined> {
     const item = await this.table.get<Item & SavedStages>(pk(batchId), STAGES_SK);
     return item && record<SavedStages>(item);
+  }
+
+  async saveConceptReviews(batchId: string, reviews: ConceptReview[]): Promise<ConceptReviews> {
+    const saved: ConceptReviews = { reviews, at: this.now().toISOString() };
+    await this.table.put({ pk: pk(batchId), sk: CONCEPTS_SK, ...saved });
+    return saved;
+  }
+
+  /** The newest review of the batch's concepts. */
+  async conceptReviews(batchId: string): Promise<ConceptReviews | undefined> {
+    const item = await this.table.get<Item & ConceptReviews>(pk(batchId), CONCEPTS_SK);
+    return item && record<ConceptReviews>(item);
   }
 
   async saveRank(batchId: string, rank: Omit<CriticRank, "at">): Promise<CriticRank> {
