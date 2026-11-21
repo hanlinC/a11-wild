@@ -24,7 +24,7 @@ Run these once, signed in to AWS with the owner's browser sign-in (`aws login`),
    - Secret `AWS_DEPLOY_ROLE_ARN`: the `DeployRoleArn` output of `A11WildGithubDeploy`.
    - Variable `AWS_REGION`: the Region.
 
-   The role grants nothing by itself: it trusts only the `main` branch of this repository, named by its owner id and repository id (`infra/bin/app.ts`). A repository that is renamed, moved or made again gets new ids: put them in that file and deploy `A11WildGithubDeploy` again, or the job fails with "Not authorized to perform sts:AssumeRoleWithWebIdentity". It is a secret because it holds the account number, and the workflow log of a public repository is public. The workflow also masks the account number, the live address and the pool id in its log. Until the variable is set, the deploy job is skipped.
+   The role grants nothing by itself: it trusts only the `main` branch of this repository, named by its owner id and repository id (`infra/bin/app.ts`). The role matches all four values: the owner's name and id, and the repository's name and id. A rename changes the name, a transfer changes the owner, and a repository made again gets a new id. After any of them, put the current four values in that file and deploy `A11WildGithubDeploy` again, or the job fails with "Not authorized to perform sts:AssumeRoleWithWebIdentity". It is a secret because it holds the account number, and the workflow log of a public repository is public. The workflow also masks the account number, the live address and the pool id in its log. Until the variable is set, the deploy job is skipped.
 
 ## Each deploy
 
