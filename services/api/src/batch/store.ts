@@ -10,6 +10,9 @@ const PK = "BATCH";
 const stored = (item: Item & Batch): Batch => ({ ...record<Batch>(item), kind: item.kind ?? "v1" });
 
 /** A batch and its saved steps. Each step is written as it is done, so a stopped session resumes from the batch id alone. */
+/** How long a call may hold a round of more concepts before another call takes it over. A save takes well under a second. */
+const ROUND_HELD_MS = 60_000;
+
 export class BatchStore {
   constructor(
     private readonly table: Table,
@@ -55,14 +58,24 @@ export class BatchStore {
   /**
    * Adds to the set only while it still has `after` ideas, so that two calls at the same moment
    * cannot write over each other. Returns false when another call has added to it first.
+   * A call that took the round and then died leaves it taken: after a minute the next call takes it over.
    */
   async extendBurst(batchId: string, ideas: Idea[], by: string, after: number): Promise<boolean> {
+    const pk = `${PK}#${batchId}`;
     const round = `BURST#AFTER#${after}`;
-    if (!(await this.table.put({ pk: `${PK}#${batchId}`, sk: round, by, at: this.now().toISOString() }, { ifNotExists: true }))) return false;
+    const take = () => this.table.put({ pk, sk: round, by, at: this.now().toISOString() }, { ifNotExists: true });
+    let taken = await take();
+    if (!taken) {
+      const held = await this.table.get<Item & { at: string }>(pk, round);
+      // The set still has `after` ideas, so a call that has held this round for a minute never saved. Only one caller takes it over.
+      const stale = !!held && this.now().getTime() - new Date(held.at).getTime() > ROUND_HELD_MS;
+      taken = held ? stale && (await this.table.delete(pk, round, { ifEquals: { attribute: "at", value: held.at } })) && (await take()) : await take();
+    }
+    if (!taken) return false;
     try {
       await this.saveBurst(batchId, ideas, by);
     } catch (error) {
-      await this.table.delete(`${PK}#${batchId}`, round);
+      await this.table.delete(pk, round);
       throw error;
     }
     return true;

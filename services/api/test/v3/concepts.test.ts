@@ -102,6 +102,12 @@ describe("the concepts of a concept ad", () => {
     const seventh = (title: string) => batches.extendBurst(batchId, [...before, { ...before[0]!, id: "idea-7", title }], "owner@example.com", before.length);
     expect(await Promise.all([seventh("First"), seventh("Second")])).toEqual([true, false]);
     expect((await batches.burst(batchId)).map((idea) => idea.title).slice(-1)).toEqual(["First"]);
+    // A call that took a round and died before it saved does not lock the set: after a minute the next call takes the round over.
+    const now = await batches.burst(batchId);
+    await studio.table.put({ pk: `BATCH#${batchId}`, sk: `BURST#AFTER#${now.length}`, by: "owner@example.com", at: studio.clock.now.toISOString() });
+    const blocked = await callTool(studio, "concepts_save", { ...rules, batchId, concepts: [concept(8, { territory: "Desk at four", insightId: "insight-4" })] });
+    expect(blocked).toMatchObject({ ok: false, error: expect.stringMatching(/another call added concepts/) });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 61_000);
     // The call that lost reads the set again and adds to it.
     const more = await callTool(studio, "concepts_save", { ...rules, batchId, concepts: [concept(8, { territory: "Desk at four", insightId: "insight-4" })] });
     expect(more.value.concepts).toHaveLength(8);
