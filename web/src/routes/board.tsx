@@ -206,6 +206,8 @@ function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: st
 function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string; alt: string; picked: boolean }) {
   // A picture is shown as it is delivered: with its approved words when it has them, and a final after the real-camera finish.
   const url = draft.words?.viewUrl ?? draft.finish?.viewUrl ?? draft.viewUrl;
+  // What was found in the picture, and what was found in it with its words on.
+  const items = [...(draft.checks?.items ?? []), ...(draft.words?.checks?.items ?? [])];
   return (
     <figure>
       <a href={url} target="_blank" rel="noopener noreferrer">
@@ -217,12 +219,12 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
         {draft.shown.id !== draft.image.id ? <Badge color="gray">Repaired</Badge> : null}
         {draft.finish ? <Badge color="green">Finished</Badge> : null}
         {draft.words ? <Badge color="green">Words set</Badge> : null}
-        {draft.checks === null ? <span className="text-muted-foreground">Not checked yet</span> : null}
+        {draft.checks === null || draft.words?.checks === null ? <span className="text-muted-foreground">Not checked yet</span> : null}
       </figcaption>
-      {draft.checks && draft.checks.items.length > 0 ? (
+      {items.length > 0 ? (
         <ul className="mt-1 grid gap-1 text-caption">
-          {draft.checks.items.map((item) => (
-            <li key={`${item.code}-${item.tool ?? "seen"}`}>
+          {items.map((item, index) => (
+            <li key={`${item.code}-${item.tool ?? "seen"}-${index}`}>
               <Badge color={item.code.startsWith("D") ? "red" : "amber"}>{item.code}</Badge> {item.note}
               {item.tool ? <span className="ml-1 text-muted-foreground">(measured)</span> : null}
             </li>

@@ -434,7 +434,7 @@ export interface BoardDraft {
   /** A final after the real-camera finish: the picture that is delivered. */
   finish?: { image: BatchImage; viewUrl: string };
   /** The picture with the approved words and the real logo set on it (an ad with words): what the owner judges, and what is delivered. */
-  words?: { image: BatchImage; viewUrl: string };
+  words?: { image: BatchImage; viewUrl: string; /** The agent's look at the picture with its words. Null until it is saved. */ checks: ImageChecks | null };
 }
 
 export type PixelTool =
@@ -494,7 +494,7 @@ export interface Board {
 /** The blind critic's order of one idea's drafts, best first, with a reason for each place. */
 export interface CriticRank {
   ideaId: string;
-  /** shownId is the picture the critic looked at: the draft, or its newest repair. The server sets it. */
+  /** shownId is the picture the critic looked at: the draft or its newest repair, and in an ad with words that picture with its words. The server sets it. */
   order: { imageId: string; shownId: string; reason: string }[];
   at: string;
 }

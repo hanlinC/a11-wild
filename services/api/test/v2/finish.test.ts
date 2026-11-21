@@ -44,7 +44,12 @@ async function checked(imageId: string) {
   const job = await callTool(studio, "pack_check", { batchId, imageId, at: [500, 800], bg: "101010" });
   await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
 }
-const words = (imageId: string) => run("type_set", { imageId, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF" });
+/** Sets the approved words on a picture and, as the agent must, looks at the picture with them. */
+async function words(imageId: string, look = true) {
+  const set = await run("type_set", { imageId, area: [0.06, 0.12, 0.94, 0.3], colour: "FFFFFF" });
+  if (set.ok && look) await callTool(studio, "checks_save", { ...rules, batchId, imageId: set.value.image.id, items: [] });
+  return set;
+}
 const done = async () => (await callTool(studio, "batch_done", { batchId })).value;
 
 /** A v2 batch with nine checked drafts that carry the approved words, ranked and shown. */
@@ -103,8 +108,13 @@ describe("a v2 batch: finals", () => {
     expect(JSON.stringify(report.conditions)).toMatch(/type_set for picture/);
 
     for (const imageId of finals) {
-      const set = await words(imageId);
+      const set = await words(imageId, false);
       expect(set.value.image).toMatchObject({ kind: "typeset", rootId: imageId });
+      // The picture with its words is what is delivered: it is looked at too, and a D item on it sends the type back.
+      expect(JSON.stringify((await done()).conditions)).toContain(`checks_save for picture ${set.value.image.id}`);
+      const bad = await callTool(studio, "checks_save", { ...rules, batchId, imageId: set.value.image.id, items: [{ code: "D1", note: "The headline runs over the pack." }] });
+      expect(bad.value.stillMissing).toContain(`type_set again for picture ${imageId}: with its words it has D1 (The headline runs over the pack.)`);
+      await words(imageId);
     }
     // The type goes on the finished picture, not under the grain.
     const last = studio.pixels.events.filter((event) => event.tool === "headline").at(-1)!;

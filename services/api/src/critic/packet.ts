@@ -1,4 +1,5 @@
 import type { Board, BrandKit, CheckItem, Fact, Idea, Product, TruthSheet } from "@a11-wild/shared";
+import { seenOf } from "../board/service.js";
 import type { CriticStep } from "./store.js";
 
 /** An idea as a blind critic reads it: what the picture is, without its author's own verdict on it. */
@@ -57,7 +58,7 @@ export function burstPacket(common: Common, ideas: Idea[]) {
 /** A draft as a critic sees it: the picture that counts, and what a pixel tool measured in it. */
 export interface BlindDraft {
   imageId: string;
-  /** The picture that counts: the draft, or its newest repair. In an ad with words, viewUrl opens that picture with the approved words and the logo set on it. */
+  /** The picture viewUrl opens: the draft or its newest repair, and in an ad with words that picture with the approved words and the logo set on it. A rank is of this picture only. */
   shownId: string;
   viewUrl: string;
   measured: CheckItem[];
@@ -69,7 +70,7 @@ export function rankable(board: Board, draftsPerIdea: number): { idea: ReturnTyp
     .filter((entry) => entry.pick === null && entry.drafts.length === draftsPerIdea)
     .map((entry) => ({
       idea: blindIdea(entry.idea),
-      drafts: entry.drafts.map((draft) => ({ imageId: draft.image.id, shownId: draft.shown.id, viewUrl: draft.words?.viewUrl ?? draft.viewUrl, measured: (draft.checks?.items ?? []).filter((item) => item.tool !== undefined) })),
+      drafts: entry.drafts.map((draft) => ({ imageId: draft.image.id, shownId: seenOf(draft).id, viewUrl: draft.words?.viewUrl ?? draft.viewUrl, measured: (draft.checks?.items ?? []).filter((item) => item.tool !== undefined) })),
     }));
 }
 

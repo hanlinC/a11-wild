@@ -1,4 +1,4 @@
-import type { ApprovedCopy, Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, ImageKind, Pick, Role } from "@a11-wild/shared";
+import type { ApprovedCopy, Batch, BatchImage, BatchState, Board, BoardDraft, CheckItem, ImageChecks, ImageKind, Pick as OwnerPick, Role } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
@@ -47,13 +47,15 @@ export const typesetOf = (on: BatchImage, all: BatchImage[], words: ApprovedCopy
   words
     ? all.filter((other) => other.kind === "typeset" && other.fromId === on.id && (other.wordsVersion === undefined ? other.createdAt >= words.at : other.wordsVersion === words.version)).at(-1)
     : undefined;
+/** The picture the owner and the critic look at: the draft or its newest repair, and in an ad with words that picture with its words. */
+export const seenOf = (draft: Pick<BoardDraft, "shown" | "words">): BatchImage => draft.words?.image ?? draft.shown;
 /** The real-camera finish that was made from this very picture, the newest one. */
 export const finishOf = (counted: BatchImage, all: BatchImage[]): BatchImage | undefined => all.filter((other) => other.kind === "finish" && other.fromId === counted.id).at(-1);
 
 /** Where one idea stands on its way to a final. */
 export interface IdeaFinal {
   ideaId: string;
-  pick: Pick | undefined;
+  pick: OwnerPick | undefined;
   /** What the idea still needs. Empty when it has a clean, finished final, or the owner's pass. */
   missing: string[];
 }
@@ -103,7 +105,7 @@ export class BoardService implements FinalRule {
             viewUrl: await pictures.viewUrl(counted.key),
             checks: found.get(counted.id) ?? null,
             ...(finish ? { finish: { image: finish, viewUrl: await pictures.viewUrl(finish.key) } } : {}),
-            ...(words ? { words: { image: words, viewUrl: await pictures.viewUrl(words.key) } } : {}),
+            ...(words ? { words: { image: words, viewUrl: await pictures.viewUrl(words.key), checks: found.get(words.id) ?? null } } : {}),
           };
         }),
       );
@@ -132,6 +134,17 @@ export class BoardService implements FinalRule {
     return missing;
   }
 
+  /** What a picture with its words still needs: the agent's look at the words on it, with no D item and fewer than two F items. Setting the type again is free. */
+  private wordNeeds(on: BatchImage, set: BatchImage | undefined, found: Map<string, ImageChecks>, what: string): string[] {
+    if (!set) return [`type_set for picture ${on.id}: the approved words and the real logo on the ${what}`];
+    const seen = found.get(set.id);
+    if (!seen?.looked) return [`checks_save for picture ${set.id}: the ${what} of ${on.id} with its words`];
+    const defect = defectOf(seen);
+    if (defect) return [`type_set again for picture ${on.id}: with its words it has ${defect.code} (${defect.note})`];
+    if (rejected(seen)) return [`type_set again for picture ${on.id}: with its words it has two F items or more`];
+    return [];
+  }
+
   /** Where each idea stands on its way to a final: the owner's choice, and what its newest final still needs. */
   async finals(batch: Batch): Promise<IdeaFinal[]> {
     const { batches, brands, checks, picks } = this.deps;
@@ -158,8 +171,9 @@ export class BoardService implements FinalRule {
       if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
       else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
       else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
-      else if (hasWords(batch.kind) && !typesetOf(finishOf(final, all) as BatchImage, all, approved.find((copy) => copy.ideaId === idea.id))) {
-        missing.push(`type_set for picture ${final.id}: the approved words and the real logo on the finished final`);
+      else if (hasWords(batch.kind)) {
+        const finish = finishOf(final, all) as BatchImage;
+        missing.push(...this.wordNeeds(final, typesetOf(finish, all, approved.find((copy) => copy.ideaId === idea.id)), found, "finished final"));
       }
     }
     return entries;
@@ -175,16 +189,21 @@ export class BoardService implements FinalRule {
       const approved = hasWords(batch.kind) ? await this.deps.copy.list(batch.id) : [];
       for (const idea of await batches.ideas(batch.id)) {
         const mine = drafts.get(idea.id) ?? [];
+        const words = approved.find((copy) => copy.ideaId === idea.id);
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);
         for (const image of mine) {
           const counted = countedOf(image, all);
           missing.push(...(await this.needs(batch.id, counted, hasPack, found)));
           // The owner judges an ad, not a bare photo: each draft carries the approved words and the real logo before he sees it.
-          if (hasWords(batch.kind) && !typesetOf(counted, all, approved.find((copy) => copy.ideaId === idea.id))) missing.push(`type_set for picture ${counted.id}: the approved words and the real logo on the draft`);
+          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft"));
         }
-        // A rank counts while it is of the pictures that count now: a repair made after it needs a new rank.
+        // A rank counts while it is of the pictures the owner sees now: a repair made after it, or words set after it, needs a new rank.
         const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
-        if (!mine.every((image) => judged.get(image.id) === countedOf(image, all).id)) {
+        const seen = (image: BatchImage) => {
+          const counted = countedOf(image, all);
+          return (hasWords(batch.kind) ? typesetOf(counted, all, words) : undefined) ?? counted;
+        };
+        if (!mine.every((image) => judged.get(image.id) === seen(image).id)) {
           missing.push(`the blind critic's rank of the drafts of ${idea.id} as they are now (a fresh helper: critic_open with step "drafts", then critic_rank)`);
         }
       }
@@ -203,8 +222,8 @@ export class BoardService implements FinalRule {
     const { batches, images, checks } = this.deps;
     const batch = await batches.get(batchId);
     const image = await images.get(batchId, imageId);
-    if (!["draft", "final", ...REPAIR_KINDS].includes(image.kind)) {
-      throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft, a final, or a repair of one.`);
+    if (!["draft", "final", "typeset", ...REPAIR_KINDS].includes(image.kind)) {
+      throw new Refusal(`Picture ${imageId} is a ${image.kind}. Checks are saved for a draft, a final, a repair of one, or one with its words set.`);
     }
     const saved = await checks.save(batchId, imageId, items);
     const { batch: after, missing } = await this.progress(batch);
@@ -249,8 +268,15 @@ export class BoardService implements FinalRule {
     if (!entry) throw new Refusal(`This batch has no idea ${input.ideaId}.`);
     const draft = input.imageId ? entry.drafts.find(({ image }) => image.id === input.imageId) : undefined;
     if (input.imageId && !draft) throw new Refusal(`Picture ${input.imageId} is not a draft of ${input.ideaId}.`);
+    // In an ad with words the owner chooses between ads, not bare photos: after his words change, the pictures carry them again first.
+    const bare = hasWords(batch.kind) ? entry.drafts.filter((shown) => !shown.words) : [];
+    if (bare.length > 0) {
+      throw new Refusal(
+        `The words of ${input.ideaId} are not on ${bare.length === entry.drafts.length ? "its drafts" : `draft ${bare.map((shown) => shown.number).join(", ")}`} as they are now, so the owner has not seen the ad he would choose. Set them with type_set, look at each picture (checks_save), have a fresh critic rank them again, and show him the board.`,
+      );
+    }
 
-    const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: draft.shown.id } : {}), ownerSaid, by: user.email });
+    const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: seenOf(draft).id } : {}), ownerSaid, by: user.email });
     await tasteLog.add({
       kind: draft ? "pick" : "pass",
       ownerSaid,
@@ -260,13 +286,13 @@ export class BoardService implements FinalRule {
       ...(draft ? { draftId: draft.image.id } : {}),
       savedBy: user.email,
     });
-    const defect = defectOf(draft?.checks ?? undefined);
+    const defect = defectOf(draft?.checks ?? undefined) ?? defectOf(draft?.words?.checks ?? undefined);
     return { pick, ...(defect ? { note: `The picked draft has ${defect.code} (${defect.note}), so no final can be made from it. Tell the owner.` } : {}) };
   }
 
   /** A final is made only from the draft the owner picked, and never from a draft with a D item. */
   async allow(batch: Batch, ideaId: string, draft: BatchImage): Promise<{ finals: number; source: BatchImage }> {
-    const made: Pick[] = await this.deps.picks.all(batch.id);
+    const made: OwnerPick[] = await this.deps.picks.all(batch.id);
     const pick = made.find((entry) => entry.ideaId === ideaId);
     if (pick?.imageId !== draft.id) {
       throw new Refusal(
