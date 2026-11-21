@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.9";
+export const RULES_VERSION = "2026-11-22.10";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -152,7 +152,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     id: "v3-drafts",
     roles: MAKERS,
     kinds: CONCEPTS,
-    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows. Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong. A draft that its checks reject (a D item, or two F items) is made again once, with the same number and a prompt that names the fault. With fewer than two drafts of a concept that pass after that, save a new direction with a lower risk; do not send a third.",
+    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows, with a skeleton too. A concept with no rough starts from a plan of its real photos (skeleton_make). Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong. A draft that its checks reject (a D item, or two F items) is made again once, with the same number and a prompt that names the fault. With fewer than two drafts of a concept that pass after that, save a new direction with a lower risk for that concept (direction_save takes it while the drafts are made, and leaves the other concepts as they are); its three drafts start again. Do not send a third.",
   },
   {
     id: "v3-finals",

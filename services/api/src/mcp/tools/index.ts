@@ -109,7 +109,7 @@ export function studioTools(parts: StudioParts) {
   const done = new DoneGate({ batches, brands, facts, truth, board, copy });
   const render = new RenderService({ directions, batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
-  const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, copy, directions, runner: parts.pixelRunner, now });
+  const pixels = new PixelService({ batches, brands, images, checks, board, renders, jobs, pictures, copy, directions, runner: parts.pixelRunner, now });
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
@@ -123,7 +123,7 @@ export function studioTools(parts: StudioParts) {
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
     ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }),
-    ...directionTools({ batches, copy, directions }),
+    ...directionTools({ batches, copy, directions, drafts: board }),
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),

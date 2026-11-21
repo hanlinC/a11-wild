@@ -9,6 +9,11 @@ export const AXES_APART_MIN = 3;
 
 const plain = (text: string) => text.trim().toLowerCase().replace(/\s+/g, " ");
 /** The axes on which two drafts say something else. */
+const planOf = ({ since: _since, ...plan }: ConceptDirection) => JSON.stringify(plan, Object.keys(plan).sort());
+/** True when two directions of a concept say the same. */
+export const samePlan = (a: ConceptDirection, b: ConceptDirection): boolean =>
+  planOf({ ...a, drafts: [] }) === planOf({ ...b, drafts: [] }) && JSON.stringify(a.drafts.map((draft) => [draft.number, draft.question, DRAFT_AXES.map((axis) => draft.axes[axis])])) === JSON.stringify(b.drafts.map((draft) => [draft.number, draft.question, DRAFT_AXES.map((axis) => draft.axes[axis])]));
+
 export const axesApart = (a: DraftPlan, b: DraftPlan): DraftAxis[] => DRAFT_AXES.filter((axis) => plain(a.axes[axis]) !== plain(b.axes[axis]));
 
 /**
@@ -47,7 +52,13 @@ export class DirectionStore {
 
   async save(batchId: string, concepts: ConceptDirection[], by: string): Promise<Direction> {
     const before = await this.get(batchId);
-    const saved: Direction = { concepts, version: (before?.version ?? 0) + 1, at: this.now().toISOString(), by };
+    const version = (before?.version ?? 0) + 1;
+    // A concept whose plan is the same keeps its drafts; one whose plan changed starts again from this version.
+    const dated = concepts.map((concept) => {
+      const earlier = before?.concepts.find((other) => other.ideaId === concept.ideaId);
+      return { ...concept, since: earlier && samePlan(earlier, concept) ? (earlier.since ?? 1) : version };
+    });
+    const saved: Direction = { concepts: dated, version, at: this.now().toISOString(), by };
     await this.table.put({ pk: pk(batchId), sk: `${SK}#${saved.version}`, ...saved });
     await this.table.put({ pk: pk(batchId), sk: SK, ...saved });
     return saved;

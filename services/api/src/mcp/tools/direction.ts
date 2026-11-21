@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { DRAFT_AXES, LOCKUPS, RISKS } from "@a11-wild/shared";
+import { type BatchState, DRAFT_AXES, LOCKUPS, RISKS } from "@a11-wild/shared";
 import { requireMove, stepAfter } from "../../batch/state.js";
 import type { BatchStore } from "../../batch/store.js";
 import type { CopyStore } from "../../copy/store.js";
-import { AXES_APART_MIN, directionFaults, type DirectionStore } from "../../direction/store.js";
+import { AXES_APART_MIN, directionFaults, type DirectionStore, samePlan } from "../../direction/store.js";
 import { DRAFTS_PER_IDEA } from "../../render/service.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
 
@@ -11,13 +11,16 @@ export interface DirectionToolDeps {
   batches: BatchStore;
   copy: CopyStore;
   directions: DirectionStore;
+  /** Says when the drafts of a concept did not pass, redo included. */
+  drafts: { spent(batchId: string, ideaId: string): Promise<boolean> };
 }
 
 const id = z.string().min(1).max(64);
 const line = (max: number) => z.string().min(1).max(max);
+const DRAFTING: readonly BatchState[] = ["priced", "waiting_spend", "drafting"];
 const NOT_V3 = "Only a batch of concept ads (v3) has a direction. A v1 or v2 batch goes from its ideas to its drafts.";
 
-export function directionTools({ batches, copy, directions }: DirectionToolDeps): ToolDefinition[] {
+export function directionTools({ batches, copy, directions, drafts }: DirectionToolDeps): ToolDefinition[] {
   return [
     defineTool({
       name: "direction_save",
@@ -51,7 +54,9 @@ export function directionTools({ batches, copy, directions }: DirectionToolDeps)
       handler: async ({ batchId, concepts }, context) => {
         const batch = await batches.get(batchId);
         if (batch.kind !== "v3") throw new Refusal(NOT_V3);
-        if (batch.state !== "directed") requireMove(batch, "directed", "direction_save");
+        // Once drafts are being made, the direction changes only to lower the risk of a concept whose drafts did not pass.
+        const drafting = DRAFTING.includes(batch.state);
+        if (batch.state !== "directed" && !drafting) requireMove(batch, "directed", "direction_save");
         const ideas = await batches.ideas(batchId);
         const approved = await copy.list(batchId);
         const unworded = ideas.filter((idea) => !approved.some((words) => words.ideaId === idea.id)).map((idea) => idea.id);
@@ -72,8 +77,28 @@ export function directionTools({ batches, copy, directions }: DirectionToolDeps)
         }));
         const faults = numbered.flatMap(directionFaults);
         if (faults.length > 0) throw new Refusal(`The direction is not saved. ${faults.join(" ")}`);
+        if (drafting) {
+          const current = await directions.get(batchId);
+          const changed = numbered.filter((concept) => {
+            const earlier = current?.concepts.find((other) => other.ideaId === concept.ideaId);
+            return earlier && !samePlan(earlier, concept);
+          });
+          const early: string[] = [];
+          for (const concept of changed) if (!(await drafts.spent(batchId, concept.ideaId))) early.push(concept.ideaId);
+          if (early.length > 0) {
+            throw new Refusal(`The drafts of this direction are being made. The direction of a concept changes only after a draft of it was made again and its checks reject the redo too: not ${early.join(", ")}. Send the other concepts as they are (direction_get).`);
+          }
+          // A concept that is at low already takes a plainer look at low.
+          const raised = changed.filter((concept) => {
+            const was = RISKS.indexOf(current!.concepts.find((other) => other.ideaId === concept.ideaId)!.risk);
+            return RISKS.indexOf(concept.risk) > was || (was > 0 && RISKS.indexOf(concept.risk) === was);
+          });
+          if (raised.length > 0) {
+            throw new Refusal(`After its drafts did not pass, the direction of a concept changes only to a lower risk: ${raised.map((concept) => `${concept.ideaId} stays at ${concept.risk} or goes up`).join("; ")}.`);
+          }
+        }
         const saved = await directions.save(batchId, numbered, context.user.email);
-        const moved = batch.state === "directed" ? batch : await batches.move(batch, "directed", "direction_save");
+        const moved = batch.state === "directed" || drafting ? batch : await batches.move(batch, "directed", "direction_save");
         return { state: moved.state, direction: saved, nextStep: stepAfter(moved) };
       },
     }),

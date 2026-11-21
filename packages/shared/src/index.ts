@@ -401,6 +401,8 @@ export interface ConceptDirection {
   look: string;
   lockup: Lockup;
   drafts: DraftPlan[];
+  /** The version of the direction in which this concept's plan last changed. Its drafts are the ones made from that version on. */
+  since?: number;
 }
 
 /** The direction of a batch of concept ads. Every save is a new version. */
@@ -692,6 +694,8 @@ export interface Render {
   directionVersion?: number;
   /** The earlier draft of the same number that this one is made again for, because its picture was rejected. */
   redoOf?: string;
+  /** The pack photo the model was given, by its name ("pack-2"), when the render named one. The pack checks measure against it. */
+  pack?: string;
   /** The price held for it in the ledger, in US dollars. */
   usd: number;
   /** The picture it made. */

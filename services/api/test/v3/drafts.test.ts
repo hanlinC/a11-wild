@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { batchAtTruth, idea, judgeIdeas } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
-import { rules, v3AtDirected } from "../helpers/v3.js";
+import { directionOf, rules, v3AtDirected } from "../helpers/v3.js";
 
 const SCENE = "One empty pouch lies flat on a yellow seamless, one hard shadow to its right, camera from above.";
 
@@ -58,6 +58,21 @@ describe("a draft of a concept ad", () => {
     expect(sent).toMatchObject({ ok: true, value: { fromId: "s1", draft: 1 } });
     expect(urls()[0]).toBe(`https://pictures.example/batches/${batchId}/skeletons/s1.png?signed=1`);
     expect(urls()).toHaveLength(3);
+  });
+
+  it("is measured against the pack photo the model was given", async () => {
+    const got = (await callTool(studio, "batch_get", { batchId })).value;
+    await studio.services.brands.saveProduct({ ...got.product, photos: [...got.product.photos, { key: "products/p/pack-big.jpg", sourceUrl: "https://cdn.wongi.example/pack-big.jpg", kind: "pack", what: "The 230 g pouch" }], savedBy: "owner@example.com" });
+    const measured = async (references: string[], draft: number) => {
+      const sent = await send("idea-2", draft, { references });
+      const { image } = (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value;
+      if ((await callTool(studio, "batch_get", { batchId })).value.batch.state === "waiting_spend") await callTool(studio, "spend_approve", { ...rules, batchId, ownerSaid: "yes" });
+      const job = await callTool(studio, "pack_check", { batchId, imageId: image.id, at: [500, 800], bg: "FFD21E" });
+      expect(job.ok ? "" : job.error).toBe("");
+      return studio.pixels.events.at(-1)!.input.packKey;
+    };
+    expect(await measured(["pack-2", "pack-1"], 1)).toBe("products/p/pack-big.jpg");
+    expect(await measured(["pack-1"], 2)).toBe("products/p/pack.jpg");
   });
 
   it("with no rough starts from a plan of the real photos", async () => {
@@ -174,5 +189,39 @@ describe("a draft that its checks reject", () => {
     const before = studio.fal.submits().length;
     expect(await send("idea-2", 1)).toMatchObject({ ok: false, error: expect.stringMatching(/It has had its one redo.*save a new direction with a lower risk/) });
     expect(studio.fal.submits()).toHaveLength(before);
+  });
+
+  it("starts again from a lower-risk direction of its concept", async () => {
+    const direct = (concepts: object[]) => callTool(studio, "direction_save", { ...rules, batchId, concepts });
+    const kept = ["idea-4", "idea-5"].map((ideaId) => directionOf(ideaId));
+    const state = async () => (await callTool(studio, "batch_get", { batchId })).value.batch.state;
+    expect((await direct([directionOf("idea-2", { risk: "medium" }), ...kept])).ok).toBe(true);
+    const first = await made("idea-2", 1);
+    await look(first, [{ code: "D2", note: "The crisps look like wax." }]);
+    const redo = await made("idea-2", 1);
+    await look(redo, [{ code: "D2", note: "The crisps look like wax." }]);
+    const other = await made("idea-4", 1);
+    expect(await state()).toBe("drafting");
+    // The same risk again is not a lower-risk direction, and no other concept changes with it.
+    expect(await direct([directionOf("idea-2", { risk: "medium", look: "A plain white table." }), ...kept])).toMatchObject({ ok: false, error: expect.stringMatching(/changes only to a lower risk: idea-2 stays at medium or goes up/) });
+    expect(await direct([directionOf("idea-2", { risk: "low" }), directionOf("idea-4", { look: "A plain white table." }), directionOf("idea-5")])).toMatchObject({ ok: false, error: expect.stringMatching(/changes only after a draft of it was made again and its checks reject the redo too: not idea-4/) });
+    const lowered = await direct([directionOf("idea-2", { risk: "low", look: "A plain white table." }), ...kept]);
+    expect(lowered.ok ? "" : lowered.error).toBe("");
+    expect(await state()).toBe("drafting");
+    const { version } = lowered.value.direction;
+    expect(lowered.value.direction.concepts.map((concept: { since: number }) => concept.since)).toEqual([version, 1, 1]);
+    // The concept starts again with three drafts; the other concept keeps the draft it has.
+    const again = await made("idea-2", 1);
+    expect(await studio.services.renders.get(batchId, again)).toMatchObject({ directionVersion: version });
+    expect(await studio.services.renders.get(batchId, again)).not.toHaveProperty("redoOf");
+    expect((await send("idea-4", 1)).ok).toBe(false);
+    expect(await shown()).toEqual([again]);
+    // The new direction has its own one redo, and a concept at low takes a plainer look at low.
+    await look(again, [{ code: "D2", note: "The crisps look like wax." }]);
+    expect((await direct([directionOf("idea-2", { risk: "low" }), ...kept])).ok).toBe(false);
+    await look(await made("idea-2", 1), [{ code: "D2", note: "The crisps look like wax." }]);
+    expect((await direct([directionOf("idea-2", { risk: "medium" }), ...kept])).ok).toBe(false);
+    expect((await direct([directionOf("idea-2", { risk: "low", look: "Only the pouch, from above." }), ...kept])).ok).toBe(true);
+    expect((await studio.services.board.board(batchId)).ideas.find((entry) => entry.idea.id === "idea-4")!.drafts.map((draft) => draft.image.id)).toEqual([other]);
   });
 });

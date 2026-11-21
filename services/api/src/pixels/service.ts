@@ -11,6 +11,7 @@ import type { CheckStore } from "../checks/store.js";
 import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { Pictures } from "../pictures/store.js";
+import type { RenderStore } from "../render/store.js";
 import type { PixelRunner } from "./runner.js";
 import { lockupLayout } from "../direction/lockup.js";
 import type { DirectionStore } from "../direction/store.js";
@@ -28,6 +29,7 @@ interface Deps {
   images: ImageStore;
   checks: CheckStore;
   board: BoardService;
+  renders: RenderStore;
   jobs: JobStore;
   pictures: Pictures;
   copy: CopyStore;
@@ -161,7 +163,25 @@ export class PixelService {
   /** The pack photo, cut out the same way as for the picture's skeleton: its tuning and its box are carried to each later tool. */
   private async packOf(batchId: string, image: BatchImage): Promise<Record<string, unknown>> {
     const { cutout, box } = await this.skeletonOf(batchId, image);
-    return { packKey: await this.packKey(batchId), ...(cutout ? { cutout } : {}), ...(box ? { box } : {}) };
+    return { packKey: (await this.drawnFrom(batchId, image)) ?? (await this.packKey(batchId)), ...(cutout ? { cutout } : {}), ...(box ? { box } : {}) };
+  }
+
+  /** The pack photo the model drew a picture from, when the picture has no skeleton: the pack its render named. */
+  private async drawnFrom(batchId: string, image: BatchImage): Promise<string | undefined> {
+    const { batches, brands, images, renders } = this.deps;
+    const all = await renders.list(batchId);
+    let at: BatchImage | undefined = image.rootId ? await images.get(batchId, image.rootId) : image;
+    // A final is made from its draft, and a repair from its picture: the first one the model drew alone names the pack.
+    for (let step = 0; at && step < 6; step += 1) {
+      const render = all.find((other) => other.id === at!.id);
+      if (!render) return undefined;
+      if (!render.fromId) {
+        return render.pack ? photoNamed(await brands.product((await batches.get(batchId)).productId), render.pack)?.key : undefined;
+      }
+      at = await images.get(batchId, render.fromId);
+      if (at.kind === "skeleton") return undefined;
+    }
+    return undefined;
   }
 
   private async planOf(batchId: string, image: BatchImage): Promise<unknown> {

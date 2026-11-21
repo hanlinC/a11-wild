@@ -81,7 +81,10 @@ export class BoardService implements FinalRule {
     const all = await renders.list(batchId);
     // A draft that was made again and finished: the redo stands in its place.
     const redone = new Set(all.filter((render) => render.status === "done").map((render) => render.redoOf));
+    // A concept whose direction was lowered shows the drafts of its direction as it is now.
+    const since = new Map(kind === "draft" ? (await this.deps.directions.get(batchId))?.concepts.map((concept) => [concept.ideaId, concept.since ?? 0]) : []);
     for (const render of all) {
+      if (render.directionVersion !== undefined && render.directionVersion < (since.get(render.ideaId) ?? 0)) continue;
       const image = render.kind === kind && render.status === "done" && render.imageId && !redone.has(render.id) ? byId.get(render.imageId) : undefined;
       if (image) byIdea.set(render.ideaId, [...(byIdea.get(render.ideaId) ?? []), image]);
     }
@@ -354,6 +357,15 @@ export class BoardService implements FinalRule {
       ...(failed.length > 0 ? { note: `This final fails ${failed.join(", ")}, so it is not delivered. Make the final again, or tell the owner.` } : {}),
       ...(missing.length > 0 ? { stillMissing: missing } : {}),
     };
+  }
+
+  /** True when a concept's drafts did not pass: one was made again, and its checks reject the redo too. */
+  async spent(batchId: string, ideaId: string): Promise<boolean> {
+    const [direction, renders] = await Promise.all([this.deps.directions.get(batchId), this.deps.renders.list(batchId)]);
+    const since = direction?.concepts.find((concept) => concept.ideaId === ideaId)?.since ?? 0;
+    const redos = renders.filter((render) => render.kind === "draft" && render.ideaId === ideaId && render.status === "done" && render.redoOf && (render.directionVersion ?? 0) >= since);
+    for (const redo of redos) if (await this.rejection(batchId, redo.id)) return true;
+    return false;
   }
 
   /** Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not. */

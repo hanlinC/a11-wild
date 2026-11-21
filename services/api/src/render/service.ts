@@ -145,7 +145,7 @@ export class RenderService {
     const sent = all.filter((render) => render.kind === input.kind && live(render));
     const redone = new Set(sent.map((render) => render.redoOf));
     // A draft that was made again does not count: its redo stands in its place.
-    const mine = sent.filter((render) => render.ideaId === idea.id && !redone.has(render.id));
+    let mine = sent.filter((render) => render.ideaId === idea.id && !redone.has(render.id));
     let from: BatchImage | undefined;
     /** The picture the model sees in place of `from`: a picked draft's repair. */
     let source: BatchImage | undefined;
@@ -176,6 +176,8 @@ export class RenderService {
         const direction = await this.deps.directions.get(batch.id);
         const plan = direction?.concepts.find((concept) => concept.ideaId === idea.id);
         if (!direction || !plan) throw new Refusal(`Concept ${idea.id} has no direction. Save it first (direction_save): a draft answers one of its three questions.`);
+        // A concept whose direction was lowered starts again: the drafts of its earlier direction do not count.
+        mine = mine.filter((render) => (render.directionVersion ?? 0) >= (plan.since ?? 0));
         const asked = plan.drafts.find((draft) => draft.number === input.draft);
         if (!asked) throw new Refusal(`Say which draft of the direction this is: draft ${plan.drafts.map((draft) => draft.number).join(", ")} of ${idea.id} (direction_get gives each one's question and axes).`);
         const before = mine.find((render) => render.draft === asked.number);
@@ -224,6 +226,7 @@ export class RenderService {
       if (mine.length >= FINALS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has had ${FINALS_PER_IDEA} finals. Tell the owner before more are made.`);
     }
 
+    const pack = input.references.find((name) => name.startsWith("pack-"));
     const named = input.references.map((name) => {
       const [kind, number] = name.split("-");
       const picture = kind === "logo" ? brand.logo : photoNamed(product, name);
@@ -269,6 +272,7 @@ export class RenderService {
       ...(from ? { fromId: from.id } : {}),
       ...(directionVersion !== undefined && input.draft !== undefined ? { draft: input.draft, directionVersion } : {}),
       ...(redoOf ? { redoOf } : {}),
+      ...(pack ? { pack } : {}),
       usd,
       fal: job,
       reservation,
