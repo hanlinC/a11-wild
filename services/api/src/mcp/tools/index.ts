@@ -58,6 +58,9 @@ import { renderTools } from "./render.js";
 import { resultTools } from "./results.js";
 import { spendTools } from "./spend.js";
 import { tasteTools } from "./taste.js";
+import { BrandNotes } from "../../brand/notes.js";
+import { LearningStore } from "../../taste/learning.js";
+import { ProposalStore } from "../../taste/proposals.js";
 
 export interface StudioParts {
   config: Config;
@@ -100,6 +103,9 @@ export function studioTools(parts: StudioParts) {
   const briefs = new BriefStore(table, now);
   const directions = new DirectionStore(table, now);
   const references = new References(table, now);
+  const learning = new LearningStore(table, now);
+  const proposals = new ProposalStore(table, canon, learning, now);
+  const brandNotes = new BrandNotes(table, now);
   const meta = new MetaStore(table, now);
   const board = new BoardService({ batches, brands, truth, images, renders, checks, picks, critic: criticStore, tasteLog, pictures, copy, points: new PointStore(table, now), directions });
   const calibration = new Calibration({ batches, picks, critic: criticStore });
@@ -113,13 +119,13 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
-  const services = { ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
+  const services = { learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
     ...brandTools({ brands, parallel, pictures, net }),
     ...factTools({ brands, facts, parallel }),
-    ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }),
+    ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net, brands, learning, proposals, brandNotes }),
     ...importTools({ importer }),
     ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
     ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }),

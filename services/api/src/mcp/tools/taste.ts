@@ -1,11 +1,15 @@
 import { z } from "zod";
-import { BATCH_KINDS } from "@a11-wild/shared";
+import { BATCH_KINDS, CANON_SCOPES, type CanonScope } from "@a11-wild/shared";
 import type { BatchReads } from "../../batch/reads.js";
 import type { BatchStore } from "../../batch/store.js";
 import { copyPicture, type Pictures } from "../../pictures/store.js";
 import { REFERENCES_MAX, type References } from "../../taste/references.js";
 import type { Net } from "../../urlsafety.js";
-import type { CanonStore } from "../../taste/canon.js";
+import type { BrandNotes } from "../../brand/notes.js";
+import type { BrandStore } from "../../brand/store.js";
+import { type CanonStore, OWNER_TASTE, scopeName, scopeOf } from "../../taste/canon.js";
+import { LEARNING_LIST_MAX, type LearningStore } from "../../taste/learning.js";
+import { EVIDENCE_FOR_EVERY_BRAND, type ProposalStore } from "../../taste/proposals.js";
 import type { TasteLog } from "../../taste/log.js";
 import type { SwipeFile } from "../../taste/swipe.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
@@ -19,41 +23,180 @@ export interface TasteToolDeps {
   batches: BatchStore;
   pictures: Pictures;
   net: Net;
+  brands: BrandStore;
+  learning: LearningStore;
+  proposals: ProposalStore;
+  brandNotes: BrandNotes;
 }
+
+const id = z.string().min(1).max(64);
+const words = (max: number) => z.string().trim().min(1).max(max);
+const scope = z
+  .strictObject({ kind: z.enum(CANON_SCOPES), brandId: id.optional().describe("Only for the scope of a brand.") })
+  .optional()
+  .describe("Which canon: the owner's taste (the default), one brand, creative craft (what makes a picture read), or performance (what results showed).");
+/** The canons a batch reads besides the owner's taste: its own brand's, craft and performance. Never another brand's. */
+const scopesOf = (brandId: string): CanonScope[] => [{ kind: "brand", brandId }, { kind: "craft" }, { kind: "performance" }];
 
 const batchId = z.string().min(1).max(64).optional().describe("The batch you read this for. The studio records the read; ideas_save needs all three reads.");
 
-export function tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net }: TasteToolDeps): ToolDefinition[] {
+export function tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net, brands, learning, proposals, brandNotes }: TasteToolDeps): ToolDefinition[] {
+  /** A scope that names a brand names one the studio has. */
+  async function checked(input: { kind: CanonScope["kind"]; brandId?: string | undefined } | undefined): Promise<CanonScope> {
+    const found = scopeOf(input);
+    if (found.kind === "brand") await brands.brand(found.brandId as string);
+    return found;
+  }
+  const ownerOnly = (role: string, what: string) => {
+    if (role !== "owner") throw new Refusal(`Only the owner can ${what}.`);
+  };
   return [
     defineTool({
       name: "canon_get",
       description:
-        "The owner's taste canon: his taste in plain words, learned from his picks. Free. Read it before you write ideas, with the batchId. Version 0 means he has not written one yet.",
-      input: { batchId, version: z.number().int().min(1).optional().describe("An older version. Leave it out for the current one.") },
-      handler: async ({ batchId, version }) => {
-        const found = version ? await canon.version(version) : await canon.get();
-        if (!version) await reads.mark(batchId, "canon");
-        return found;
+        "The owner's taste canon: his taste in plain words, learned from his picks. Free. Read it before you write ideas, with the batchId: the reply then also holds the canons this batch follows besides his taste (its own brand's, creative craft, performance) in `also`, and what he chose for this brand before in `brandNotes`. A batch never gets the rules of another brand. Version 0 means that canon is not written yet.",
+      input: { batchId, version: z.number().int().min(1).optional().describe("An older version. Leave it out for the current one."), scope },
+      handler: async ({ batchId, version, scope }) => {
+        const asked = await checked(scope);
+        const batch = batchId ? await batches.get(batchId) : undefined;
+        if (batch && asked.kind === "brand" && asked.brandId !== batch.brandId) {
+          throw new Refusal(`Batch ${batch.id} is for another brand. A batch reads the rules of its own brand only: leave the scope out, and the reply holds them.`);
+        }
+        const found = version ? await canon.version(version, asked) : await canon.get(asked);
+        if (!batch || version || asked.kind !== "owner") return found;
+        await reads.mark(batchId, "canon");
+        const also = (await Promise.all(scopesOf(batch.brandId).map((other) => canon.get(other)))).filter((other) => other.version > 0);
+        return { ...found, also, brandNotes: await brandNotes.list(batch.brandId) };
       },
     }),
     defineTool({
       name: "canon_versions",
-      description: "Every version of the taste canon, newest first, with its reason and its author. Free.",
-      input: {},
-      handler: async () => ({ versions: await canon.versions() }),
+      description: "Every version of a canon, newest first, with its reason and its author. Free. With no scope: the owner's taste.",
+      input: { scope },
+      handler: async ({ scope }) => ({ versions: await canon.versions(await checked(scope)) }),
     }),
     defineTool({
       name: "canon_save",
       description:
-        "Saves a new version of the taste canon. Only the owner's taste goes in, in plain words, and only with his say: show him the new text and the reason first. Send the WHOLE canon, not the change. Old versions stay readable.",
+        "Saves a new version of a canon. With no scope it is the owner's taste: only his taste goes in, in plain words, and only with his say: show him the new text and the reason first. Send the WHOLE canon, not the change. Old versions stay readable. To suggest a change yourself, use canon_propose: the owner decides it.",
       input: {
         text: z.string().min(1).describe("The whole canon."),
         reason: z.string().describe("One line: what changed and why, with the owner's words when he gave them."),
+        scope,
       },
       writes: true,
-      handler: ({ text, reason }, context) => {
-        if (context.user.role !== "owner") throw new Refusal("Only the owner can change the taste canon.");
-        return canon.save({ text, reason, by: context.user.email });
+      handler: async ({ text, reason, scope }, context) => {
+        ownerOnly(context.user.role, "change a canon");
+        return canon.save({ text, reason, by: context.user.email, scope: await checked(scope) });
+      },
+    }),
+    defineTool({
+      name: "canon_restore",
+      description: "Brings an earlier version of a canon back, as a new version. Only with the owner's say. Nothing is removed: the version it replaces stays readable (canon_versions).",
+      input: { version: z.number().int().min(1), reason: words(500).describe("Why, with the owner's words."), scope },
+      writes: true,
+      handler: async ({ version, reason, scope }, context) => {
+        ownerOnly(context.user.role, "restore a canon");
+        return canon.restore({ version, reason, by: context.user.email, scope: await checked(scope) });
+      },
+    }),
+    defineTool({
+      name: "learn",
+      description: `Saves a learning record: something the studio saw, and the lesson it may teach. A record changes nothing by itself. It never changes a product fact (facts_save does that, from a source) and never a canon: a lesson reaches a canon only through canon_propose and the owner's yes. Give the scope the lesson was seen in: one brand, the owner's taste, creative craft or performance. One correction on one brand is a record of that brand, not a rule for every brand.`,
+      input: {
+        observation: words(1000).describe("What was seen, as a fact: what the owner said or chose, what a check found, what a results file showed."),
+        source: words(300).describe("Where it was seen: the owner's words, a batch, a results file."),
+        scope: z.strictObject({ kind: z.enum(CANON_SCOPES), brandId: id.optional() }).describe("Where the lesson holds."),
+        lesson: words(600).describe("The proposed lesson, in plain words, as a line a canon could hold."),
+        evidence: z.number().int().min(1).max(1000).describe("How many separate times it was seen. One correction is 1."),
+        confidence: z.enum(["low", "medium", "high"]),
+        examples: z.array(words(400)).max(10).describe("Where it held: a batch and an ad, or the owner's words."),
+        counterexamples: z.array(words(400)).max(10).describe("Where it did not hold. Empty when none is known."),
+        expectedEffect: words(400).describe("What should change when the lesson is followed."),
+        testResult: words(600).optional().describe("What happened when it was tried, if it was."),
+        batchId: id.optional().describe("The batch it was seen in."),
+      },
+      writes: true,
+      needsRules: true,
+      handler: async ({ scope, batchId, testResult, ...input }, context) => {
+        const found = await checked(scope);
+        const batch = batchId ? await batches.get(batchId) : undefined;
+        if (batch && found.kind === "brand" && found.brandId !== batch.brandId) throw new Refusal(`Batch ${batch.id} is for another brand than the scope names.`);
+        // What a tester did in a test batch is not what the studio saw the owner do.
+        if (batch?.test) throw new Refusal("A test batch teaches the studio nothing: no learning record is saved from it.");
+        return learning.add({ ...input, scope: found, ...(testResult ? { testResult } : {}), ...(batchId ? { batchId } : {}), savedBy: context.user.email });
+      },
+    }),
+    defineTool({
+      name: "learning_list",
+      description: `The learning records, newest first: what the studio saw and what each may teach. Free. With a batchId: the records this batch may read (the owner's taste, craft, performance and its own brand). None of them is a rule: only a canon is.`,
+      input: { batchId: id.optional(), scope, limit: z.number().int().min(1).max(LEARNING_LIST_MAX).optional() },
+      handler: async ({ batchId, scope, limit }) => {
+        const batch = batchId ? await batches.get(batchId) : undefined;
+        const asked = scope ? await checked(scope) : undefined;
+        if (batch && asked?.kind === "brand" && asked.brandId !== batch.brandId) throw new Refusal(`Batch ${batch.id} is for another brand. A batch reads the records of its own brand only.`);
+        const scopes = asked ? [asked] : batch ? [OWNER_TASTE, ...scopesOf(batch.brandId)] : undefined;
+        return { records: await learning.list({ ...(scopes ? { scopes } : {}), ...(limit ? { limit } : {}) }) };
+      },
+    }),
+    defineTool({
+      name: "canon_propose",
+      description: `Proposes a change to a canon, for the owner to decide. It is not active: no batch reads it until he says yes (canon_decide). Send the WHOLE canon of that scope as it would read, the reason, and the learning records it rests on (learn). The records are of the same scope. A change to a canon that every brand follows (the owner's taste, craft, performance) rests on ${EVIDENCE_FOR_EVERY_BRAND} sightings or more. Then show the owner the change in plain words.`,
+      input: {
+        scope: z.strictObject({ kind: z.enum(CANON_SCOPES), brandId: id.optional() }),
+        text: z.string().min(1).describe("The whole canon of that scope as it would read."),
+        reason: words(500).describe("One line: what changes and why."),
+        recordIds: z.array(id).min(1).max(20).describe("The learning records it rests on."),
+      },
+      writes: true,
+      needsRules: true,
+      handler: async ({ scope, text, reason, recordIds }, context) => proposals.propose({ scope: await checked(scope), text, reason, recordIds, by: context.user.email }),
+    }),
+    defineTool({
+      name: "canon_proposals",
+      description: "The proposed changes to the canons, newest first, each with its status: proposed (it waits for the owner), approved or declined. Free.",
+      input: { id: id.optional().describe("One proposal, with its text. Leave it out for the list without the texts.") },
+      handler: async ({ id }) => {
+        if (id) {
+          const proposal = await proposals.get(id);
+          return { proposal, current: await canon.get(proposal.scope) };
+        }
+        return { proposals: (await proposals.list()).map(({ text: _text, ...proposal }) => ({ ...proposal, scopeName: scopeName(proposal.scope) })) };
+      },
+    }),
+    defineTool({
+      name: "canon_decide",
+      description: "Saves the owner's yes or no to a proposed canon change. Only the owner decides, in his own words: show him the current canon and the proposed one first. A yes makes the next version of that canon; a no keeps the proposal as a record. A proposal written against an older version of the canon is refused: propose again from the current one.",
+      input: { id, approve: z.boolean(), ownerSaid: words(500).describe("The owner's own words.") },
+      writes: true,
+      needsRules: true,
+      handler: async ({ id, approve, ownerSaid }, context) => {
+        ownerOnly(context.user.role, "decide a proposal");
+        return proposals.decide({ id, approve, ownerSaid, by: context.user.email });
+      },
+    }),
+    defineTool({
+      name: "brand_note",
+      description: "Saves what the owner chose for one brand, in his words (for example: show the cap, not the pump). The next batch of that brand gets it with canon_get. It is his choice for this brand only, not a rule for another brand, and not a product fact: a fact goes through facts_save with its source.",
+      input: { brandId: id, note: words(500).describe("The choice, in plain words."), ownerSaid: words(500).describe("The owner's own words."), batchId: id.optional().describe("The batch he said it in.") },
+      writes: true,
+      needsRules: true,
+      handler: async ({ brandId, note, ownerSaid, batchId }, context) => {
+        ownerOnly(context.user.role, "save a brand note");
+        await brands.brand(brandId);
+        const batch = batchId ? await batches.get(batchId) : undefined;
+        if (batch && batch.brandId !== brandId) throw new Refusal(`Batch ${batch.id} is for another brand.`);
+        if (batch?.test) throw new Refusal("A test batch teaches the studio nothing: no brand note is saved from it.");
+        return brandNotes.add({ brandId, note, ownerSaid, ...(batchId ? { batchId } : {}), savedBy: context.user.email });
+      },
+    }),
+    defineTool({
+      name: "brand_notes",
+      description: "What the owner chose for one brand before, newest first. Free. A batch of that brand gets the same list with canon_get.",
+      input: { brandId: id },
+      handler: async ({ brandId }) => {
+        await brands.brand(brandId);
+        return { notes: await brandNotes.list(brandId) };
       },
     }),
     defineTool({
