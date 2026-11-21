@@ -43,7 +43,9 @@ export class BrandStore {
   }
 
   async saveBrand(kit: Omit<BrandKit, "id" | "createdAt"> & { id?: string }): Promise<BrandKit> {
-    const saved: BrandKit = { ...kit, id: kit.id ?? randomUUID(), createdAt: this.now().toISOString() };
+    // A brand that is saved again keeps the day it was first saved.
+    const before = kit.id ? await this.table.get<Item & BrandKit>(BRANDS, kit.id) : undefined;
+    const saved: BrandKit = { ...kit, id: kit.id ?? randomUUID(), createdAt: before?.createdAt ?? this.now().toISOString() };
     await this.table.put({ pk: BRANDS, sk: saved.id, ...saved });
     return saved;
   }
@@ -61,7 +63,8 @@ export class BrandStore {
 
   async saveProduct(product: Omit<Product, "id" | "createdAt"> & { id?: string }): Promise<Product> {
     await this.brand(product.brandId);
-    const saved: Product = { ...product, id: product.id ?? randomUUID(), createdAt: this.now().toISOString() };
+    const before = product.id ? await this.table.get<Item & Product>(brandKey(product.brandId), `PRODUCT#${product.id}`) : undefined;
+    const saved: Product = { ...product, id: product.id ?? randomUUID(), createdAt: before?.createdAt ?? this.now().toISOString() };
     await this.table.put({ pk: brandKey(saved.brandId), sk: `PRODUCT#${saved.id}`, ...saved });
     // A second item finds the product by its id alone.
     await this.table.put({ pk: "PRODUCT", sk: saved.id, brandId: saved.brandId });

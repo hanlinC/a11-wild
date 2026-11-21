@@ -215,7 +215,11 @@ describe("a v2 batch: the words", () => {
 describe("a v2 batch: the type", () => {
   it("saves a brand font from Google Fonts, and refuses a file that is not a font", async () => {
     await v2Batch();
+    const first = (await studio.services.brands.brand(brandId)).createdAt;
+    studio.clock.now = new Date(studio.clock.now.getTime() + 60_000);
     const saved = await callTool(studio, "font_save", { brandId, family: "Archivo", weight: 800 });
+    // A brand that is saved again keeps the day it was first saved.
+    expect((await studio.services.brands.brand(brandId)).createdAt).toBe(first);
     expect(saved.value).toMatchObject({ saved: { family: "Archivo", weight: 800, sourceUrl: FONT_FILE }, fontFiles: [{ family: "Archivo", weight: 800 }] });
     expect(studio.pictures.files.get(`brands/${brandId}/fonts/archivo-800.ttf`)?.type).toBe("font/ttf");
     const missing = await callTool(studio, "font_save", { brandId, family: "Brand Sans", weight: 700 });
