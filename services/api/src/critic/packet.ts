@@ -14,7 +14,7 @@ export function blindIdea({ id, title, visual, device, focalPoint, elements, ref
 }
 
 const READ_FIRST =
-  'Before you judge: rules_get with role "critic", then canon_get, taste_log and swipe_search. Judge from this packet and those reads only. Do not call batch_get or board_show: they hold the author\'s own notes.';
+  'Before you judge: rules_get with role "critic" and the kind of this batch, then canon_get, taste_log and swipe_search. Judge from this packet and those reads only. Do not call batch_get or board_show: they hold the author\'s own notes.';
 
 interface Common {
   brand: BrandKit;

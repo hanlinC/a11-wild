@@ -47,14 +47,14 @@ describe("MCP server", () => {
     expect(Object.keys(tools)).toEqual(expect.arrayContaining(["rules_get", "whoami", "studio_status"]));
     expect(tools.rules_get.inputSchema).toMatchObject({
       type: "object",
-      required: ["role"],
-      properties: { role: { enum: ["main", "critic"] } },
+      required: ["role", "kind"],
+      properties: { role: { enum: ["main", "writer", "art_director", "critic"] }, kind: { enum: ["v1", "v2", "v3"] } },
     });
     expect(tools.sample_write.inputSchema.required).toEqual(expect.arrayContaining(["title", "rulesVersion"]));
   });
 
   it("returns the house rules and their version for a role", async () => {
-    const result = await callTool("rules_get", { role: "critic" });
+    const result = await callTool("rules_get", { role: "critic", kind: "v1" });
     const payload = JSON.parse(result.content[0].text);
     expect(payload.rulesVersion).toBe(RULES_VERSION);
     expect(payload.rules.map((rule: { id: string }) => rule.id)).toContain("blind-critic");
@@ -67,7 +67,7 @@ describe("MCP server", () => {
   });
 
   it("refuses an argument of the wrong type, names the field and runs nothing", async () => {
-    const result = await callTool("rules_get", { role: 7 });
+    const result = await callTool("rules_get", { role: 7, kind: "v1" });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("role");
   });
@@ -98,7 +98,7 @@ describe("MCP server", () => {
 
   it("serves the pipeline as the prompt wild_ads, and its first step asks for brand and product", async () => {
     const list = await send(rpc("prompts/list"));
-    expect(list.body.result.prompts.map((prompt: { name: string }) => prompt.name)).toEqual(["wild_ads"]);
+    expect(list.body.result.prompts.map((prompt: { name: string }) => prompt.name)).toEqual(["headline_ads", "wild_ads"]);
 
     const { body } = await send(rpc("prompts/get", { name: "wild_ads" }));
     const text: string = body.result.messages[0].content.text;

@@ -49,7 +49,7 @@ beforeEach(batchWithDrafts);
 
 describe("checks", () => {
   it("gives the meaning of every D and F code with the house rules", async () => {
-    const got = await callTool(studio, "rules_get", { role: "main" });
+    const got = await callTool(studio, "rules_get", { role: "main", kind: "v1" });
     expect(Object.keys(got.value.pictureChecks)).toHaveLength(19);
     expect(got.value.pictureChecks.D11).toMatch(/pack_check, 2%/);
   });
