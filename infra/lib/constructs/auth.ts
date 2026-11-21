@@ -49,7 +49,7 @@ export class Auth extends Construct {
     // only the authorization-code grant, and only the studio scope.
     const cfnPool = this.userPool.node.defaultChild as cognito.CfnUserPool;
     cfnPool.addPropertyOverride("DcrConfiguration", {
-      EnableStatus: "ENABLED",
+      EnableStatus: "Enabled",
       OpenDcrEnabled: true,
       OpenDcrGrantTypes: ["code"],
       AuthenticatedGrantTypes: [],

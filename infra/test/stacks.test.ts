@@ -89,7 +89,7 @@ describe("studio stack", () => {
   it("lets MCP clients register for the code grant and the studio scope only", () => {
     template.hasResourceProperties("AWS::Cognito::UserPool", {
       DcrConfiguration: {
-        EnableStatus: "ENABLED",
+        EnableStatus: "Enabled",
         OpenDcrEnabled: true,
         OpenDcrGrantTypes: ["code"],
         AuthenticatedGrantTypes: [],
