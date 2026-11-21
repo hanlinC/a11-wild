@@ -57,7 +57,7 @@ export function burstPacket(common: Common, ideas: Idea[]) {
 /** A draft as a critic sees it: the picture that counts, and what a pixel tool measured in it. */
 export interface BlindDraft {
   imageId: string;
-  /** The picture behind viewUrl: the draft, or its newest repair. */
+  /** The picture that counts: the draft, or its newest repair. In an ad with words, viewUrl opens that picture with the approved words and the logo set on it. */
   shownId: string;
   viewUrl: string;
   measured: CheckItem[];
@@ -69,7 +69,7 @@ export function rankable(board: Board, draftsPerIdea: number): { idea: ReturnTyp
     .filter((entry) => entry.pick === null && entry.drafts.length === draftsPerIdea)
     .map((entry) => ({
       idea: blindIdea(entry.idea),
-      drafts: entry.drafts.map((draft) => ({ imageId: draft.image.id, shownId: draft.shown.id, viewUrl: draft.viewUrl, measured: (draft.checks?.items ?? []).filter((item) => item.tool !== undefined) })),
+      drafts: entry.drafts.map((draft) => ({ imageId: draft.image.id, shownId: draft.shown.id, viewUrl: draft.words?.viewUrl ?? draft.viewUrl, measured: (draft.checks?.items ?? []).filter((item) => item.tool !== undefined) })),
     }));
 }
 

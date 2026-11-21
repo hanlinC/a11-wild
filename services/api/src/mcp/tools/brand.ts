@@ -18,7 +18,8 @@ export interface BrandToolDeps {
 
 const httpsUrl = z.string().max(2000).describe("An https address on a public host.");
 const id = z.string().min(1).max(64);
-const PHOTOS_MAX = 6;
+/** A product with many variants needs a real photo of each one (the owner, 22-11-2026: real photos first, for everything). */
+const PHOTOS_MAX = 16;
 
 /** Picture addresses in a page's text, as Markdown or as plain links. */
 function pictureLinks(text: string): string[] {

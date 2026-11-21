@@ -1,9 +1,12 @@
 import type { Batch, DoneCondition, DoneReport } from "@a11-wild/shared";
 import type { BoardService } from "../board/service.js";
+import type { CopyStore } from "../copy/store.js";
+import { unprovenNumbers } from "../ideas/checks.js";
 import type { BrandStore } from "../brand/store.js";
 import type { FactStore } from "../facts/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { TruthStore } from "../truth/store.js";
+import { hasWords } from "./state.js";
 import type { BatchStore } from "./store.js";
 
 interface Deps {
@@ -12,6 +15,7 @@ interface Deps {
   facts: FactStore;
   truth: TruthStore;
   board: BoardService;
+  copy: CopyStore;
 }
 
 /** The owner's own conditions for calling a batch done: the ones the studio can measure, and the ones only he can judge. */
@@ -53,6 +57,24 @@ export class DoneGate {
     };
 
     const conditions = [picks, made];
+    if (hasWords(batch.kind)) {
+      // An ad with words: each final carries the owner's own words, and each number in them is on the fact sheet.
+      const [approved, known] = await Promise.all([this.deps.copy.list(batch.id), facts.list(product.id)]);
+      const lines = picked.map((entry) => {
+        const words = approved.find((copy) => copy.ideaId === entry.ideaId);
+        if (!words) return { ok: false, line: `${entry.ideaId}: the owner has not approved its words (copy_approve)` };
+        const loose = unprovenNumbers(`${words.headline} ${words.subline}`, known);
+        return loose.length > 0
+          ? { ok: false, line: `${entry.ideaId}: no saved fact holds ${loose.join(", ")}` }
+          : { ok: true, line: `${entry.ideaId}: "${words.headline}" / "${words.subline}" (version ${words.version})` };
+      });
+      conditions.push({
+        name: "words",
+        asks: "Each final carries the words the owner approved, and every number in them traces to a saved fact.",
+        passed: lines.length > 0 && lines.every((entry) => entry.ok),
+        evidence: lines.length === 0 ? "No draft is picked, so there are no words to judge." : lines.map((entry) => entry.line).join("; "),
+      });
+    }
     const unverified = (sheet?.measures ?? []).filter((measure) => measure.status === "unverified").map((measure) => measure.name);
     return {
       batch,

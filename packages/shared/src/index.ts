@@ -521,7 +521,7 @@ export interface CalibrationPage {
 
 /** One condition of the done gate, with what the studio measured. */
 export interface DoneCondition {
-  name: "picks" | "finals";
+  name: "picks" | "finals" | "words";
   /** The condition in the owner's words. */
   asks: string;
   passed: boolean;
