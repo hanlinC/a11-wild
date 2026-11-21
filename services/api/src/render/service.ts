@@ -1,5 +1,6 @@
 import type { Batch, BatchImage, Idea, Render, RenderKind } from "@a11-wild/shared";
 import { hasWords, requireMove, StateError, stepAfter } from "../batch/state.js";
+import type { DirectionStore } from "../direction/store.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { estimateUsd, type FalClient } from "../fal/client.js";
@@ -45,6 +46,8 @@ export interface RenderRequest {
   prompt: string;
   /** A draft's skeleton, or the picked draft of a final. */
   fromId?: string;
+  /** A draft of a concept ad: which of the direction's three drafts it is. */
+  draft?: number;
   /** Other pictures the model sees: keys of the product's photos or the brand's logo. */
   /** Names of the product's photos and the brand's logo: "logo", "pack-1", "food-2". Never a key. */
   references: string[];
@@ -56,6 +59,7 @@ export interface RenderView extends Render {
 }
 
 interface Deps {
+  directions: DirectionStore;
   batches: BatchStore;
   brands: BrandStore;
   images: ImageStore;
@@ -142,6 +146,9 @@ export class RenderService {
     /** The picture the model sees in place of `from`: a picked draft's repair. */
     let source: BatchImage | undefined;
     let count: number;
+    /** A draft of a concept ad starts from its rough: the picture the critic and the owner judged the concept by. */
+    let rough: BatchImage | undefined;
+    let directionVersion: number | undefined;
 
     if (input.kind === "rough") {
       if (!["ideas", "reviewed"].includes(batch.state)) requireMove(batch, "ideas", "render_submit");
@@ -160,6 +167,27 @@ export class RenderService {
         requireMove(batch, "drafting", "render_submit");
       }
       realPhotos();
+      if (batch.kind === "v3") {
+        const direction = await this.deps.directions.get(batch.id);
+        const plan = direction?.concepts.find((concept) => concept.ideaId === idea.id);
+        if (!direction || !plan) throw new Refusal(`Concept ${idea.id} has no direction. Save it first (direction_save): a draft answers one of its three questions.`);
+        const asked = plan.drafts.find((draft) => draft.number === input.draft);
+        if (!asked) throw new Refusal(`Say which draft of the direction this is: draft ${plan.drafts.map((draft) => draft.number).join(", ")} of ${idea.id} (direction_get gives each one's question and axes).`);
+        if (mine.some((render) => render.draft === asked.number)) {
+          throw new Refusal(`Draft ${asked.number} of ${idea.id} ("${asked.question}") is already sent. Each of the three drafts answers its own question. A draft that failed can be sent again; one that is done cannot.`);
+        }
+        directionVersion = direction.version;
+        rough = (await images.list(batch.id, "rough")).filter((image) => image.ideaId === idea.id).at(-1);
+        if (!input.fromId) {
+          // A reference render: the model draws the product from its real photos, so each one is sent.
+          const unsent = (idea.shows ?? []).filter((name) => !input.references.includes(name));
+          if (unsent.length > 0) {
+            throw new Refusal(`Real photos first: concept ${idea.id} shows ${unsent.join(", ")}. Give the real photo of each one in references, or build the draft round a skeleton that holds the real pack (skeleton_make).`);
+          }
+        }
+      } else if (input.draft !== undefined) {
+        throw new Refusal("Only a draft of a concept ad (v3) has a number from its direction.");
+      }
       if (mine.length >= DRAFTS_PER_IDEA) throw new Refusal(`Idea ${idea.id} has its ${DRAFTS_PER_IDEA} drafts. A draft that failed can be sent again; one that is done cannot.`);
       const hasPack = product.photos.some((photo) => photo.kind === "pack");
       if (input.fromId) {
@@ -168,7 +196,8 @@ export class RenderService {
         if (mine.some((render) => render.fromId === from?.id)) {
           throw new Refusal("R23: each draft of an idea comes from its own skeleton. This skeleton already has a draft of this idea. Make another skeleton, with another camera, crop or scale.");
         }
-      } else if (hasPack) {
+      } else if (hasPack && batch.kind !== "v3") {
+        // A concept ad draws the product from its real photos by default, so that it can be held, turned or opened. pack_check then measures its shape.
         throw new Refusal("R29: this product has a pack photo, so each draft is built round a skeleton that holds the real pack. Make one with skeleton_make and give its id as fromId.");
       }
       count = (await batches.ideas(batch.id)).length * DRAFTS_PER_IDEA;
@@ -189,7 +218,7 @@ export class RenderService {
       if (!picture) throw new Refusal(`This ${kind === "logo" ? "brand has no logo" : `product has no ${kind} photo ${number}`}. A reference picture is the brand's logo ("logo") or one of this product's photos ("pack-1", "food-1", "prop-1").`);
       return picture.key;
     });
-    const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...named])];
+    const keys = [...new Set([...(from ? [(source ?? from).key] : []), ...(rough ? [rough.key] : []), ...named])];
     if (keys.length > REFERENCES_MAX) throw new Refusal(`A render takes ${REFERENCES_MAX} reference pictures or fewer.`);
 
     if (input.kind === "rough") {
@@ -225,6 +254,7 @@ export class RenderService {
       kind: input.kind,
       prompt: input.prompt.trim(),
       ...(from ? { fromId: from.id } : {}),
+      ...(directionVersion !== undefined && input.draft !== undefined ? { draft: input.draft, directionVersion } : {}),
       usd,
       fal: job,
       reservation,

@@ -106,7 +106,7 @@ export function studioTools(parts: StudioParts) {
   const conceptPicks = new ConceptPicks({ table, now, batches, brands, briefs, critic, tasteLog });
   const conceptBoard = new ConceptBoardService({ batches, brands, briefs, critic, images, pictures, conceptPicks });
   const done = new DoneGate({ batches, brands, facts, truth, board, copy });
-  const render = new RenderService({ batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
+  const render = new RenderService({ directions, batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
   const jobs = new JobStore(table, now);
   const pixels = new PixelService({ batches, brands, images, checks, board, jobs, pictures, copy, runner: parts.pixelRunner, now });
   const packs = new PackStore(table);

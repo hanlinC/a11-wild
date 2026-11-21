@@ -78,7 +78,11 @@ Step 7. The owner's pick. Show the owner every concept with its rough, its words
 
 Step 8. Words. Show him the words of his three concepts as text and wait for his yes (copy_approve). His pick of a concept is not his yes to its words.
 
-Step 9. Follow batch_get: its nextStep names what comes next, from the direction of each concept to the drafts, the owner's pick of a draft and the finals.
+Step 9. Direction. Save the direction of each picked concept (direction_save): its look, its risk, where the words stand, and three drafts that each ask the owner one question. No draft is made before it.
+
+Step 10. Drafts. Send each draft with its number from the direction (render_submit with draft 1, 2 or 3) and the real photo of each thing the concept shows. The studio gives the model the rough first. Measure each draft (pack_check) and look at it (checks_save).
+
+Step 11. Follow batch_get: its nextStep names what comes next, from the words on each draft to the owner's pick of a draft and the finals.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
 

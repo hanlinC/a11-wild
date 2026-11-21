@@ -673,6 +673,9 @@ export interface Render {
   prompt: string;
   /** A draft's skeleton, or the picked draft of a final. */
   fromId?: string;
+  /** A draft of a concept ad: which of the direction's three drafts it is, and the version of that direction. */
+  draft?: number;
+  directionVersion?: number;
   /** The price held for it in the ledger, in US dollars. */
   usd: number;
   /** The picture it made. */

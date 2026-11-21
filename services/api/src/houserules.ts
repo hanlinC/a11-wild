@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.7";
+export const RULES_VERSION = "2026-11-22.8";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -140,6 +140,18 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     roles: ALL,
     kinds: CONCEPTS,
     text: "The owner picks the three concepts himself, of any funnel stage (concept_pick). Show him every concept with its rough, its words and the critic's notes first (concept_board, or the concept board in the dashboard), not only the ones the critic recommends. The critic advises and never chooses. His pick of a concept is not his yes to its words: the words are approved after it (copy_approve).",
+  },
+  {
+    id: "v3-direction",
+    roles: MAKERS,
+    kinds: CONCEPTS,
+    text: "After the owner's yes to the words and before any draft, save the direction of each picked concept (direction_save): why the look says the concept, its risk, what the three drafts share, where the words stand, and the three drafts. Each draft asks the owner one question and answers eight axes: composition, product position, scale, camera, light, environment, negative space, staging. Each pair of drafts differs on three axes or more, and one of them is composition, camera or scale. The stage is the brand's own colour unless the concept needs a place. The words stand where the picture leaves room, not always on the same side. A held or opened product, a hand, a liquid and many items are high risk: say why the concept is worth it and name the lower-risk way.",
+  },
+  {
+    id: "v3-drafts",
+    roles: MAKERS,
+    kinds: CONCEPTS,
+    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows. Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong.",
   },
   {
     id: "concept",
