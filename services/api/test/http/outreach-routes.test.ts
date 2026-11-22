@@ -499,7 +499,7 @@ describe("the owner's pick of the ad", () => {
     expect(candidates.drafts).toHaveLength(9);
     expect(new Set(candidates.drafts.map((draft: { ideaId: string }) => draft.ideaId))).toEqual(new Set(["idea-1", "idea-2", "idea-3"]));
     expect(candidates.drafts.filter((draft: { blocked?: string }) => draft.blocked)).toEqual([]);
-    expect(candidates.drafts.filter((draft: { warning?: string }) => draft.warning)).toEqual([expect.objectContaining({ imageId: bad, warning: "The agent saw: The pouch is too tall." })]);
+    expect(candidates.drafts.filter((draft: { warning?: string }) => draft.warning)).toEqual([expect.objectContaining({ imageId: bad, warning: "The agent saw: The pouch is too tall.", findings: ["The agent saw: The pouch is too tall."] })]);
     for (const draft of candidates.drafts) expect(draft.viewUrl).toMatch(/^https:\/\//);
     const today = await json(await get("/api/outreach/today"));
     expect(today.picks).toMatchObject([{ prospect: { id: "00001", brand: "Brand 1", stage: "pick_waits" }, drafts: 9 }]);

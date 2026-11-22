@@ -1,4 +1,5 @@
 import type { OutreachAdView, OutreachChannel, OutreachMessage, OutreachStage, OutreachStep, ProspectPage, ProspectRow } from "@a11-wild/shared";
+import { ChevronDown } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, NavLink } from "react-router";
 import { FIELD } from "@/components/canon-card";
@@ -84,18 +85,62 @@ export function AdPicture({ ad, brand }: { ad: OutreachAdView; brand: string }) 
  * What the checks found in a picture of an outreach brand. It blocks nothing: the owner reads it and decides.
  * In a row of drafts it is cut to two lines; the picture opened large gives it in full.
  */
-export function CheckNote({ warning, before, short }: { warning: string | undefined; before?: string; short?: boolean }) {
+export function CheckNote({ warning, before }: { warning: string | undefined; before?: string }) {
   if (!warning) return null;
   return (
     <p className="text-caption">
       <Badge variant="dot" color="amber">
         The checks found
       </Badge>
-      <span className={cn("mt-1 block text-muted-foreground", short && "line-clamp-2")} title={short ? warning : undefined}>
-        {warning}
-        {short ? null : ` It is your call${before ? ` ${before}` : ""}.`}
+      <span className="mt-1 block text-muted-foreground">
+        {warning} It is your call{before ? ` ${before}` : ""}.
       </span>
     </p>
+  );
+}
+
+/**
+ * What the checks found in one draft, where there is little room: one line that says how many things, and a click unfolds each of them in full.
+ * No line is cut, on the page or on the dark of the large picture.
+ */
+export function Findings({ findings, dark }: { findings: string[]; dark?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (findings.length === 0) return null;
+  const count = `The checks found ${findings.length === 1 ? "1 thing" : `${findings.length} things`}`;
+  const turn = <ChevronDown aria-hidden className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-180")} />;
+  const list = (
+    <ul className={cn("grid gap-1.5", dark ? "text-left text-[14px] leading-5" : "mt-1 text-caption text-muted-foreground")}>
+      {findings.map((finding) => (
+        <li key={finding}>{finding}</li>
+      ))}
+    </ul>
+  );
+  if (dark) {
+    return (
+      <>
+        {open ? <div className="max-h-[45dvh] w-full touch-pan-y overflow-y-auto overscroll-contain rounded-xl bg-[rgba(20,12,7,.88)] px-4 py-3 text-white">{list}</div> : null}
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="flex items-center gap-2 rounded-full bg-[rgba(20,12,7,.62)] px-3.5 py-2 text-[13px] leading-none font-medium text-white outline-none focus-visible:ring-2 focus-visible:ring-white"
+        >
+          <span aria-hidden className="size-1.5 rounded-full bg-[#f59e0b]" />
+          {count}
+          {turn}
+        </button>
+      </>
+    );
+  }
+  return (
+    <div className="text-caption">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex max-w-full items-start gap-1.5 rounded-sm text-left">
+        <span aria-hidden className="mt-[0.45em] size-1.5 shrink-0 rounded-full bg-[#f59e0b]" />
+        <span className="min-w-0">{count}</span>
+        <span className="mt-[0.15em]">{turn}</span>
+      </button>
+      {open ? list : null}
+    </div>
   );
 }
 

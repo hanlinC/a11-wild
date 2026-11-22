@@ -247,8 +247,11 @@ describe("the owner's pick on the prospect page", () => {
     // No check greys a draft or takes its button away: the draft the agent faulted can be picked like the others.
     for (const picture of pictures) expect(picture.className).not.toMatch(/grayscale|opacity/);
     expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    // What the checks found is one short line under the draft, and a click unfolds each thing in full.
+    expect(screen.queryByText("The agent saw: The box is too tall.")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "The checks found 2 things" }));
+    expect(screen.getByText("The pack is drawn 5% wider than in its photo. The limit is 2%.")).toBeInTheDocument();
     expect(screen.getByText("The agent saw: The box is too tall.")).toBeInTheDocument();
-    expect(screen.getAllByText("The checks found")).toHaveLength(1);
     // Only a draft that is not an ad yet has no button.
     expect(screen.getByText("Not ready to pick: Its words are not set yet.")).toBeInTheDocument();
     expect(screen.getByText(/Nothing is sent by a pick/)).toBeInTheDocument();
@@ -263,6 +266,8 @@ describe("the owner's pick on the prospect page", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     await userEvent.click(first!);
     const viewer = within(screen.getByRole("dialog", { name: "Picture 1 of 4, large" }));
+    // The large picture takes the focus, and the focus rule rounds what it is on: square corners keep the page out of the screen's four corners.
+    expect(screen.getByRole("dialog")).toHaveClass("rounded-none");
     expect(viewer.getByText("1 / 4")).toBeInTheDocument();
     expect(viewer.getByRole("img", { name: 'Draft 1 of "One fork tap and it crumbles." for Koi Tea' })).toHaveAttribute("src", "https://pictures.example/idea-1-1.jpg");
     // The first picture has nothing before it, and the last nothing after: the row does not go round.
@@ -271,8 +276,10 @@ describe("the owner's pick on the prospect page", () => {
     expect(viewer.getByText("1 / 4")).toBeInTheDocument();
     await userEvent.keyboard("{ArrowRight}{ArrowRight}");
     expect(viewer.getByText("3 / 4")).toBeInTheDocument();
-    // Large, what the checks found is one line above the one button.
-    expect(viewer.getByText("The checks found: The agent saw: The box is too tall.")).toBeInTheDocument();
+    // Large, what the checks found is one short line above the one button, and a click unfolds it in full.
+    expect(viewer.queryByText("The agent saw: The box is too tall.")).not.toBeInTheDocument();
+    await userEvent.click(viewer.getByRole("button", { name: "The checks found 2 things" }));
+    expect(viewer.getByText("The agent saw: The box is too tall.")).toBeInTheDocument();
     expect(viewer.getByRole("button", { name: "Pick this one" })).toBeInTheDocument();
     await userEvent.click(viewer.getByRole("button", { name: "Next picture" }));
     expect(viewer.getByText("4 / 4")).toBeInTheDocument();

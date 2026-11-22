@@ -49,12 +49,15 @@ const noteOf = (item: CheckItem): string => {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 };
 
-/** What the checks found, in the owner's words: it blocks nothing, and he reads it before he picks or sends. */
-export const noteText = (items: CheckItem[]): string | undefined => (items.length > 0 ? [...new Set(items.map(noteOf))].join(" ") : undefined);
+/** Each thing the checks found, in the owner's words, once. */
+export const noteList = (items: CheckItem[]): string[] => [...new Set(items.map(noteOf))];
 
-/** What the checks found in a draft, in the bare picture and in the picture with its words. */
-export const warningOf = (draft: Pick<BoardDraft, "checks" | "words">): string | undefined =>
-  noteText([draft.checks ?? undefined, draft.words?.checks ?? undefined].flatMap((checks) => notesIn(OUTREACH, checks)));
+/** What the checks found, in the owner's words: it blocks nothing, and he reads it before he picks or sends. */
+export const noteText = (items: CheckItem[]): string | undefined => (items.length > 0 ? noteList(items).join(" ") : undefined);
+
+/** What the checks found in a draft, in the bare picture and in the picture with its words: one line for each thing. */
+export const findingsOf = (draft: Pick<BoardDraft, "checks" | "words">): string[] =>
+  noteList([draft.checks ?? undefined, draft.words?.checks ?? undefined].flatMap((checks) => notesIn(OUTREACH, checks)));
 
 /** The owner's own choice of the ad for a prospect: he sees every draft the studio made and picks one. */
 export class OutreachPicks {
@@ -86,7 +89,7 @@ export class OutreachPicks {
           (hasWords(batch.kind) && !draft.words ? "Its words are not set yet." : undefined) ??
           (draft.words && !draft.words.checks?.looked ? "Its words are not checked yet." : undefined) ??
           (refused.has(draft.image.id) ? "You said no to its full-size version." : undefined);
-        const warning = warningOf(draft);
+        const findings = findingsOf(draft);
         return {
           ideaId: idea.id,
           title: idea.title,
@@ -95,7 +98,7 @@ export class OutreachPicks {
           imageId: draft.image.id,
           viewUrl: draft.words?.viewUrl ?? draft.viewUrl,
           ...(blocked ? { blocked } : {}),
-          ...(warning ? { warning } : {}),
+          ...(findings.length > 0 ? { warning: findings.join(" "), findings } : {}),
         };
       }),
     );

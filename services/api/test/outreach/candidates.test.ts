@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { plainReason, warningOf } from "../../src/outreach/candidates.js";
+import { findingsOf, plainReason } from "../../src/outreach/candidates.js";
 
 describe("what the checks found in a draft, as the owner reads it", () => {
   // The lines are the pixel tools' own, as the live studio saved them on 22-11-2026.
@@ -37,20 +37,22 @@ describe("what the checks found in a draft, as the owner reads it", () => {
   const of = (items: { code: "D11" | "D4" | "F1"; note: string; tool?: string }[]) => ({ checks: { imageId: "a", looked: true, savedAt: "", items } });
 
   it("says what the pack measure found, each finding once", () => {
-    expect(warningOf(of([measured]))).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%.");
-    expect(warningOf(of([measured, measured]))).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%.");
-    expect(warningOf(of([]))).toBeUndefined();
+    expect(findingsOf(of([measured]))).toEqual(["The pack is drawn 5% wider than in its photo. The limit is 2%."]);
+    expect(findingsOf(of([measured, measured]))).toEqual(["The pack is drawn 5% wider than in its photo. The limit is 2%."]);
+    expect(findingsOf(of([]))).toEqual([]);
   });
 
-  it("says what the agent saw as the agent's, beside what a tool measured, and what was found with the words on", () => {
-    expect(warningOf(of([measured, { code: "D4", note: "Invented leaves at the left edge." }]))).toBe(
-      "The pack is drawn 5% wider than in its photo. The limit is 2%. The agent saw: Invented leaves at the left edge.",
-    );
-    expect(warningOf(of([{ code: "F1", note: "Soft edge" }]))).toBe("The agent saw: Soft edge.");
-    expect(warningOf(of([{ code: "D11", tool: "cap_check", note: "cap centre 14.0 px left of the body centre (4.1% of the body width); FAIL at 1%" }]))).toMatch(/^The cap sits 4% to the left of the middle of the pack\./);
+  it("says what the agent saw as the agent's, beside what a tool measured, and what was found with the words on, one line each", () => {
+    expect(findingsOf(of([measured, { code: "D4", note: "Invented leaves at the left edge." }]))).toEqual([
+      "The pack is drawn 5% wider than in its photo. The limit is 2%.",
+      "The agent saw: Invented leaves at the left edge.",
+    ]);
+    expect(findingsOf(of([{ code: "F1", note: "Soft edge" }]))).toEqual(["The agent saw: Soft edge."]);
+    expect(findingsOf(of([{ code: "D11", tool: "cap_check", note: "cap centre 14.0 px left of the body centre (4.1% of the body width); FAIL at 1%" }]))[0]).toMatch(/^The cap sits 4% to the left of the middle of the pack\./);
     const words = { checks: { imageId: "w", looked: true, savedAt: "", items: [{ code: "F2" as const, note: "The subline sits close to the pack." }] } };
-    expect(warningOf({ ...of([measured]), words } as Parameters<typeof warningOf>[0])).toBe(
-      "The pack is drawn 5% wider than in its photo. The limit is 2%. The agent saw: The subline sits close to the pack.",
-    );
+    expect(findingsOf({ ...of([measured]), words } as Parameters<typeof findingsOf>[0])).toEqual([
+      "The pack is drawn 5% wider than in its photo. The limit is 2%.",
+      "The agent saw: The subline sits close to the pack.",
+    ]);
   });
 });

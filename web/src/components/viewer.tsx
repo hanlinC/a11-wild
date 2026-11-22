@@ -403,7 +403,7 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
       onTouchMove={moved}
       onTouchEnd={lifted}
       onTouchCancel={lifted}
-      className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden bg-[#140c07] p-0 text-white outline-none backdrop:bg-transparent motion-safe:animate-[viewer-in_.2s]"
+      className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden rounded-none bg-[#140c07] p-0 text-white outline-none backdrop:bg-transparent motion-safe:animate-[viewer-in_.2s]"
     >
       <div ref={sheet} className="relative size-full">
         <div ref={track} onScroll={scrolled} className="flex h-full touch-pan-x snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

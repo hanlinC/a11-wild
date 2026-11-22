@@ -1,7 +1,7 @@
 import type { OutreachCandidate, OutreachCandidates, ProspectPage } from "@a11-wild/shared";
 import { type FormEvent, useState } from "react";
 import { FIELD } from "@/components/canon-card";
-import { CheckNote, Failure, TAP, useWrite } from "@/components/outreach";
+import { Failure, Findings, TAP, useWrite } from "@/components/outreach";
 import { Card } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
   );
 
   const altOf = (draft: OutreachCandidate) => `Draft ${draft.number} of "${draft.headline ?? draft.title}" for ${brand}`;
+  /** Each thing the checks found in a draft. An answer saved before the list was sent holds them in one line. */
+  const found = (draft: OutreachCandidate) => draft.findings ?? (draft.warning ? [draft.warning] : []);
   const isMine = (draft: OutreachCandidate) => candidates.picked?.imageId === draft.imageId;
   const otherWords = (draft: OutreachCandidate) => {
     setLarge(undefined);
@@ -87,7 +89,7 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
     ) : null;
 
   const draftCard = (draft: OutreachCandidate) => (
-    <li key={draft.imageId} className="grid content-start gap-2">
+    <li key={draft.imageId} className="grid min-w-0 content-start gap-2">
       <button type="button" onClick={() => setLarge(candidates.drafts.indexOf(draft))} title="Look at it large" className={ZOOM}>
         <img src={draft.viewUrl} alt={altOf(draft)} className={`aspect-[4/5] w-full rounded-lg border bg-muted object-cover ${isMine(draft) ? "border-foreground ring-2 ring-foreground" : "border-border"}`} />
         <ZoomMark />
@@ -97,7 +99,7 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
         {isMine(draft) ? <Badge color="green">Your pick</Badge> : null}
       </p>
       {actions(draft)}
-      <CheckNote warning={draft.warning} short />
+      <Findings findings={found(draft)} />
     </li>
   );
 
@@ -156,12 +158,8 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
       <Failure error={error} />
       {shown && large !== undefined ? (
         <Viewer shots={candidates.drafts.map((draft) => ({ url: draft.viewUrl, alt: altOf(draft) }))} at={large} onAt={setLarge} onClose={() => setLarge(undefined)}>
-          {/* The whole screen is the picture: what the checks found is one line above the one button, and it is in full on the page. */}
-          {shown.warning ? (
-            <p className={NOTE} title={shown.warning}>
-              The checks found: {shown.warning}
-            </p>
-          ) : null}
+          {/* The whole screen is the picture: what the checks found is one short line above the one button, and a click unfolds it in full. */}
+          <Findings key={shown.imageId} findings={found(shown)} dark />
           {shown.blocked ? <p className={NOTE}>Not ready to pick: {shown.blocked}</p> : null}
           {error ? <p className={NOTE}>{error}</p> : null}
           <div className="flex flex-wrap items-center justify-center gap-2">

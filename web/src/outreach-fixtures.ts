@@ -68,7 +68,7 @@ export const candidates = (overrides: Partial<OutreachCandidates> = {}): Outreac
     waits: true,
     agentOwes: false,
     choosing: "open",
-    drafts: [draftOf("idea-1", 1, crumbles), draftOf("idea-1", 2, crumbles), draftOf("idea-2", 1, gift, { warning: "The agent saw: The box is too tall." }), draftOf("idea-2", 2, gift, { blocked: "Its words are not set yet." })],
+    drafts: [draftOf("idea-1", 1, crumbles), draftOf("idea-1", 2, crumbles), draftOf("idea-2", 1, gift, { warning: "The pack is drawn 5% wider than in its photo. The limit is 2%. The agent saw: The box is too tall.", findings: ["The pack is drawn 5% wider than in its photo. The limit is 2%.", "The agent saw: The box is too tall."] }), draftOf("idea-2", 2, gift, { blocked: "Its words are not set yet." })],
     ...overrides,
   };
 };

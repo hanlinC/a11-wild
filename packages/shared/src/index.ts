@@ -1376,6 +1376,8 @@ export interface OutreachCandidate {
   blocked?: string;
   /** What the checks found in this draft, in plain words: it blocks nothing, and the owner reads it before he picks. */
   warning?: string;
+  /** The same, one line for each thing the checks found, so a page can count them and list them. */
+  findings?: string[];
 }
 
 /** Every draft the studio made for a prospect's newest outreach batch, and what the owner chose. */
