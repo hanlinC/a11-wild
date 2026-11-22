@@ -1,8 +1,9 @@
-import type { BrandPage } from "@a11-wild/shared";
+import type { Attention, BatchLine, BrandPage } from "@a11-wild/shared";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
+import { AttentionProvider } from "@/lib/attention";
 import { MEMBER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Brand } from "./brand";
 
@@ -49,7 +50,83 @@ function show(page: BrandPage) {
   );
 }
 
+const line = (id: string, who: BatchLine["who"], text: string, batch: Partial<BatchLine["batch"]> = {}, brandId = "b1"): BatchLine => ({
+  batch: { id, label: `W47 ${id}`, kind: "v1", state: "waiting_pick", createdAt: "2026-11-21T10:00:00.000Z", ...batch },
+  brand: { id: brandId, name: "WonGi" },
+  product: { id: "p1", name: "Seaweed crisps" },
+  who,
+  text,
+  to: `/batches/${id}`,
+});
+
+function showWith(batches: BatchLine[], page = brandPage(), me?: typeof MEMBER) {
+  stubApi({ "GET /api/brands/b1": () => ({ body: page }) });
+  const value: Attention = { batches, lines: [], counts: { studio: 0 } };
+  renderSignedIn(
+    <AttentionProvider value={{ value, error: undefined }}>
+      <Routes>
+        <Route path="brands/:brandId" element={<Brand />} />
+      </Routes>
+    </AttentionProvider>,
+    me,
+    "/brands/b1",
+  );
+}
+
 describe("Brand page", () => {
+  it("leads with the batch that waits for the owner, then what is in work, before the kit", async () => {
+    showWith([
+      line("x1", "owner", "Pick one draft for each idea."),
+      line("x2", "agent", "The agent makes the drafts."),
+      line("x3", "nobody", "Done.", { state: "done" }),
+      line("x4", "agent", "The agent makes the drafts.", { purpose: "outreach" }),
+      line("x9", "owner", "Pick one draft for each idea.", {}, "b2"),
+    ]);
+    const needs = (await screen.findByRole("heading", { name: /Needs you/ })).closest("section")!;
+    expect(within(needs).getByText("Pick one draft for each idea.")).toBeInTheDocument();
+    expect(within(needs).getByRole("link", { name: /Open the board/ })).toHaveAttribute("href", "/batches/x1");
+    expect(within(needs).queryByText(/x9/)).toBeNull();
+    const work = screen.getByRole("heading", { name: /In work/ }).closest("section")!;
+    expect(within(work).getByRole("link", { name: "W47 x2" })).toBeInTheDocument();
+    expect(within(work).queryByRole("link", { name: "W47 x3" })).toBeNull();
+    expect(needs.compareDocumentPosition(work) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(work.compareDocumentPosition(screen.getByRole("heading", { name: "Kit" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // What asks nothing is folded at the foot.
+    expect(screen.queryByRole("link", { name: "W47 x3" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /Done, outreach and test batches/ }));
+    expect(screen.getByRole("link", { name: "W47 x3" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "W47 x4" })).toBeInTheDocument();
+  });
+
+  it("asks a member nothing: a batch that waits for the owner is in work", async () => {
+    showWith([line("x1", "owner", "Waits for the owner.")], brandPage(), MEMBER);
+    await screen.findByRole("heading", { name: /In work/ });
+    expect(screen.queryByRole("heading", { name: /Needs you/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "W47 x1" })).toBeInTheDocument();
+  });
+
+  it("says what starts a batch when the brand has none in work", async () => {
+    showWith([]);
+    expect(await screen.findByText(/No batch is in work for this brand\. Your agent starts one/)).toBeInTheDocument();
+  });
+
+  it("shows the first three facts of a long list, and the rest at a click", async () => {
+    const fact = (n: number) => ({ id: `f${n}`, productId: "p1", claim: `Fact number ${n}`, quote: `Quote ${n}.`, url: PAGE, checkedAt: "2026-11-21T10:00:00.000Z", savedBy: "owner@example.com" });
+    showWith([], brandPage({ facts: [1, 2, 3, 4, 5].map(fact) }));
+    expect(await screen.findByText("Fact number 3")).toBeInTheDocument();
+    expect(screen.queryByText("Fact number 4")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Show all 5 facts" }));
+    expect(screen.getByText("Fact number 5")).toBeInTheDocument();
+  });
+
+  it("lists the batches by their state when who acts next could not be read", async () => {
+    const page = brandPage();
+    show({ ...page, batches: [{ id: "x1", label: "W47 x1", state: "drafting", createdAt: "2026-11-21T10:00:00.000Z" } as BrandPage["batches"][number]] });
+    const all = (await screen.findByRole("heading", { name: /Batches/ })).closest("section")!;
+    expect(within(all).getByRole("link", { name: "W47 x1" })).toHaveAttribute("href", "/batches/x1");
+    expect(within(all).getByText("drafting")).toBeInTheDocument();
+  });
+
   it("shows each fact with its quote and a link that opens in a new tab without the opener", async () => {
     show(brandPage());
     expect(await screen.findByText("A pack holds 40 g")).toBeInTheDocument();

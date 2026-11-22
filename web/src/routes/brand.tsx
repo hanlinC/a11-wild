@@ -1,13 +1,15 @@
-import type { BrandPage, Measure } from "@a11-wild/shared";
+import type { BatchLine, BrandPage, Fact, Measure } from "@a11-wild/shared";
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
+import { Batches } from "@/components/batches";
 import { CanonCard, FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Ask, Card, Empty, Fold, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
+import { useAttention } from "@/lib/attention";
 import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
@@ -16,9 +18,11 @@ export function Brand() {
   const { brandId = "" } = useParams();
   const isOwner = useMe().role === "owner";
   const { value: page, error, reload } = useLoad(useCallback(() => api.brand(brandId), [brandId]));
+  const attention = useAttention().value;
 
   if (page === undefined) return <Loading error={error} />;
   const { brand, logoUrl, products, batches, canon, canonVersions, notes } = page;
+  const lines = attention?.batches.filter((line) => line.brand.id === brand.id);
 
   return (
     <>
@@ -27,7 +31,51 @@ export function Brand() {
           Brands
         </Link>
       </p>
-      <PageHeader title={brand.name} lead="The kit you chose, and what the studio can prove about each product. Copy and pictures may state only the facts here." />
+      <PageHeader title={brand.name} lead="What is in work for this brand, then your choices, its kit and what the studio can prove about each product." />
+      <Work batches={batches} lines={lines} isOwner={isOwner} />
+
+      <Section title="What you chose" count={notes.length}>
+        <p className="mb-3 max-w-2xl text-caption text-muted-foreground">
+          Your choices for {brand.name}, in your words: which pack to show, what to leave out. The next batch of this brand reads them. They are not product facts, and copy may not state them.
+        </p>
+        {isOwner ? <NoteForm brandId={brand.id} reload={reload} /> : null}
+        {notes.length === 0 ? (
+          <Empty>Nothing yet for this brand.</Empty>
+        ) : (
+          <ul className="grid gap-2">
+            {notes.map((note) => (
+              <li key={note.id}>
+                <Card className="py-4">
+                  <p className="text-body whitespace-pre-line">{note.note}</p>
+                  {note.ownerSaid !== note.note ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">You said: {note.ownerSaid}</p> : null}
+                  <p className="mt-1 text-caption text-muted-foreground">
+                    {when(note.at)}
+                    {note.batchId ? (
+                      <>
+                        {" · "}
+                        <Link to={`/batches/${note.batchId}`} className="underline underline-offset-2">
+                          the batch it came from
+                        </Link>
+                      </>
+                    ) : null}
+                  </p>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Rules for this brand">
+        <CanonCard
+          scope={{ kind: "brand", brandId: brand.id }}
+          canon={canon}
+          versions={canonVersions}
+          isOwner={isOwner}
+          empty={`No rule yet for ${brand.name} alone. Rules here reach only this brand's batches.`}
+          reload={reload}
+        />
+      </Section>
 
       <Section title="Kit">
         <Card className="grid gap-5 sm:grid-cols-[auto_1fr]">
@@ -86,49 +134,6 @@ export function Brand() {
         </Card>
       </Section>
 
-      <Section title="What you chose" count={notes.length}>
-        <p className="mb-3 max-w-2xl text-caption text-muted-foreground">
-          Your choices for {brand.name}, in your words: which pack to show, what to leave out. The next batch of this brand reads them. They are not product facts, and copy may not state them.
-        </p>
-        {isOwner ? <NoteForm brandId={brand.id} reload={reload} /> : null}
-        {notes.length === 0 ? (
-          <Empty>Nothing yet for this brand.</Empty>
-        ) : (
-          <ul className="grid gap-2">
-            {notes.map((note) => (
-              <li key={note.id}>
-                <Card className="py-4">
-                  <p className="text-body whitespace-pre-line">{note.note}</p>
-                  {note.ownerSaid !== note.note ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">You said: {note.ownerSaid}</p> : null}
-                  <p className="mt-1 text-caption text-muted-foreground">
-                    {when(note.at)}
-                    {note.batchId ? (
-                      <>
-                        {" · "}
-                        <Link to={`/batches/${note.batchId}`} className="underline underline-offset-2">
-                          the batch it came from
-                        </Link>
-                      </>
-                    ) : null}
-                  </p>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section title="Rules for this brand">
-        <CanonCard
-          scope={{ kind: "brand", brandId: brand.id }}
-          canon={canon}
-          versions={canonVersions}
-          isOwner={isOwner}
-          empty={`No rule yet for ${brand.name} alone. Rules here reach only this brand's batches.`}
-          reload={reload}
-        />
-      </Section>
-
       {products.length === 0 ? (
         <Section title="Products">
           <Empty>No product yet. Ask your agent to read one of this brand's product pages.</Empty>
@@ -137,30 +142,116 @@ export function Brand() {
         products.map((entry) => <ProductSection key={entry.product.id} entry={entry} />)
       )}
 
+      <Rest lines={lines} />
+    </>
+  );
+}
+
+const aside = (line: BatchLine) => line.batch.test === true || line.batch.purpose === "outreach";
+const open = (line: BatchLine) => !aside(line) && line.who !== "nobody";
+
+/** The brand's batches that move: what is asked of the owner first, then what an agent is at. */
+function Work({ batches, lines, isOwner }: { batches: BrandPage["batches"]; lines: BatchLine[] | undefined; isOwner: boolean }) {
+  // Without the read of who acts next, the batches are still listed, by their state.
+  if (lines === undefined) {
+    return (
       <Section title="Batches" count={batches.length}>
-        {batches.length === 0 ? (
-          <Empty>No batch yet for this brand.</Empty>
-        ) : (
+        {batches.length === 0 ? <Empty>No batch yet for this brand. Your agent starts one when you give it a product of this brand.</Empty> : <Plain batches={batches} />}
+      </Section>
+    );
+  }
+  const asked = isOwner ? lines.filter((line) => line.who === "owner") : [];
+  const inWork = lines.filter((line) => open(line) && !asked.includes(line));
+  return (
+    <>
+      {asked.length > 0 ? (
+        <Section title="Needs you" count={asked.length}>
           <ul className="grid gap-3">
-            {batches.map((batch) => (
-              <li key={batch.id}>
-                <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <Link to={`/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
-                    {batch.label ?? "Batch"}
-                  </Link>
-                  <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
-                    {batch.state.replace("_", " ")}
-                  </Badge>
-                  <span className="text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
-                  {batch.truthVersion ? <span className="text-caption text-muted-foreground">Truth sheet version {batch.truthVersion}</span> : null}
-                  <span className="ml-auto font-mono text-caption text-muted-foreground">{batch.id}</span>
-                </Card>
+            {asked.map((line) =>
+              line.chat ? (
+                <Ask key={line.batch.id} about={`${line.batch.label ?? "Batch"} · ${line.product.name}`} ask={line.text} to={line.to} where="Your agent asks you in chat." />
+              ) : (
+                <Ask key={line.batch.id} about={`${line.batch.label ?? "Batch"} · ${line.product.name}`} ask={line.text} to={line.to} action={line.to.endsWith("/concepts") ? "Open the concepts" : "Open the board"} />
+              ),
+            )}
+          </ul>
+        </Section>
+      ) : null}
+      <Section title="In work" count={inWork.length}>
+        {inWork.length === 0 ? <Empty>No batch is in work for this brand. Your agent starts one when you give it a product of this brand.</Empty> : <Batches lines={inWork} ofBrand />}
+      </Section>
+    </>
+  );
+}
+
+/** The brand's batches that ask nothing: done, made for outreach, or a test. Folded, at the foot of the page. */
+function Rest({ lines }: { lines: BatchLine[] | undefined }) {
+  const rest = lines?.filter((line) => !open(line)) ?? [];
+  if (rest.length === 0) return null;
+  return (
+    <div className="mt-10">
+      <Fold title="Done, outreach and test batches" count={rest.length}>
+        <Batches lines={rest} ofBrand />
+      </Fold>
+    </div>
+  );
+}
+
+function Plain({ batches }: { batches: BrandPage["batches"] }) {
+  return (
+    <ul className="grid gap-3">
+      {batches.map((batch) => (
+        <li key={batch.id}>
+          <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link to={`/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
+              {batch.label ?? "Batch"}
+            </Link>
+            <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
+              {batch.state.replace("_", " ")}
+            </Badge>
+            <span className="text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
+          </Card>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const FACTS_SHOWN = 3;
+
+/** A product's facts. The first few are shown; a long list opens at a click. */
+function Facts({ facts }: { facts: Fact[] }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? facts : facts.slice(0, FACTS_SHOWN);
+  return (
+    <Card>
+      <h3 className="text-body font-medium">
+        Facts <span className="text-caption font-normal text-muted-foreground">{facts.length}</span>
+      </h3>
+      {facts.length === 0 ? (
+        <p className="mt-2 text-caption text-muted-foreground">No fact yet. A fact is kept only when its exact words are on the page it names.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-caption text-muted-foreground">Copy and pictures may state only these.</p>
+          <ul className="mt-3 grid gap-4">
+            {shown.map((fact) => (
+              <li key={fact.id} className="text-caption">
+                <p className="text-body">{fact.claim}</p>
+                <blockquote className="mt-1 border-l-2 border-border pl-3 text-muted-foreground">“{fact.quote}”</blockquote>
+                <p className="mt-1 text-muted-foreground">
+                  <OutLink href={fact.url}>{fact.url}</OutLink> · checked {when(fact.checkedAt)}
+                </p>
               </li>
             ))}
           </ul>
-        )}
-      </Section>
-    </>
+          {facts.length > FACTS_SHOWN ? (
+            <Button type="button" variant="ghost" size="compact" className="mt-3" aria-expanded={all} onClick={() => setAll((was) => !was)}>
+              {all ? `Show the first ${FACTS_SHOWN} only` : `Show all ${facts.length} facts`}
+            </Button>
+          ) : null}
+        </>
+      )}
+    </Card>
   );
 }
 
@@ -217,26 +308,7 @@ function ProductSection({ entry }: { entry: BrandPage["products"][number] }) {
           )}
         </Card>
 
-        <Card>
-          <h3 className="text-body font-medium">
-            Facts <span className="text-caption font-normal text-muted-foreground">{facts.length}</span>
-          </h3>
-          {facts.length === 0 ? (
-            <p className="mt-2 text-caption text-muted-foreground">No fact yet. A fact is kept only when its exact words are on the page it names.</p>
-          ) : (
-            <ul className="mt-3 grid gap-4">
-              {facts.map((fact) => (
-                <li key={fact.id} className="text-caption">
-                  <p className="text-body">{fact.claim}</p>
-                  <blockquote className="mt-1 border-l-2 border-border pl-3 text-muted-foreground">“{fact.quote}”</blockquote>
-                  <p className="mt-1 text-muted-foreground">
-                    <OutLink href={fact.url}>{fact.url}</OutLink> · checked {when(fact.checkedAt)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        <Facts facts={facts} />
       </div>
     </Section>
   );

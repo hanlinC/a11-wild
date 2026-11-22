@@ -149,6 +149,32 @@ describe("Concept board", () => {
     expect(screen.queryByRole("button", { name: "Choose this concept" })).toBeNull();
   });
 
+  it("asks for the three before the concepts, and counts them as they are chosen", async () => {
+    show(board());
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("Asked of you");
+    expect(step).toHaveTextContent("0 of 3 chosen");
+    expect(step).toHaveTextContent("Pick three concepts");
+    await userEvent.click(within(await card("Empty pack 1")).getByRole("button", { name: "Choose this concept" }));
+    expect(step).toHaveTextContent("1 of 3 chosen");
+  });
+
+  it("says what is asked next once the three are saved", async () => {
+    const saved = board({
+      batch: { ...board().batch, state: "judged" },
+      pick: { picks: [1, 2, 4].map((n) => ({ ideaId: `idea-${n}`, ownerSaid: `yes ${n}` })), passes: [], warnings: [], by: "owner@example.com", at },
+    });
+    show(saved);
+    expect(await screen.findByRole("status")).toHaveTextContent("Say yes or no to the words of your three concepts. You answer your agent in chat.");
+  });
+
+  it("tells a member that the batch waits for the owner", async () => {
+    show(board(), MEMBER);
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("Nothing is asked of you");
+    expect(step).toHaveTextContent("Waits for the owner.");
+  });
+
   it("says when the critic has not reviewed the set as it is now", async () => {
     show(board({ picking: "not_yet", reviewedAt: null, concepts: board().concepts.map((entry) => ({ ...entry, review: null })) }));
     expect(await screen.findByText(/The critic has not reviewed every concept and rough as they are now/)).toBeInTheDocument();

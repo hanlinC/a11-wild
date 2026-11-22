@@ -61,11 +61,13 @@ function show(page: BoardData, me?: typeof MEMBER) {
 }
 
 describe("Pick board", () => {
-  it("shows each idea's three drafts numbered 1 to 3 in order, with no rank, beside the truth sheet", async () => {
+  it("shows each idea's three drafts numbered 1 to 3 in order, with no rank, and the truth sheet behind one click", async () => {
     show(board());
     const first = (await screen.findByRole("heading", { name: "Idea 1: Rock 1" })).closest("section")!;
     const pictures = within(first).getAllByRole("img");
     expect(pictures.map((img) => img.getAttribute("alt"))).toEqual(["Rock 1, draft 1", "Rock 1, draft 2", "Rock 1, draft 3"]);
+    expect(screen.queryByText("Truth sheet version 2")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "What is true about the product" }));
     expect(screen.getByText("Truth sheet version 2")).toBeInTheDocument();
     expect(screen.getByText("unverified")).toBeInTheDocument();
     // Inside an idea nothing orders the drafts but their numbers.
@@ -230,5 +232,37 @@ describe("Pick board", () => {
     show(board(), MEMBER);
     await screen.findByAltText("Rock 1, draft 1");
     expect(screen.queryByRole("button", { name: /Pick draft|Pass on all/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Waits for the owner's pick.");
+    expect(screen.queryByText("Waits for your pick")).not.toBeInTheDocument();
+  });
+
+  it("asks for the picks before the drafts, and says how many are left", async () => {
+    const page = board();
+    show({ ...page, ideas: [{ ...page.ideas[0]!, pick: { ideaId: "idea-1", imageId: "idea-1-d3", ownerSaid: "calm", at, by: "owner@example.com" } }, page.ideas[1]!] });
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("Asked of you");
+    expect(step).toHaveTextContent("1 of 2 left");
+    expect(step).toHaveTextContent("Pick one draft for each idea");
+    expect(step.compareDocumentPosition(screen.getByAltText("Rock 1, draft 1")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText("Picked")).toBeInTheDocument();
+    expect(screen.getAllByText("Waits for your pick")).toHaveLength(1);
+  });
+
+  it("says who acts next when every pick is made", async () => {
+    const page = board();
+    const pick = (ideaId: string) => ({ ideaId, imageId: null, ownerSaid: "none fits", at, by: "owner@example.com" });
+    show({ ...page, ideas: page.ideas.map((entry) => ({ ...entry, pick: pick(entry.idea.id) })) });
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("In work");
+    expect(step).toHaveTextContent("Every pick is made. The agent makes the finals next.");
+    expect(screen.getAllByText("Passed")).toHaveLength(2);
+  });
+
+  it("sends the owner to the brand's page for an outreach batch, and asks nothing here", async () => {
+    const page = board();
+    show({ ...page, batch: { ...page.batch, purpose: "outreach", prospectId: "00007" } });
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("Nothing is asked of you");
+    expect(within(step).getByRole("link", { name: "Open the brand's page" })).toHaveAttribute("href", "/outreach/prospects/00007");
   });
 });

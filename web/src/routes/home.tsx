@@ -1,12 +1,10 @@
 import type { AttentionKind, AttentionLine, BatchLine } from "@a11-wild/shared";
 import { Link } from "react-router";
+import { Batches } from "@/components/batches";
 import { Loading } from "@/components/loading";
 import { Ask, Empty, Fold, PageHeader, Section } from "@/components/page";
-import { Badge } from "@/components/ui/badge";
 import { useAttention } from "@/lib/attention";
-import { KIND_NAMES } from "@/lib/kinds";
 import { useMe } from "@/lib/session";
-import { when } from "@/lib/when";
 
 const many = (count: number, one: string, more: string) => `${count} ${count === 1 ? one : more}`;
 
@@ -121,7 +119,7 @@ export function Home() {
           ) : null}
           {outreach.length > 0 ? (
             <Fold title="Outreach batches" count={outreach.length}>
-              <p className="px-2 pb-3 text-caption text-muted-foreground">Made to show a brand what the studio can do. The agent chooses in them; your yes or no to each ad is asked above.</p>
+              <p className="px-2 pb-3 text-caption text-muted-foreground">Made to show a brand what the studio can do. You pick the ad to send on the brand's page in Outreach.</p>
               <Batches lines={outreach} />
             </Fold>
           ) : null}
@@ -134,28 +132,5 @@ export function Home() {
         </div>
       ) : null}
     </>
-  );
-}
-
-/** Batches as plain rows: the name is the link, and the step says who acts next. */
-function Batches({ lines }: { lines: BatchLine[] }) {
-  return (
-    <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-      {lines.map((line) => (
-        <li key={line.batch.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3">
-          <div className="min-w-0 flex-1 basis-64">
-            <Link to={line.to} className="text-body font-medium underline underline-offset-2">
-              {line.batch.label ?? "Batch"}
-            </Link>
-            <span className="ml-2 text-body text-muted-foreground">
-              {line.brand.name}: {line.product.name}
-            </span>
-            <p className="mt-0.5 text-caption text-muted-foreground">{line.text}</p>
-          </div>
-          <Badge color="gray">{KIND_NAMES[line.batch.kind]}</Badge>
-          <span className="text-caption text-muted-foreground">Started {when(line.batch.createdAt)}</span>
-        </li>
-      ))}
-    </ul>
   );
 }

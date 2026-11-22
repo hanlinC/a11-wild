@@ -2,7 +2,7 @@ import type { ConceptBoard, ConceptReview, ConceptScore, FunnelStage, IdeaTest }
 import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router";
 import { Loading } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ const SCORE_NAMES: Record<ConceptScore, string> = {
   commercial: "Sells",
   execution: "Can be made",
 };
-const LEAD = "Every concept of this batch, with its rough and the critic's notes. The critic advises; you choose. Pick three, of any stage, and say why in your own words.";
+const LEAD = "Every concept of this batch, with its rough and the critic's notes. The critic advises; you choose.";
 
 /** The concept board: the owner sees every concept and the critic's review of it, and picks three himself. */
 export function Concepts() {
@@ -78,6 +78,21 @@ export function Concepts() {
   return (
     <>
       <PageHeader title={`${brand.name}: ${product.name}`} lead={LEAD} />
+      {picking === "not_yet" ? (
+        <Step who="agent">Not ready for your pick yet. The critic has not reviewed every concept and rough as they are now.</Step>
+      ) : picking === "closed" ? (
+        <Step who="nobody">You approved the words of your three concepts. The pick is closed.</Step>
+      ) : batch.test ? (
+        <Step who="agent">A test batch: the tester chooses in your place.</Step>
+      ) : !owner ? (
+        <Step who="nobody">Waits for the owner.</Step>
+      ) : pick ? (
+        <Step who="you">Say yes or no to the words of your three concepts. You answer your agent in chat. You can still change the three here.</Step>
+      ) : (
+        <Step who="you" left={`${ids.length} of ${PICKED} chosen`}>
+          Pick three concepts, of any stage, and say why in your own words.
+        </Step>
+      )}
       <p className="mb-6 flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
         <Badge variant="dot" color="amber">
           {batch.state.replace("_", " ")}
@@ -89,16 +104,6 @@ export function Concepts() {
           Pick board of the drafts
         </Link>
       </p>
-
-      {picking === "open" ? null : (
-        <Banner status="info">
-          <BannerTitle>
-            {picking === "not_yet"
-              ? "Not ready for your pick yet. The critic has not reviewed every concept and rough as they are now."
-              : "You approved the words of your three concepts. The pick is closed."}
-          </BannerTitle>
-        </Banner>
-      )}
 
       {pick ? (
         <Section title="Your pick">
