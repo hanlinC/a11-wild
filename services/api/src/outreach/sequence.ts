@@ -108,9 +108,14 @@ export class OutreachSequence {
       if (!(await this.store.takePlace(day, daily))) throw new Refusal(`Today's ${daily} first messages are sent. The next sending day is ${nextSendingDay(day)}.`);
     }
     const send: OutreachSend = { step, day, channel, ...fill(templates.steps[step], file.profile.brand, input.title), at: this.now().toISOString() };
-    if (await this.store.putSend(id, send)) return { send, already: false };
-    // Another mark of the same step came first: this one gives its place back.
-    if (counted) await this.store.givePlace(day);
+    let put = false;
+    try {
+      put = await this.store.putSend(id, send);
+    } finally {
+      // The mark was not saved, or another mark of the same step came first: this one gives its place back.
+      if (!put && counted) await this.store.givePlace(day);
+    }
+    if (put) return { send, already: false };
     const saved = (await this.file(id)).file.sends.find((entry) => entry.step === step);
     return { send: saved ?? send, already: true };
   }
@@ -123,8 +128,9 @@ export class OutreachSequence {
     if (file.sends.some((entry) => entry.step > step)) throw new Refusal("A later message of this brand is marked as sent. Take that one back first.");
     const day = singaporeDay(this.now());
     if (send.day !== day || !(await this.store.deleteSend(id, step, day))) throw new Refusal(`A mark can be taken back on its own day only. This one is of ${send.day}.`);
-    await this.store.addEvent(id, { type: "unsent", step }, "owner");
+    // The place goes back before the note of it is written: the mark is gone, so the day must not count it.
     if (step === 0 && !file.profile.test) await this.store.givePlace(day);
+    await this.store.addEvent(id, { type: "unsent", step }, "owner");
   }
 
   /** A reply the owner got. "no" is an opt-out, at once and for good. */
@@ -139,9 +145,10 @@ export class OutreachSequence {
   /** Final, and kept for the contact: every brand with that number or that address leaves every list. */
   async optOut(id: string): Promise<void> {
     const profile = await this.store.get(id);
-    await this.store.addEvent(id, { type: "optout" }, "owner");
+    // The contact's own register is written first: if the second write fails, every brand with the contact is off the lists already, and a second try finishes it.
     // A test prospect's opt-out stays on the test prospect, so a test can neither block nor free a real contact.
     if (!profile.test) await this.store.addOptOut(profile);
+    await this.store.addEvent(id, { type: "optout" }, "owner");
   }
 
   /** The owner's yes or no to an ad. Only his yes puts the brand in the sending queue. */

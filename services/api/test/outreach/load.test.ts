@@ -57,7 +57,19 @@ describe("the load of the list", () => {
     await loadRows(store, [row(1, { whatsapp: "+65 8111 1111" })], now);
     const [file] = await store.all();
     expect(stageOf(file!, await store.optOuts())).toBe("opted_out");
-    expect(await store.optOuts()).toEqual(new Set(["W#6580000001", "E#hello@brand1.example"]));
+    // The old number stays off the lists, and the new one joins it.
+    expect(await store.optOuts()).toEqual(new Set(["W#6580000001", "W#6581111111", "E#hello@brand1.example"]));
+  });
+
+  it("takes a contact that a second load gives to an opted-out brand off the lists for every brand", async () => {
+    await loadRows(store, [row(1), row(2)], now);
+    await store.addEvent("00001", { type: "optout" }, "owner");
+    await store.addOptOut(await store.get("00001"));
+    const stages = async () => Promise.all((await store.all()).map(async (file) => stageOf(file, await store.optOuts())));
+    expect(await stages()).toEqual(["opted_out", "new"]);
+    // The list now says that brand 1 is reached at brand 2's number too.
+    await loadRows(store, [row(1, { whatsapp: "+65 8000 0001; +65 8000 0002" })], now);
+    expect(await stages()).toEqual(["opted_out", "opted_out"]);
   });
 
   it("refuses a row with a number that is not a number or an address that is not one, by its row and field, and saves the others", async () => {

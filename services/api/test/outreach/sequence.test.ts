@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRows, makeTestProspect } from "../../src/outreach/load.js";
 import { OutreachSequence } from "../../src/outreach/sequence.js";
 import { stageOf } from "../../src/outreach/stage.js";
@@ -35,6 +35,10 @@ beforeEach(async () => {
   sequence = new OutreachSequence(store, now);
   await loadRows(store, [1, 2, 3, 4, 5, 6, 7].map((n) => row(n)), now);
   await sequence.saveTemplates(STEPS);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("marking a message as sent", () => {
@@ -171,6 +175,36 @@ describe("marking a message as sent", () => {
     expect(await stage(test.id)).toBe("opted_out");
     expect((await store.optOuts()).size).toBe(0);
     expect(await stage("00001")).toBe("new");
+  });
+});
+
+describe("a write that fails half way", () => {
+  const down = new Error("the table is down");
+
+  it("gives the day's place back when the mark is not saved", async () => {
+    await ready("00001");
+    vi.spyOn(store, "putSend").mockRejectedValueOnce(down);
+    await expect(sequence.send("00001", { step: 0, title: 0 })).rejects.toBe(down);
+    expect(await store.placesTaken("2026-11-23")).toBe(0);
+    expect((await sequence.send("00001", { step: 0, title: 0 })).already).toBe(false);
+    expect(await store.placesTaken("2026-11-23")).toBe(1);
+  });
+
+  it("gives the day's place back when the note of a take-back is not saved", async () => {
+    await ready("00001");
+    await sequence.send("00001", { step: 0, title: 0 });
+    vi.spyOn(store, "addEvent").mockRejectedValueOnce(down);
+    await expect(sequence.takeBack("00001", 0)).rejects.toBe(down);
+    expect(await store.placesTaken("2026-11-23")).toBe(0);
+    expect(await stage("00001")).toBe("ready");
+  });
+
+  it("has the contact off every list when the opt-out's own note is not saved", async () => {
+    await loadRows(store, [row(8, { whatsapp: "+65 8000 0001", email: undefined })], now);
+    vi.spyOn(store, "addEvent").mockRejectedValueOnce(down);
+    await expect(sequence.optOut("00001")).rejects.toBe(down);
+    expect(await stage("00001")).toBe("opted_out");
+    expect(await stage("00008")).toBe("opted_out");
   });
 });
 

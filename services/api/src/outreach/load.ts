@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { OUTREACH_TIERS, type OutreachTier, type Prospect } from "@a11-wild/shared";
 import { Refusal } from "../mcp/registry.js";
+import { EMAIL } from "./messages.js";
 import { type OutreachStore, prospectId } from "./store.js";
 
 /** One row of the owner's list, as plain text and numbers. The spreadsheet is read outside the server. */
@@ -66,7 +67,7 @@ export function numbers(value: string | undefined): string[] {
 export function address(value: string | undefined): string | undefined {
   const text = plain(value)?.toLowerCase();
   if (!text) return undefined;
-  if (text.length > 254 || !/^[^@\s<>"',;:\\]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(text)) throw new RowError("email", "the address is not an email address");
+  if (text.length > 254 || !EMAIL.test(text)) throw new RowError("email", "the address is not an email address");
   return text;
 }
 
@@ -121,10 +122,10 @@ const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().t
 
 /**
  * Loads rows of the list. It can be run again: it adds new rows and updates the list's own fields.
- * It writes profiles only, so no history, ad, opt-out or note is changed or removed.
+ * It writes profiles, and the opt-out register for a brand that opted out, so no history, ad, opt-out or note is changed or removed.
  */
 export async function loadRows(store: OutreachStore, rows: LoadRow[], now: () => Date): Promise<{ added: number; updated: number; refused: LoadRefusal[] }> {
-  const saved = new Map((await store.all()).map((file) => [file.profile.id, file.profile]));
+  const files = new Map((await store.all()).map((file) => [file.profile.id, file]));
   const loadedAt = now().toISOString();
   const refused: LoadRefusal[] = [];
   const seen = new Set<number>();
@@ -135,10 +136,13 @@ export async function loadRows(store: OutreachStore, rows: LoadRow[], now: () =>
       const profile = profileOf(row, loadedAt);
       if (seen.has(profile.n)) throw new RowError("n", "this number is in the rows twice");
       seen.add(profile.n);
-      const before = saved.get(profile.id);
+      const file = files.get(profile.id);
+      const before = file?.profile;
       // A number that now names another brand would give that brand the first one's history.
       if (before && !sameName(before.brand, profile.brand)) throw new RowError("brand", `number ${profile.n} is saved as "${before.brand}": a row keeps its number`);
       await store.saveProfile(profile);
+      // An opt-out is for the contact. A number or an address the list now gives to an opted-out brand is off every list too.
+      if (file && !profile.test && file.events.some((event) => event.type === "optout")) await store.addOptOut(profile);
       if (before) updated += 1;
       else added += 1;
     } catch (error) {

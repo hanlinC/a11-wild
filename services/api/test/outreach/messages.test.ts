@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { address } from "../../src/outreach/load.js";
 import { checkTemplate, fill, mailLink, messagesFor, profileLink, whatsappLink } from "../../src/outreach/messages.js";
 import { profile } from "./helpers.js";
 
@@ -27,6 +28,15 @@ describe("a message", () => {
     expect(link).toBe("mailto:hello@brand.example?subject=Kopi%20%26%20Co%20%231&body=Line%20one%0ALine%20two");
     expect(mailLink("hello@brand.example?bcc=x@y.example", "t", "x")).toBeUndefined();
     expect(mailLink("a@b.example,c@d.example", "t", "x")).toBeUndefined();
+  });
+
+  it("makes a mail link for every address the list accepts, with the part before the @ encoded", () => {
+    for (const local of ["sales&support", "a?subject=x", "50%off", "tag#1", "first.last+ads"]) {
+      const accepted = address(`${local}@brand.example`)!;
+      const link = mailLink(accepted, "Title", "Text")!;
+      expect(link, local).toBe(`mailto:${encodeURIComponent(local)}@brand.example?subject=Title&body=Text`);
+      expect([...new URL(link).searchParams.keys()], local).toEqual(["subject", "body"]);
+    }
   });
 
   it("gives both versions with the link of the brand's channel", () => {

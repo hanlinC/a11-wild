@@ -129,6 +129,17 @@ describe("the owner's day", () => {
     });
   });
 
+  it("offers the message on the brand's own page on a sending day only: a mark on a Saturday would be refused", async () => {
+    await ready();
+    expect((await json(await get("/api/outreach/prospects/00001"))).message).toMatchObject({ step: 0 });
+    // Saturday 28 November 2026, 10:00 in Singapore.
+    studio.clock.now = new Date("2026-11-28T02:00:00Z");
+    cookie = await sessionCookie(studio);
+    const page = await json(await get("/api/outreach/prospects/00001"));
+    expect(page.prospect.stage).toBe("ready");
+    expect(page).not.toHaveProperty("message");
+  });
+
   it("marks a message as sent once, with the title he used, and takes it back on the same day only", async () => {
     await ready();
     const sent = await json(await on("00001", "sent", { step: 0, title: 1 }));

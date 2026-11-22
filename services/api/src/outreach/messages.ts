@@ -42,9 +42,12 @@ export function whatsappLink(number: string, title: string, text: string): strin
   return `https://wa.me/${number}?text=${encodeURIComponent(`${title}\n\n${text}`)}`;
 }
 
+/** An address the list may hold. The link below encodes the part before the @, so a mark such as & or ? in it cannot add a field to the link. */
+export const EMAIL = /^[^@\s<>"',;:\\]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
 /** A mail link from a checked address, with the title as its subject. */
 export function mailLink(address: string, title: string, text: string): string | undefined {
-  if (!/^[^@\s<>"',;:\\?&#%]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(address)) return undefined;
+  if (!EMAIL.test(address)) return undefined;
   const [local, domain] = address.split("@") as [string, string];
   return `mailto:${encodeURIComponent(local)}@${domain}?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text)}`;
 }
