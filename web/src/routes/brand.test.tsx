@@ -1,8 +1,9 @@
 import type { BrandPage } from "@a11-wild/shared";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
-import { renderSignedIn, stubApi } from "@/test-helpers";
+import { MEMBER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Brand } from "./brand";
 
 const PAGE = "https://wongi.example/products/seaweed-crisps";
@@ -90,5 +91,58 @@ describe("Brand page", () => {
       "/brands/gone",
     );
     expect(await screen.findByText("That is no longer there.")).toBeInTheDocument();
+  });
+
+  const note = { id: "n1", brandId: "b1", note: "Show the pouch, not the bowl.", ownerSaid: "pouch pls", batchId: "batch-1", savedBy: "owner@example.com", at: "2026-11-22T10:00:00.000Z" };
+  const element = (
+    <Routes>
+      <Route path="brands/:brandId" element={<Brand />} />
+    </Routes>
+  );
+
+  it("keeps a choice the owner types for this brand, and shows it with the words he said", async () => {
+    let sent: unknown;
+    stubApi({
+      "GET /api/brands/b1": () => ({ body: { ...brandPage(), notes: sent ? [note] : [] } }),
+      "POST /api/brands/b1/notes": (body) => {
+        sent = body;
+        return { body: note };
+      },
+    });
+    renderSignedIn(element, undefined, "/brands/b1");
+    expect(await screen.findByText("Nothing yet for this brand.")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("A choice for this brand"), "Show the pouch, not the bowl.");
+    await userEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(sent).toEqual({ note: "Show the pouch, not the bowl." }));
+    expect(await screen.findByText("Show the pouch, not the bowl.")).toBeInTheDocument();
+    expect(screen.getByText("You said: pouch pls")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "the batch it came from" })).toHaveAttribute("href", "/batches/batch-1");
+    expect(screen.getByLabelText("A choice for this brand")).toHaveValue("");
+  });
+
+  it("saves this brand's rules under this brand", async () => {
+    let sent: unknown;
+    stubApi({
+      "GET /api/brands/b1": () => ({ body: brandPage() }),
+      "POST /api/taste/canon": (body) => {
+        sent = body;
+        return { body: {} };
+      },
+    });
+    renderSignedIn(element, undefined, "/brands/b1");
+    await userEvent.click(await screen.findByRole("button", { name: "Write the rules" }));
+    await userEvent.type(screen.getByLabelText("All the rules"), "Show the cap.");
+    await userEvent.type(screen.getByLabelText("What changed, and why"), "He said so.");
+    await userEvent.click(screen.getByRole("button", { name: "Save as version 1" }));
+    await waitFor(() => expect(sent).toEqual({ text: "Show the cap.", reason: "He said so.", scope: { kind: "brand", brandId: "b1" } }));
+  });
+
+  it("shows a member the choices and the rules, with no way to change them", async () => {
+    stubApi({ "GET /api/brands/b1": () => ({ body: { ...brandPage(), notes: [note], canon: { version: 1, text: "Show the cap.", reason: "He said so.", savedBy: "owner@example.com", savedAt: "2026-11-22T10:00:00.000Z" } } }) });
+    renderSignedIn(element, MEMBER, "/brands/b1");
+    expect(await screen.findByText("Show the pouch, not the bowl.")).toBeInTheDocument();
+    expect(screen.getByText("Show the cap.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("A choice for this brand")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 });

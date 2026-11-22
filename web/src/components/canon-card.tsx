@@ -85,7 +85,7 @@ export function CanonCard({ scope, name, canon, versions, isOwner, empty, reload
         {editing ? (
           <form onSubmit={save} className="grid gap-4">
             <label className="grid gap-1.5 text-caption text-muted-foreground">
-              The whole canon
+              {scope ? "All the rules" : "The whole canon"}
               <textarea value={text} onChange={(event) => setText(event.target.value)} rows={name ? 8 : 18} className={`${FIELD} font-mono text-caption text-foreground`} required />
             </label>
             <label className="grid gap-1.5 text-caption text-muted-foreground">
@@ -115,7 +115,7 @@ export function CanonCard({ scope, name, canon, versions, isOwner, empty, reload
             )}
             {isOwner ? (
               <Button variant="secondary" size="compact" className="mt-4" onClick={edit} aria-label={name ? `${canon.version === 0 ? "Write" : "Edit"}${of}` : undefined}>
-                {canon.version === 0 ? (name ? "Write" : "Write the canon") : "Edit"}
+                {canon.version === 0 ? (name ? "Write" : scope ? "Write the rules" : "Write the canon") : "Edit"}
               </Button>
             ) : null}
           </>
