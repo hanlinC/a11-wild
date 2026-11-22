@@ -46,7 +46,8 @@ describe("a results file through the pack link", () => {
     expect(waiting[0]).not.toHaveProperty("table");
     await studio.pictures.put(`quarantine/packs/${batchId}/${upload.id}.csv`, new TextEncoder().encode("Ad name,Impressions\na11,1000\n"), "text/csv");
     const kept = (await callTool(studio, "results_get", { batchId })).value.uploads;
-    expect(kept).toMatchObject([{ id: upload.id, state: "checked", table: { rows: [["Ad name", "Impressions"], ["a11", "1000"]], cut: false } }]);
+    expect(kept).toMatchObject([{ id: upload.id, state: "checked", rowsWith: "results_table" }]);
+    expect((await callTool(studio, "results_table", { batchId, uploadId: upload.id })).value).toEqual({ table: { rows: [["Ad name", "Impressions"], ["a11", "1000"]], cut: false } });
     expect(JSON.stringify(kept)).not.toContain("Url");
     expect(JSON.stringify(kept)).not.toContain('"key"');
   });

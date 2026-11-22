@@ -72,6 +72,17 @@ describe("a CSV as a table", () => {
     expect(large.rows[0]).toEqual(["x".repeat(300), "ok"]);
     expect(large.cut).toBe(true);
   });
+
+  it("holds half a million characters at most, so one answer stays small enough to send", () => {
+    // 500 rows of 60 full cells are 9 million characters: within every other limit, and too large to send.
+    const line = Array.from({ length: 60 }, () => "y".repeat(300)).join(",");
+    const table = csvTable(Array.from({ length: 500 }, () => line).join("\n"));
+    expect(table.cut).toBe(true);
+    const chars = table.rows.flat().join("").length;
+    expect(chars).toBeLessThanOrEqual(500_000);
+    expect(chars).toBeGreaterThan(499_000);
+    expect(JSON.stringify(table).length).toBeLessThan(1_000_000);
+  });
 });
 
 describe("a file a client sent", () => {
@@ -162,7 +173,8 @@ describe("a file a client sent", () => {
   it("gives an agent the rows of a CSV and never the file", async () => {
     await sent("week-1.csv", "text/csv", bytes("Ad name,Clicks\n=cmd|' /C calc'!A0,12\n"));
     const [kept] = await studio.services.uploads.list(pack.id);
-    expect(await studio.services.uploads.forAgent(kept!)).toEqual({ table: { rows: [["Ad name", "Clicks"], ["=cmd|' /C calc'!A0", "12"]], cut: false } });
+    expect(await studio.services.uploads.forAgent(kept!)).toEqual({ rowsWith: "results_table" });
+    expect(await studio.services.uploads.table(pack.id, kept!.id)).toEqual({ rows: [["Ad name", "Clicks"], ["=cmd|' /C calc'!A0", "12"]], cut: false });
   });
 
   it("neither opens nor deletes a file of a type the studio took once and takes no more", async () => {

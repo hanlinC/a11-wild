@@ -759,6 +759,8 @@ export interface UploadTable {
 export const TABLE_MAX_ROWS = 500;
 export const TABLE_MAX_COLUMNS = 60;
 export const TABLE_MAX_CELL = 300;
+/** The most characters one table holds, all cells together, so one answer of the studio stays small enough to send. */
+export const TABLE_MAX_CHARS = 500_000;
 
 /** The numbers of one ad over one period, as the client's report gave them. They are typed in by the owner or his agent. */
 export interface AdResult {

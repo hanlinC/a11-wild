@@ -1,4 +1,4 @@
-import { type Pack, type PackUpload, TABLE_MAX_CELL, TABLE_MAX_COLUMNS, TABLE_MAX_ROWS, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadTable, type UploadType } from "@a11-wild/shared";
+import { type Pack, type PackUpload, TABLE_MAX_CELL, TABLE_MAX_CHARS, TABLE_MAX_COLUMNS, TABLE_MAX_ROWS, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadTable, type UploadType } from "@a11-wild/shared";
 import { log } from "../log.js";
 import { Refusal } from "../mcp/registry.js";
 import type { ClientActivity } from "../notify.js";
@@ -33,15 +33,23 @@ export function csvTable(text: string): UploadTable {
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+  // The table holds all it may: the rest of the file is not shown.
+  let full = false;
   const add = (char: string) => {
     // One more than the page shows is kept, so a cell that was cut is known as cut.
     if (cell.length <= TABLE_MAX_CELL) cell += char;
   };
+  let chars = 0;
   const endCell = () => {
     if (row.length >= TABLE_MAX_COLUMNS) cut = true;
     else {
       if (cell.length > TABLE_MAX_CELL) cut = true;
-      row.push(cell.slice(0, TABLE_MAX_CELL));
+      const value = cell.slice(0, TABLE_MAX_CELL);
+      if (chars + value.length > TABLE_MAX_CHARS) full = true;
+      else {
+        chars += value.length;
+        row.push(value);
+      }
     }
     cell = "";
   };
@@ -53,9 +61,9 @@ export function csvTable(text: string): UploadTable {
   const source = text.replace(/^\uFEFF/, "");
   for (let at = 0; at < source.length; at++) {
     const char = source[at] as string;
-    if (rows.length >= TABLE_MAX_ROWS) {
-      cut = true;
-      return { rows, cut };
+    if (rows.length >= TABLE_MAX_ROWS || full) {
+      if (full && row.some((value) => value !== "")) rows.push(row);
+      return { rows, cut: true };
     }
     if (quoted) {
       if (char === '"' && source[at + 1] === '"') {
@@ -71,7 +79,7 @@ export function csvTable(text: string): UploadTable {
     } else add(char);
   }
   if (cell !== "" || row.length > 0) endRow();
-  return { rows, cut };
+  return { rows, cut: cut || full };
 }
 
 interface Deps {
@@ -163,11 +171,12 @@ export class UploadService {
   }
 
   /**
-   * What the owner's agent gets of a file from `list`: an address to look at a checked picture, the rows of a checked CSV as text,
-   * and nothing of any other file. A CSV is never handed out as a file, so it cannot end in a spreadsheet program.
+   * What the owner's agent gets of a file from `list`: an address to look at a checked picture, the tool that reads a checked CSV
+   * as rows of text, and nothing of any other file. A CSV is never handed out as a file, so it cannot end in a spreadsheet program,
+   * and its rows come one file at a time, so many files never make one answer too large to send.
    */
-  async forAgent(upload: PackUpload): Promise<{ viewUrl: string } | { table: UploadTable } | Record<string, never>> {
+  async forAgent(upload: PackUpload): Promise<{ viewUrl: string } | { rowsWith: "results_table" } | Record<string, never>> {
     if (upload.state !== "checked") return {};
-    return upload.type === "text/csv" ? { table: await this.tableOf(upload) } : { viewUrl: await this.deps.pictures.viewUrl(upload.key) };
+    return upload.type === "text/csv" ? { rowsWith: "results_table" } : { viewUrl: await this.deps.pictures.viewUrl(upload.key) };
   }
 }
