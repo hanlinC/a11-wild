@@ -8,25 +8,34 @@ import { Outreach } from "./outreach";
 const section = (name: string) => within(screen.getByRole("heading", { name: new RegExp(`^${name}`) }).closest("section")!);
 
 describe("Today page", () => {
-  it("shows the three groups in order, the day's count and the empty state of each group", async () => {
+  it("says that nothing waits and what brings a brand here, with no empty group", async () => {
     stubApi({ "GET /api/outreach/today": () => ({ body: todayPage() }) });
     renderSignedIn(<Outreach />);
-    expect(await screen.findByRole("status")).toHaveTextContent("3 of 5 first messages sent today");
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Replies that are owed an answer0", "Follow-ups due0", "New first messages0", "Ads that wait for your yes or no0"]);
-    expect(section("Replies").getByText("No reply waits for your answer.")).toBeInTheDocument();
-    expect(section("Follow-ups").getByText("No follow-up is due today.")).toBeInTheDocument();
-    expect(section("New first").getByText(/No brand is ready/)).toBeInTheDocument();
-    expect(section("Ads that wait").getByText("No ad waits for you.")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Nothing is asked of you3 of 5 first messages sent todayNothing waits for you today, Mon, 23 Nov 2026. A brand shows here when its drafts are ready for your pick, when a message is due, or when a reply is logged.",
+    );
+    expect(screen.queryAllByRole("heading", { level: 2 })).toEqual([]);
+    expect(screen.queryByText(/Nothing else today/)).not.toBeInTheDocument();
+  });
+
+  it("shows only the groups that hold something, in order, and names the empty ones in one line", async () => {
+    const owed = { prospect: prospectRow({ stage: "replied" }), reply: { text: "Show me another.", at: "2026-11-20T03:00:00.000Z" } };
+    const first = firstLine({ prospect: prospectRow({ id: "00002", n: 2, brand: "Glow Lab", stage: "ready" }) });
+    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ owed: [owed], firsts: [first] }) }) });
+    renderSignedIn(<Outreach />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Asked of you3 of 5 first messages sent today2 things wait for you today, Mon, 23 Nov 2026.");
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Replies that are owed an answer1", "New first messages1"]);
+    expect(screen.getByText("Nothing else today: no follow-up is due, no brand waits for your pick and no ad waits for your yes or no.")).toBeInTheDocument();
   });
 
   it("says that a Saturday is not a planned day, names the next one, and still offers the messages to send", async () => {
     const owed = { prospect: prospectRow({ stage: "replied" }), reply: { text: "Show me another.", at: "2026-11-20T03:00:00.000Z" } };
-    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ day: "2026-11-21", sendingDay: false, nextSendingDay: "2026-11-23", owed: [owed], firsts: [firstLine()] }) }) });
+    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ day: "2026-11-21", sendingDay: false, nextSendingDay: "2026-11-23", firstsSent: 5, owed: [owed], followUps: [firstLine({ step: 1 })] }) }) });
     renderSignedIn(<Outreach />);
-    expect(await screen.findByRole("status")).toHaveTextContent("3 of 5 first messages sent today, Sat, 21 Nov 2026. Not a planned sending day: the next one is Mon, 23 Nov 2026. You can still send today.");
+    expect(await screen.findByRole("status")).toHaveTextContent("5 of 5 first messages sent today2 things wait for you today, Sat, 21 Nov 2026. Not a planned sending day: the next one is Mon, 23 Nov 2026. You can still send today.");
     expect(section("Replies").getByText("Show me another.")).toBeInTheDocument();
-    expect(section("New first").getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
-    expect(section("Follow-ups").getByText("No follow-up is due today.")).toBeInTheDocument();
+    expect(section("Follow-ups").getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing else today: today's first messages are all sent, no brand waits/)).toBeInTheDocument();
   });
 
   it("gives a first message its ad, both titles and the four actions, and marks it as sent with the title he chose", async () => {
@@ -86,7 +95,7 @@ describe("Today page", () => {
     first.unmount();
     stubApi({ "GET /api/outreach/today": () => ({ body: todayPage() }) });
     renderSignedIn(<Outreach />);
-    await screen.findAllByRole("heading", { level: 2 });
+    await screen.findByRole("status");
     expect(screen.queryByRole("heading", { name: /Brands that wait for your pick/ })).not.toBeInTheDocument();
   });
 

@@ -8,12 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Viewer, ZOOM } from "@/components/viewer";
 
 /** What the section says first: what is asked of the owner now, or who acts next. */
+/** What the owner can do with the drafts now. Who acts next is said once, in the step at the top of the page. */
 function lead({ choosing, picked, wordsAsked, agentOwes }: OutreachCandidates): string {
   if (choosing === "closed") return "This brand takes no ad now, so nothing is picked.";
-  if (wordsAsked) return `Waits for the agent: it sets the other words you asked for ("${wordsAsked.ownerSaid}"). The drafts come back for your pick after that.`;
-  if (picked && agentOwes) return "You picked. Waits for the agent: it makes the full-size version of your pick, and the message is then ready. You can still pick another.";
+  if (wordsAsked) return `You asked for other words on one draft: "${wordsAsked.ownerSaid}"`;
+  if (picked && agentOwes) return "Your pick is marked. You can still pick another.";
   if (picked) return "Your pick is under Ads. Pick another draft here if you want a different ad for the next message.";
-  return "Every draft the studio made for this brand. Click one to look at it large, or to ask for other words on it. Pick the one to send: the agent then makes it full size. Nothing is sent by a pick.";
+  return "Click a draft to look at it large, or to ask for other words on it. Nothing is sent by a pick.";
 }
 
 /**
@@ -110,9 +111,7 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
 
   return (
     <div className="grid gap-4">
-      <p className="text-body" role="status">
-        {lead(candidates)}
-      </p>
+      <p className="text-body text-muted-foreground">{lead(candidates)}</p>
       {ideas.map((drafts) => {
         const first = drafts[0];
         if (!first) return null;

@@ -2,7 +2,7 @@ import type { TodayLine } from "@a11-wild/shared";
 import { Link } from "react-router";
 import { Loading } from "@/components/loading";
 import { AdPicture, AdVerdict, BrandLine, Failure, MessageCard, OutreachTabs, TAP, useWrite } from "@/components/outreach";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, PageHeader, Section, Step } from "@/components/page";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -23,16 +23,55 @@ export function Outreach() {
   }
   const done = () => void reload();
 
+  const sections: { title: string; lines: TodayLine[]; none: string; line: (line: TodayLine) => React.ReactNode }[] = [
+    { title: "Replies that are owed an answer", lines: today.owed, none: "no reply waits for your answer", line: (line) => <Owed line={line} done={done} /> },
+    { title: "Follow-ups due", lines: today.followUps, none: "no follow-up is due", line: (line) => <Message line={line} done={done} /> },
+    {
+      title: "New first messages",
+      lines: today.firsts,
+      none: today.firstsSent >= today.daily ? "today's first messages are all sent" : "no brand is ready for a first message",
+      line: (line) => <Message line={line} done={done} />,
+    },
+    {
+      title: "Brands that wait for your pick",
+      lines: today.picks,
+      none: "no brand waits for your pick",
+      line: (line) => (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-body">
+            {line.drafts === 1 ? "1 draft" : `${line.drafts ?? "Some"} drafts`} to choose from. You pick the one to send; the agent then makes it full size.
+          </p>
+          <Button asChild className={TAP}>
+            <Link to={`/outreach/prospects/${line.prospect.id}`}>Pick the ad</Link>
+          </Button>
+        </div>
+      ),
+    },
+    {
+      title: "Ads that wait for your yes or no",
+      lines: today.adsWaiting,
+      none: "no ad waits for your yes or no",
+      line: (line) =>
+        line.ad ? (
+          <div className="grid gap-4 sm:grid-cols-[16rem_1fr]">
+            <AdPicture ad={line.ad} brand={line.prospect.brand} />
+            <AdVerdict prospect={line.prospect} ad={line.ad} done={done} />
+          </div>
+        ) : null,
+    },
+  ];
+  const open = sections.filter((section) => section.lines.length > 0);
+  const waits = open.reduce((sum, section) => sum + section.lines.length, 0);
+  const rest = sections.filter((section) => section.lines.length === 0).map((section) => section.none);
+
   return (
     <>
       <Header />
-      <p className="mb-6 text-body" role="status">
-        <span className="font-medium">
-          {today.firstsSent} of {today.daily}
-        </span>{" "}
-        first messages sent today, {dayName(today.day)}.
+      <Step who={waits > 0 ? "you" : "nobody"} left={`${today.firstsSent} of ${today.daily} first messages sent today`}>
+        {waits > 0 ? `${waits === 1 ? "1 thing waits" : `${waits} things wait`} for you today, ${dayName(today.day)}.` : `Nothing waits for you today, ${dayName(today.day)}.`}
         {today.sendingDay ? null : <> Not a planned sending day: the next one is {dayName(today.nextSendingDay)}. You can still send today.</>}
-      </p>
+        {waits > 0 ? null : " A brand shows here when its drafts are ready for your pick, when a message is due, or when a reply is logged."}
+      </Step>
       {today.templates ? null : (
         <Banner status="info">
           <BannerTitle>
@@ -41,62 +80,18 @@ export function Outreach() {
         </Banner>
       )}
 
-      <Section title="Replies that are owed an answer" count={today.owed.length}>
-        {today.owed.length === 0 ? (
-          <Empty>No reply waits for your answer.</Empty>
-        ) : (
-          <Lines lines={today.owed}>{(line) => <Owed line={line} done={done} />}</Lines>
-        )}
-      </Section>
-
-      <Section title="Follow-ups due" count={today.followUps.length}>
-        {today.followUps.length === 0 ? <Empty>No follow-up is due today.</Empty> : <Lines lines={today.followUps}>{(line) => <Message line={line} done={done} />}</Lines>}
-      </Section>
-
-      <Section title="New first messages" count={today.firsts.length}>
-        {today.firsts.length === 0 ? (
-          <Empty>{today.firstsSent >= today.daily ? "Today's first messages are all sent." : "No brand is ready. A brand is ready after your yes to its ad."}</Empty>
-        ) : (
-          <Lines lines={today.firsts}>{(line) => <Message line={line} done={done} />}</Lines>
-        )}
-      </Section>
-
-      {today.picks.length > 0 ? (
-        <Section title="Brands that wait for your pick" count={today.picks.length}>
-          <Lines lines={today.picks}>
-            {(line) => (
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-body">
-                  {line.drafts === 1 ? "1 draft" : `${line.drafts ?? "Some"} drafts`} to choose from. You pick the one to send; the agent then makes it full size.
-                </p>
-                <Button asChild className={TAP}>
-                  <Link to={`/outreach/prospects/${line.prospect.id}`}>Pick the ad</Link>
-                </Button>
-              </div>
-            )}
-          </Lines>
+      {open.map((section) => (
+        <Section key={section.title} title={section.title} count={section.lines.length}>
+          <Lines lines={section.lines}>{section.line}</Lines>
         </Section>
-      ) : null}
-
-      <Section title="Ads that wait for your yes or no" count={today.adsWaiting.length}>
-        {today.adsWaiting.length === 0 ? (
-          <Empty>No ad waits for you.</Empty>
-        ) : (
-          <Lines lines={today.adsWaiting}>
-            {(line) =>
-              line.ad ? (
-                <div className="grid gap-4 sm:grid-cols-[16rem_1fr]">
-                  <AdPicture ad={line.ad} brand={line.prospect.brand} />
-                  <AdVerdict prospect={line.prospect} ad={line.ad} done={done} />
-                </div>
-              ) : null
-            }
-          </Lines>
-        )}
-      </Section>
+      ))}
+      {open.length > 0 && rest.length > 0 ? <p className="mt-10 text-body text-muted-foreground">Nothing else today: {listOf(rest)}.</p> : null}
     </>
   );
 }
+
+/** "a, b and c": the parts of a sentence that names each empty group once. */
+const listOf = (parts: string[]): string => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 function Header() {
   return (

@@ -1,11 +1,11 @@
 import { OWN_PICTURE_MAX_BYTES, OWN_PICTURE_TYPES, type OutreachEvent, type OwnPictureType, type ProspectPage } from "@a11-wild/shared";
 import { type FormEvent, useCallback, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { Candidates } from "@/components/candidates";
 import { FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { AdPicture, AdVerdict, BrandLine, CHANNELS, Failure, MessageCard, OutreachTabs, CheckNote, STAGES, STEPS, TAP, useWrite } from "@/components/outreach";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
@@ -14,7 +14,7 @@ import { dayName, when } from "@/lib/when";
 
 const OWNER_STAGES = ["in_talks", "client", "lost", "parked"] as const;
 
-/** One brand: how to reach it, its ad, the message to send, and everything that happened, newest first. */
+/** One brand: the one step that is next first, then its ad and its message. How to reach it and what happened are folded below. */
 export function Prospect() {
   const { id = "" } = useParams();
   const load = useCallback(() => api.prospect(id), [id]);
@@ -44,6 +44,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
 
   return (
     <>
+      <Next page={page} />
       <Card className="grid gap-2">
         <BrandLine prospect={prospect} />
         <p className="text-caption text-muted-foreground">
@@ -59,7 +60,6 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
             </Button>
           </div>
         ) : null}
-        {out ? <p className="text-body">This contact opted out. No message goes to it, and none is recorded.</p> : null}
       </Card>
 
       {page.owed ? (
@@ -86,9 +86,8 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
       ) : null}
 
       <Section title="Ads" count={ads.length}>
-        {out ? null : <OwnPicture id={prospect.id} done={done} />}
         {ads.length === 0 ? (
-          <Empty>{page.candidates ? "No finished ad yet. The agent makes the full-size version of the draft you pick. Or upload your own above." : "No ad yet. The agent makes drafts, and you pick the one to send here. Or upload your own above."}</Empty>
+          <Empty>{page.candidates ? "No finished ad yet. The full-size version of the draft you pick shows here." : "No ad yet."} You can upload your own picture below.</Empty>
         ) : (
           <ul className="grid gap-3">
             {ads.map((ad) => (
@@ -113,12 +112,27 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
             ))}
           </ul>
         )}
+        {out ? null : (
+          <div className="mt-3">
+            <Fold title="Upload your own picture">
+              <OwnPicture id={prospect.id} done={done} />
+            </Fold>
+          </div>
+        )}
       </Section>
 
       {picking ? null : drafts}
 
-      <Section title="How to reach it">
-        <Card>
+      {sends.length > 0 && !out ? (
+        <Section title="Did they reply?">
+          <Card>
+            <Reply id={prospect.id} done={done} />
+          </Card>
+        </Section>
+      ) : null}
+
+      <div className="mt-10">
+        <Fold title="How to reach it">
           <dl className="grid gap-x-6 gap-y-2 text-body sm:grid-cols-[10rem_1fr]">
             {contact.whatsapp.map((entry) => (
               <Line key={entry.number} name="WhatsApp" text={`+${entry.number}`} href={entry.href} />
@@ -139,13 +153,11 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
               </Button>
             </div>
           ) : null}
-        </Card>
-      </Section>
+        </Fold>
 
-      {out ? null : (
-        <Section title="What happened">
-          <Card className="grid gap-6">
-            {sends.length > 0 ? <Reply id={prospect.id} done={done} /> : null}
+        {out ? null : (
+          <Fold title="Note, stage and opt-out">
+            <div className="grid gap-6 px-2 py-1">
             <Note id={prospect.id} done={done} />
             <div className="grid gap-2">
               <p className="text-caption text-muted-foreground">Set the stage yourself</p>
@@ -178,16 +190,76 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
               <OptOut onYes={() => write({ action: "optout" })} busy={busy === "optout"} />
             </div>
             <Failure error={error} />
-          </Card>
-        </Section>
-      )}
+            </div>
+          </Fold>
+        )}
 
-      <Section title="Timeline">
-        <Timeline page={page} />
-      </Section>
+        <Fold title="Timeline" count={page.events.length + sends.length + ads.length}>
+          <Timeline page={page} />
+        </Fold>
 
-      {prospect.test ? <Remove id={prospect.id} /> : null}
+        {prospect.test ? <Remove id={prospect.id} /> : null}
+      </div>
     </>
+  );
+}
+
+/**
+ * The one step that is next for this brand, and who takes it. The first case that holds is the step:
+ * an answer he owes comes before a pick, a pick before a yes, a yes before a message.
+ */
+function Next({ page }: { page: ProspectPage }) {
+  const { prospect, ads, candidates } = page;
+  const drafts = candidates?.drafts.length ?? 0;
+  const stage = prospect.stage;
+  if (stage === "opted_out") return <Step who="nobody">This contact opted out. No message goes to it, and none is recorded.</Step>;
+  if (page.owed) return <Step who="you">Answer the reply yourself, then mark it as answered.</Step>;
+  if (stage === "lost" || stage === "parked") return <SetAside page={page} />;
+  if (candidates?.choosing === "agent") return <Step who="agent">The agent sets the other words you asked for. The drafts come back for your pick after that.</Step>;
+  if (stage === "pick_waits") {
+    return (
+      <Step who="you" left={drafts === 1 ? "1 draft" : `${drafts} drafts`}>
+        Pick the one draft to send. The agent then makes it full size.
+      </Step>
+    );
+  }
+  if (ads[0] && !ads[0].verdict) return <Step who="you">Say yes or no to the ad. A yes makes the first message ready.</Step>;
+  if (page.message) return <Step who="you">{STEPS[page.message.step]} is ready. Send it yourself, then mark it as sent.</Step>;
+  if (stage === "pick_made") return <Step who="agent">You picked. The agent makes the full-size version of your pick, and the message is then ready.</Step>;
+  if (stage === "ready") {
+    return (
+      <Step who="you">
+        Ready to send, but your message text is not saved yet. Write it on the{" "}
+        <Link to="/outreach/messages" className="underline underline-offset-4">
+          Messages
+        </Link>{" "}
+        page.
+      </Step>
+    );
+  }
+  if (stage === "contacted") {
+    return <Step who="nobody">{prospect.next ? `${STEPS[prospect.next.step]} is due ${dayName(prospect.next.due)}.` : "All three messages are sent."} Log a reply below when one comes.</Step>;
+  }
+  if (stage === "replied") return <Step who="nobody">They replied and you answered. Set the stage below when it becomes a talk, a client or a loss.</Step>;
+  if (stage === "no_route") return <Step who="nobody">The list holds no WhatsApp number and no address for this brand, so no message can go to it.</Step>;
+  if (stage === "needs_service_ad") return <Step who="nobody">It sells a service, and the studio makes ads for products. Upload your own picture if you want to write to it.</Step>;
+  if (stage === "new") {
+    return <Step who="nobody">{drafts > 0 ? "Nothing is asked yet. The drafts made so far are below, and you can pick one now." : "No ad yet. The agent makes drafts and you pick the one to send here, or you upload your own picture."}</Step>;
+  }
+  return <SetAside page={page} />;
+}
+
+/** A brand at a stage that somebody set, or that the studio set after his second no: who set it, why, and how it comes back. */
+function SetAside({ page }: { page: ProspectPage }) {
+  // The events are newest first.
+  const set = page.events.find((event) => event.type === "stage");
+  const back = "Nothing happens with it until you set it back to its own stage below.";
+  if (set?.type !== "stage" || set.stage === "auto") return <Step who="nobody">Parked: you said no to its ads, and the studio makes no third try. {back}</Step>;
+  if (set.by === "agent") return <Step who="nobody">The agent parked this brand{set.reason ? `: ${set.reason.replace(/[.\s]+$/, "")}` : ""}. {back}</Step>;
+  return (
+    <Step who="nobody">
+      You set this brand to "{STAGES[page.prospect.stage].label}". {back}
+    </Step>
   );
 }
 
@@ -212,13 +284,10 @@ function OwnPicture({ id, done }: { id: string; done: (page: ProspectPage) => vo
   }
 
   return (
-    <Card className="mb-3 grid gap-3">
-      <div>
-        <p className="text-body">Upload your own picture</p>
-        <p className="mt-1 text-caption text-muted-foreground">
-          The ad you send with the first message, from your computer. JPEG or PNG, up to 8 MB. Your upload counts as your yes, so the message is ready right after.
-        </p>
-      </div>
+    <div className="grid gap-3 px-2 py-1">
+      <p className="text-caption text-muted-foreground">
+        The ad you send with the first message, from your computer. JPEG or PNG, up to 8 MB. Your upload counts as your yes, so the message is ready right after.
+      </p>
       <label className="inline-block">
         <span className="sr-only">Choose your picture</span>
         <input
@@ -238,7 +307,7 @@ function OwnPicture({ id, done }: { id: string; done: (page: ProspectPage) => vo
         </p>
       ) : null}
       <Failure error={error} />
-    </Card>
+    </div>
   );
 }
 
@@ -381,8 +450,8 @@ function Remove({ id }: { id: string }) {
     }
   }
   return (
-    <Section title="Test prospect">
-      <Card className="grid gap-3">
+    <Fold title="Test prospect">
+      <div className="grid gap-3 px-2 py-1">
         <p className="text-body">This prospect is a test. Removing it takes away everything of it. No brand of your list can be removed.</p>
         <div>
           <Button type="button" variant="destructive" className={TAP} loading={busy} onClick={remove}>
@@ -390,7 +459,7 @@ function Remove({ id }: { id: string }) {
           </Button>
         </div>
         <Failure error={error} />
-      </Card>
-    </Section>
+      </div>
+    </Fold>
   );
 }

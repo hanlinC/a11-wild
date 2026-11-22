@@ -16,6 +16,8 @@ const open = () =>
     "/outreach/prospects/00001",
   );
 const GET = "GET /api/outreach/prospects/00001";
+/** Opens a folded part of the page, when the page has loaded. */
+const unfold = async (title: RegExp | string) => userEvent.click(await screen.findByRole("button", { name: title }));
 const sendOf = (day: string) => ({ step: 0 as const, day, channel: "whatsapp" as const, title: "New ad for Koi Tea", text: "Hi", at: `${day}T03:00:00.000Z` });
 
 afterEach(() => vi.restoreAllMocks());
@@ -24,6 +26,8 @@ describe("Prospect page", () => {
   it("shows the contact: a checked value as a link, any other as text", async () => {
     stubApi({ [GET]: () => ({ body: prospectPage({ contact: { whatsapp: [{ number: "6580000001", href: "https://wa.me/6580000001" }], instagram: { name: "javascript:alert(1)" }, decisionMaker: "A Person", dmTitle: "Founder" } }) }) });
     open();
+    expect(screen.queryByRole("link", { name: "+6580000001" })).not.toBeInTheDocument();
+    await unfold("How to reach it");
     expect(await screen.findByRole("link", { name: "+6580000001" })).toHaveAttribute("href", "https://wa.me/6580000001");
     expect(screen.getByText("javascript:alert(1)").closest("a")).toBeNull();
     expect(screen.getByText("A Person, Founder")).toBeInTheDocument();
@@ -43,6 +47,8 @@ describe("Prospect page", () => {
     });
     open();
     expect(await screen.findByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Asked of youFirst message is ready. Send it yourself, then mark it as sent.");
+    await unfold(/^Timeline/);
     expect(screen.getAllByRole("listitem").map((item) => item.textContent).filter((text) => /Note|Yes to|attached/.test(text ?? "")).map((text) => text!.split(/You|The agent/)[0])).toEqual(["Note: Met at a fair.", "Yes to ad 1.", "Ad 1 attached: The cup on its own colour."]);
   });
 
@@ -59,10 +65,12 @@ describe("Prospect page", () => {
     });
     const user = userEvent.setup();
     open();
+    await unfold("Upload your own picture");
     await user.upload(await screen.findByLabelText("Choose your picture"), new File(["PNG"], "ad.png", { type: "image/png" }));
     expect(await screen.findByText("Your upload")).toBeInTheDocument();
     expect(screen.getByText("You said yes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    await unfold(/^Timeline/);
     expect(screen.getByText("Ad 1 uploaded from your computer.")).toBeInTheDocument();
     expect(calls.filter((call) => !call.startsWith("GET"))).toEqual(["POST /api/outreach/prospects/00001/picture", "PUT /put?type=image/png&bytes=3", "POST /api/outreach/prospects/00001/picture/u1/done"]);
   });
@@ -77,6 +85,7 @@ describe("Prospect page", () => {
     // applyAccept is off: a person can still drop any file on the field.
     const user = userEvent.setup({ applyAccept: false });
     open();
+    await unfold("Upload your own picture");
     const field = await screen.findByLabelText("Choose your picture");
     await user.upload(field, new File(["%PDF"], "ad.pdf", { type: "application/pdf" }));
     expect(await screen.findByText("Choose a JPEG or a PNG picture.")).toBeInTheDocument();
@@ -92,8 +101,9 @@ describe("Prospect page", () => {
   it("offers no upload for a contact that opted out", async () => {
     stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "opted_out" }) }) }) });
     open();
-    expect(await screen.findByText(/This contact opted out/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Choose your picture")).not.toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Nothing is asked of youThis contact opted out.");
+    expect(screen.queryByRole("button", { name: "Upload your own picture" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Note, stage and opt-out" })).not.toBeInTheDocument();
   });
 
   it("asks once before an opt-out, and the brand then offers no action", async () => {
@@ -103,6 +113,7 @@ describe("Prospect page", () => {
       "POST /api/outreach/prospects/00001/optout": () => ((asked += 1), { body: prospectPage({ prospect: prospectRow({ stage: "opted_out" }) }) }),
     });
     open();
+    await unfold("Note, stage and opt-out");
     await userEvent.click(await screen.findByRole("button", { name: "Opt this contact out" }));
     expect(asked).toBe(0);
     await userEvent.click(screen.getByRole("button", { name: "Yes, opt out" }));
@@ -114,11 +125,15 @@ describe("Prospect page", () => {
   it("offers take back on the day of the mark only", async () => {
     stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "contacted" }), sends: [sendOf("2026-11-23")] }) }) });
     const { unmount } = open();
+    await unfold("Note, stage and opt-out");
     expect(await screen.findByRole("button", { name: 'Take back "First message sent"' })).toBeInTheDocument();
     unmount();
-    stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "contacted" }), sends: [sendOf("2026-11-20")] }) }) });
+    stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "contacted", next: { step: 1, due: "2026-11-24" } }), sends: [sendOf("2026-11-20")] }) }) });
     open();
+    // The reply is logged without opening anything: after a message it is the next thing that can happen.
     expect(await screen.findByRole("button", { name: "They said more" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing is asked of youFollow-up 1 is due Tue, 24 Nov 2026. Log a reply below when one comes.");
+    await unfold("Note, stage and opt-out");
     expect(screen.queryByRole("button", { name: /Take back/ })).not.toBeInTheDocument();
   });
 
@@ -136,6 +151,7 @@ describe("Prospect page", () => {
     expect(sent).toEqual([]);
     await userEvent.click(screen.getByRole("button", { name: "They said more" }));
     expect(await screen.findByRole("heading", { name: "A reply waits for your answer" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Asked of youAnswer the reply yourself, then mark it as answered.");
     expect(sent).toEqual([{ reply: "more", text: "Show me another." }]);
   });
 
@@ -143,13 +159,42 @@ describe("Prospect page", () => {
     stubApi({ [GET]: () => ({ body: prospectPage({ ads: [adView()] }) }) });
     const { unmount } = open();
     expect(await screen.findByRole("button", { name: "Yes, send this ad" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Remove the test prospect" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Asked of youSay yes or no to the ad.");
+    expect(screen.queryByRole("button", { name: "Test prospect" })).not.toBeInTheDocument();
     unmount();
     const calls = stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ test: true }) }) }), "POST /api/outreach/prospects/00001/remove": () => ({ body: { removed: true } }) });
     open();
+    await unfold("Test prospect");
     await userEvent.click(await screen.findByRole("button", { name: "Remove the test prospect" }));
     expect(await screen.findByText("The list")).toBeInTheDocument();
     await waitFor(() => expect(calls).toContain("POST /api/outreach/prospects/00001/remove"));
+  });
+});
+
+describe("the one next step on the prospect page", () => {
+  const step = async (page: ReturnType<typeof prospectPage>) => {
+    stubApi({ [GET]: () => ({ body: page }) });
+    const { unmount } = open();
+    const text = (await screen.findByRole("status")).textContent;
+    unmount();
+    return text;
+  };
+  const parkedBy = (by: "agent" | "owner") => ({ id: "e1", type: "stage" as const, stage: "parked" as const, ...(by === "agent" ? { reason: "No clean pack photo." } : {}), at: "2026-11-23T01:00:00.000Z", by });
+
+  it("names who set a brand aside and why, before anything its ads would ask", async () => {
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "parked" }), ads: [adView()], events: [parkedBy("agent")] }))).toBe(
+      "Nothing is asked of youThe agent parked this brand: No clean pack photo. Nothing happens with it until you set it back to its own stage below.",
+    );
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "parked" }), events: [parkedBy("owner")] }))).toMatch(/You set this brand to "Parked"\./);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "parked" }), events: [] }))).toMatch(/Parked: you said no to its ads, and the studio makes no third try\./);
+  });
+
+  it("says when the agent acts, and what a brand with no ad or no route waits for", async () => {
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates() }))).toMatch(/^In workYou picked\. The agent makes the full-size version/);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [] }))).toMatch(/^Nothing is asked of youNo ad yet\./);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [], candidates: candidates() }))).toMatch(/The drafts made so far are below, and you can pick one now\./);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "no_route" }), ads: [] }))).toMatch(/no WhatsApp number and no address/);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "ready" }), ads: [adView({ verdict: "yes" })] }))).toMatch(/^Asked of youReady to send, but your message text is not saved yet\./);
   });
 });
 
@@ -217,7 +262,7 @@ describe("the owner's pick on the prospect page", () => {
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pick this one" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(sent).toEqual([{ imageId: "idea-2-draft-1" }]);
-    expect(await screen.findByText(/You picked. Waits for the agent/)).toBeInTheDocument();
+    expect(await screen.findByText(/You picked\. The agent makes the full-size version of your pick/)).toBeInTheDocument();
   });
 
   it("gives what the checks found on the full-size ad of his pick, beside Mark as sent, and opens the ad large", async () => {
@@ -247,7 +292,8 @@ describe("the owner's pick on the prospect page", () => {
     await user.click((await screen.findAllByRole("button", { name: "Pick this one" }))[2]!);
     expect(sent).toEqual([{ imageId: "idea-2-draft-1" }]);
     expect(await screen.findByText("Your pick")).toBeInTheDocument();
-    expect(screen.getByText(/Waits for the agent: it makes the full-size version of your pick/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("In workYou picked. The agent makes the full-size version of your pick, and the message is then ready.");
+    expect(screen.getByText("Your pick is marked. You can still pick another.")).toBeInTheDocument();
     // He can still pick another, and no longer says none: he has picked.
     expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "None of these" })).not.toBeInTheDocument();
@@ -280,7 +326,8 @@ describe("the owner's pick on the prospect page", () => {
     expect(screen.getByLabelText(/Draft 2 with other words/)).toHaveFocus();
     await user.type(screen.getByLabelText(/Draft 2 with other words/), "Say the price.");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByText(/it sets the other words you asked for \("Say the price\."\)/)).toBeInTheDocument();
+    expect(await screen.findByText('You asked for other words on one draft: "Say the price."')).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("In workThe agent sets the other words you asked for.");
     expect(sent[1]).toEqual({ imageId: "idea-1-draft-2", ownerSaid: "Say the price." });
     expect(screen.queryByRole("button", { name: "Pick this one" })).not.toBeInTheDocument();
   });

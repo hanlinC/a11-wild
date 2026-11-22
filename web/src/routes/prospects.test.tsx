@@ -16,6 +16,7 @@ describe("Prospects page", () => {
   it("shows the numbers by tier and by channel, and each brand without a number or an address", async () => {
     stubApi({ "GET /api/outreach/prospects": () => ({ body: page() }) });
     renderSignedIn(<Prospects />);
+    await userEvent.click(await screen.findByRole("button", { name: /^Numbers of the campaign/ }));
     const sent = within((await screen.findByRole("rowheader", { name: "Sent" })).closest("tr")!);
     expect(sent.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["12", "7", "4", "1", "9", "3"]);
     expect(screen.getByRole("link", { name: "Koi Tea" })).toHaveAttribute("href", "/outreach/prospects/00001");
@@ -39,8 +40,24 @@ describe("Prospects page", () => {
     let sent: unknown;
     stubApi({ "GET /api/outreach/prospects": () => ({ body: page() }), "POST /api/outreach/test-prospect": (body) => ((sent = body), { body: { id: "T1" } }) });
     renderSignedIn(<Prospects />);
+    await userEvent.click(await screen.findByRole("button", { name: "Try the pages with a test prospect" }));
     await userEvent.type(await screen.findByLabelText(/Or your own address/), "me@test.example");
     await userEvent.click(screen.getByRole("button", { name: "Make a test prospect" }));
     await waitFor(() => expect(sent).toEqual({ email: "me@test.example" }));
+  });
+
+  it("lists the brands that wait for him first, and draws a long list fifty at a time", async () => {
+    const many = Array.from({ length: 120 }, (_, index) => prospectRow({ id: String(index + 1).padStart(5, "0"), n: index + 1, brand: `Brand ${index + 1}`, stage: index === 99 ? "pick_waits" : index === 70 ? "replied" : "new" }));
+    stubApi({ "GET /api/outreach/prospects": () => ({ body: page(many) }) });
+    renderSignedIn(<Prospects />);
+    expect(await screen.findByText("Replies and the brands that wait for you are listed first")).toBeInTheDocument();
+    const names = () => screen.getAllByRole("link", { name: /^Brand / }).map((link) => link.textContent);
+    expect(names().slice(0, 4)).toEqual(["Brand 71", "Brand 100", "Brand 1", "Brand 2"]);
+    expect(names()).toHaveLength(50);
+    await userEvent.click(screen.getByRole("button", { name: "Show 50 more of 70" }));
+    expect(names()).toHaveLength(100);
+    await userEvent.click(screen.getByRole("button", { name: "Show 20 more of 20" }));
+    expect(names()).toHaveLength(120);
+    expect(screen.queryByRole("button", { name: /^Show/ })).not.toBeInTheDocument();
   });
 });

@@ -1,10 +1,10 @@
-import { OUTREACH_STAGES, OUTREACH_TIERS, type OutreachCount, type OutreachNumbers, type OutreachStage, type OutreachTier } from "@a11-wild/shared";
+import { OUTREACH_STAGES, OUTREACH_TIERS, type OutreachCount, type OutreachNumbers, type OutreachStage, type OutreachTier, type ProspectRow } from "@a11-wild/shared";
 import { type FormEvent, useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { FIELD } from "@/components/canon-card";
 import { Loading } from "@/components/loading";
 import { BrandLine, CHANNELS, Failure, OutreachTabs, STAGES, STEPS, TAP } from "@/components/outreach";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { api, describeError, type ProspectFilter } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
@@ -18,12 +18,22 @@ const COUNTS: [keyof Omit<OutreachNumbers, "prospects">, string][] = [
   ["clients", "Clients"],
 ];
 
-/** Every brand of the list, with a search by name, three filters, and the numbers of the campaign. */
+/** The stages listed first, in the order the owner takes them: a reply, then what waits for his pick, his yes or his message. A row does not say if a reply is answered, so the list gives no count. */
+const WAITS: OutreachStage[] = ["replied", "pick_waits", "ad_waits", "ready"];
+const rank = (row: ProspectRow): number => (WAITS.includes(row.stage) ? WAITS.indexOf(row.stage) : WAITS.length);
+/** How many rows are drawn at once: the list is long, and a page of it opens at once. */
+const PAGE = 50;
+
+/** Every brand of the list, the ones that wait for the owner first, with a search by name and three filters. The numbers of the campaign are folded below. */
 export function Prospects() {
   const [filter, setFilter] = useState<ProspectFilter>({});
   const load = useCallback(() => api.prospects(filter), [filter]);
   const { value: page, error } = useLoad(load);
-  const set = (change: ProspectFilter) => setFilter((before) => ({ ...before, ...change }));
+  const [shown, setShown] = useState(PAGE);
+  const set = (change: ProspectFilter) => (setShown(PAGE), setFilter((before) => ({ ...before, ...change })));
+  // A stable sort: within one rank the brands keep the order of the list.
+  const rows = page ? [...page.rows].sort((a, b) => rank(a) - rank(b)) : [];
+  const first = rows.some((row) => rank(row) < WAITS.length);
 
   return (
     <>
@@ -33,11 +43,7 @@ export function Prospects() {
         <Loading error={error} />
       ) : (
         <>
-          <Section title="Numbers" count={page.numbers.prospects}>
-            <Numbers numbers={page.numbers} />
-          </Section>
-
-          <Section title="Brands" count={page.rows.length}>
+          <Section title="Brands" count={page.rows.length} mark={first ? <span className="text-caption text-muted-foreground">Replies and the brands that wait for you are listed first</span> : null}>
             <div className="mb-4 grid gap-3 sm:grid-cols-4">
               <label className="grid gap-1.5 text-caption text-muted-foreground">
                 Search by name
@@ -51,7 +57,7 @@ export function Prospects() {
               <Empty>{page.numbers.prospects === 0 ? "The list is not loaded yet." : "No brand fits the search and the filters."}</Empty>
             ) : (
               <ul className="grid gap-2">
-                {page.rows.map((row) => (
+                {rows.slice(0, shown).map((row) => (
                   <li key={row.id}>
                     <Card className="grid gap-1 px-4 py-3">
                       <BrandLine prospect={row} />
@@ -66,11 +72,23 @@ export function Prospects() {
                 ))}
               </ul>
             )}
+            {rows.length > shown ? (
+              <div className="mt-3">
+                <Button type="button" variant="secondary" className={TAP} onClick={() => setShown((before) => before + PAGE)}>
+                  Show {Math.min(PAGE, rows.length - shown)} more of {rows.length - shown}
+                </Button>
+              </div>
+            ) : null}
           </Section>
 
-          <Section title="Try the pages">
-            <TestProspect />
-          </Section>
+          <div className="mt-10">
+            <Fold title="Numbers of the campaign" count={page.numbers.prospects}>
+              <Numbers numbers={page.numbers} />
+            </Fold>
+            <Fold title="Try the pages with a test prospect">
+              <TestProspect />
+            </Fold>
+          </div>
         </>
       )}
     </>
@@ -163,7 +181,7 @@ function TestProspect() {
   }
 
   return (
-    <Card>
+    <div className="px-2 py-1">
       <form onSubmit={make} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <label className="grid gap-1.5 text-caption text-muted-foreground">
           Your own WhatsApp number, if you want the link to open
@@ -181,6 +199,6 @@ function TestProspect() {
       <div className="mt-3">
         <Failure error={error} />
       </div>
-    </Card>
+    </div>
   );
 }

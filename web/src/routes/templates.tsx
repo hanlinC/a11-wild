@@ -3,7 +3,7 @@ import { type FormEvent, useState } from "react";
 import { FIELD } from "@/components/canon-card";
 import { Loading } from "@/components/loading";
 import { Failure, OutreachTabs, STEPS, TAP } from "@/components/outreach";
-import { Card, PageHeader, Section } from "@/components/page";
+import { Card, PageHeader, Section, Step } from "@/components/page";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
@@ -55,10 +55,16 @@ function Body({ page, reload }: { page: TemplatesPage; reload: () => Promise<voi
 
   return (
     <>
+      {page.templates ? (
+        <Step who="nobody" left={`Last saved ${when(page.templates.savedAt)}`}>
+          Your three messages are saved. Change them here when you want other words.
+        </Step>
+      ) : (
+        <Step who="you">Write your three messages and save them. No message is ready for any brand before that.</Step>
+      )}
       <form onSubmit={(event) => run("text", event, () => api.saveOutreachTemplates(steps), "The messages are saved.")}>
         <p className="mb-4 max-w-2xl text-caption text-muted-foreground">
           Write {page.placeholder} where the brand's name goes. It is the only placeholder. A message that was sent keeps the text it was sent with.
-          {page.templates ? ` Last saved ${when(page.templates.savedAt)}.` : ""}
         </p>
         {([0, 1, 2] as const).map((step) => (
           <Section key={step} title={STEPS[step]}>
