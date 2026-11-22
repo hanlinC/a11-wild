@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RULES_VERSION } from "../../src/houserules.js";
 import { batchAtTruth } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { outreachBatch } from "../helpers/outreach-batch.js";
@@ -89,6 +90,7 @@ describe("no outreach tool returns a contact", () => {
     const replies = [
       await callTool(studio, "outreach_next", {}),
       await callTool(studio, "outreach_mark", { prospectId: "00001", mark: "product" }),
+      await callTool(studio, "outreach_show", { batchId }),
       await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." }),
       await callTool(studio, "outreach_state", {}),
       await callTool(studio, "batch_get", { batchId }),
@@ -97,14 +99,15 @@ describe("no outreach tool returns a contact", () => {
       expect(reply.ok).toBe(true);
       expect(JSON.stringify(reply)).not.toMatch(LEAKS);
     }
-    expect(replies[0]!.value.brands[0]).toEqual({ id: "00001", n: 1, brand: "Brand 1", sector: "F&B", liveAds: 24, tier: "20+", newestAd: "2026-11-01", why: "first", doneBatchId: batchId });
+    expect(replies[0]!.value.brands).toEqual([]);
+    expect(replies[0]!.value.owed).toEqual([{ id: "00001", n: 1, brand: "Brand 1", sector: "F&B", liveAds: 24, tier: "20+", newestAd: "2026-11-01", batchId, owes: "final", ideaId: "idea-1", imageId: expect.any(String) }]);
   });
 
   it("lists no tool that sends, says yes to an ad, logs a reply or reads a contact", async () => {
     const token = await studio.signer.accessToken((await import("../helpers/deps.js")).config);
     const response = await studio.app.request("/mcp", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
     const tools = ((await response.json()) as { result: { tools: { name: string }[] } }).result.tools.map((tool) => tool.name).filter((name) => name.startsWith("outreach_"));
-    expect(tools.sort()).toEqual(["outreach_attach", "outreach_load", "outreach_mark", "outreach_next", "outreach_state"]);
+    expect(tools.sort()).toEqual(["outreach_attach", "outreach_load", "outreach_mark", "outreach_next", "outreach_show", "outreach_state"]);
   });
 });
 
@@ -146,22 +149,58 @@ describe("outreach_next", () => {
     expect((await callTool(studio, "outreach_next", {})).value.brands).toMatchObject([{ brand: "Brand 3", why: "more" }, { brand: "Brand 1" }, { brand: "Brand 2" }]);
   });
 
-  it("names the batch of a brand that is not done, so a new session resumes it", async () => {
+  it("names the batch of a brand whose drafts are not shown yet, so a new session resumes it", async () => {
     await loadProspects(studio);
-    const open = await outreachBatch(studio, "00001", { done: false });
-    expect((await callTool(studio, "outreach_next", {})).value.brands).toMatchObject([{ brand: "Brand 1", openBatchId: open }]);
+    const open = await outreachBatch(studio, "00001", { upTo: "checked" });
+    expect((await callTool(studio, "outreach_next", {})).value).toMatchObject({ owed: [], brands: [{ brand: "Brand 1", openBatchId: open }] });
   });
 
-  it("names a done batch whose ad is on no page yet, and no longer once it is attached", async () => {
+  it("gives a brand to nobody while its drafts wait for the owner's pick", async () => {
+    await loadProspects(studio, [row(1), row(2)]);
+    await outreachBatch(studio, "00001", { upTo: "shown" });
+    const next = (await callTool(studio, "outreach_next", {})).value;
+    expect(next.owed).toEqual([]);
+    expect(next.brands.map((entry: { brand: string }) => entry.brand)).toEqual(["Brand 2"]);
+    const { brand, product } = await batchAtTruth(studio);
+    expect(await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id, prospectId: "00001" })).toMatchObject({ ok: false, error: expect.stringMatching(/wait for the owner's pick/) });
+  });
+
+  it("owes the final of the owner's pick first, until it is attached", async () => {
+    const [id] = await loadProspects(studio, [row(1), row(2)]);
+    const batchId = await outreachBatch(studio, id!, { upTo: "picked" });
+    const next = async () => (await callTool(studio, "outreach_next", {})).value;
+    expect((await next()).owed).toMatchObject([{ id, brand: "Brand 1", batchId, owes: "final", ideaId: "idea-1" }]);
+    expect((await next()).brands.map((entry: { brand: string }) => entry.brand)).toEqual(["Brand 2"]);
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { pick_made: 1 }, ads: { owedByTheAgent: 1 } });
+    const done = await outreachBatch(studio, "00002");
+    await callTool(studio, "outreach_attach", { batchId: done, why: "The pack on its own colour." });
+    expect((await next()).owed.map((entry: { id: string }) => entry.id)).toEqual([id]);
+  });
+
+  it("owes other words with what the owner said, until the drafts are shown again", async () => {
     const [id] = await loadProspects(studio);
-    const batchId = await outreachBatch(studio, id!);
-    const brand = async () => (await callTool(studio, "outreach_next", {})).value.brands[0];
-    expect(await brand()).toMatchObject({ id, why: "first", doneBatchId: batchId });
-    expect(await brand()).not.toHaveProperty("openBatchId");
-    await callTool(studio, "outreach_attach", { batchId, why: "The pack on its own colour." });
-    await outreach().sequence.verdict(id!, { ad: 1, yes: false, ownerSaid: "the pack is too small" });
-    expect(await brand()).toMatchObject({ id, why: "again" });
-    expect(await brand()).not.toHaveProperty("doneBatchId");
+    const batchId = await outreachBatch(studio, id!, { upTo: "shown" });
+    const { picks } = outreach();
+    const file = async () => (await outreach().store.all())[0]!;
+    const view = (await picks.view(await file(), new Set()))!;
+    // A v1 picture carries no words, so none can be asked.
+    await expect(picks.words(id!, view.drafts[0]!.imageId, "say the price")).rejects.toThrow(/cannot change now/);
+    await outreach().store.addEvent(id!, { type: "words", batchId, ideaId: "idea-1", imageId: view.drafts[0]!.imageId, ownerSaid: "say the price" }, "owner");
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ id, batchId, owes: "words", ownerSaid: "say the price" }]);
+    await expect(picks.pick(id!, view.drafts[0]!.imageId, "owner@studio.example")).rejects.toThrow(/setting the other words/);
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ already: false });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toEqual([]);
+    expect((await callTool(studio, "outreach_state", {})).value.stages).toMatchObject({ pick_waits: 1 });
+  });
+
+  it("gives the brand again with the owner's words after his none, and never resumes the refused batch", async () => {
+    const [id] = await loadProspects(studio);
+    await outreachBatch(studio, id!, { upTo: "shown" });
+    await outreach().picks.none(id!, "the headline says nothing");
+    const brand = (await callTool(studio, "outreach_next", {})).value.brands[0];
+    expect(brand).toMatchObject({ id, why: "again", ownerSaid: "the headline says nothing" });
+    expect(brand).not.toHaveProperty("openBatchId");
   });
 
   it("returns a brand name that reads like an instruction as plain data", async () => {
@@ -211,18 +250,51 @@ describe("an outreach batch and outreach_attach", () => {
     expect(await create("00001")).toMatchObject({ ok: false, error: expect.stringMatching(/waits for the owner's yes or no/) });
   });
 
-  it("attaches the final of a done batch once: the ad then waits for the owner", async () => {
+  it("shows the drafts once, and refuses to show a batch that is not ready or not outreach", async () => {
+    await loadProspects(studio, [row(1), row(2)]);
+    const plain = (await batchAtTruth(studio)).batchId;
+    expect(await callTool(studio, "outreach_show", { batchId: plain })).toMatchObject({ ok: false, error: expect.stringMatching(/not an outreach batch/) });
+    const early = (await batchAtTruth(studio, { prospectId: "00002" })).batchId;
+    expect(await callTool(studio, "outreach_show", { batchId: early })).toMatchObject({ ok: false, error: expect.stringMatching(/shown when each one is made, checked/) });
+    const batchId = await outreachBatch(studio, "00001", { upTo: "checked" });
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ drafts: 9, canBePicked: 9, already: false, note: expect.stringMatching(/pick nothing and make no final/) });
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ already: true });
+    const file = (await outreach().store.all())[0]!;
+    expect(file.events.filter((event) => event.type === "candidates")).toHaveLength(1);
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { pick_waits: 1 }, ads: { draftsWaitForHisPick: 1 }, campaign: { brandsWithAnAd: 1 } });
+  });
+
+  it("makes no final and attaches nothing before the owner's pick", async () => {
+    await loadProspects(studio);
+    const batchId = await outreachBatch(studio, "00001", { upTo: "shown" });
+    const view = (await outreach().picks.view((await outreach().store.all())[0]!, new Set()))!;
+    const draft = view.drafts[0]!;
+    expect(await callTool(studio, "pick_save", { batchId, ideaId: draft.ideaId, imageId: draft.imageId, ownerSaid: "the agent's choice" })).toMatchObject({ ok: false, error: expect.stringMatching(/picked on the brand's page/) });
+    expect(await callTool(studio, "render_submit", { rulesVersion: RULES_VERSION, batchId, ideaId: draft.ideaId, kind: "final", prompt: "The pouch on a rock.", fromId: draft.imageId })).toMatchObject({ ok: false });
+    expect(await callTool(studio, "outreach_attach", { batchId, why: "w" })).toMatchObject({ ok: false, error: expect.stringMatching(/Only the final of a done batch/) });
+    expect((await outreach().store.all())[0]!.ads).toEqual([]);
+  });
+
+  it("attaches the final of the owner's pick once: his pick is his yes, and the brand is ready", async () => {
     await loadProspects(studio);
     const batchId = await outreachBatch(studio, "00001");
     const attached = await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." });
-    expect(attached.value).toMatchObject({ already: false, ad: { n: 1, batchId, kind: "v1", why: "The pouch on its own colour." } });
+    expect(attached.value).toMatchObject({ already: false, ad: { n: 1, batchId, kind: "v1", picked: true, why: "The pouch on its own colour." } });
     expect(attached.value.ad.key).toBeUndefined();
     expect((await callTool(studio, "outreach_attach", { batchId, why: "Again." })).value).toMatchObject({ already: true, ad: { n: 1, why: "The pouch on its own colour." } });
     const [file] = await outreach().store.all();
     expect(file!.ads).toHaveLength(1);
     expect(file!.ads[0]!.key).toMatch(/\.(png|jpg|jpeg|webp)$/);
-    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { ad_waits: 1 }, ads: { waitForTheOwner: 1 }, campaign: { brandsWithAnAd: 1, brandsLimit: 50 } });
-    expect(await names()).toEqual([]);
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { ready: 1 }, ads: { waitForTheOwner: 0, owedByTheAgent: 0 }, campaign: { brandsWithAnAd: 1, brandsLimit: 50 } });
+    expect((await callTool(studio, "outreach_next", {})).value).toMatchObject({ owed: [], brands: [] });
+  });
+
+  it("attaches one ad when two calls come at one moment", async () => {
+    await loadProspects(studio);
+    const batchId = await outreachBatch(studio, "00001");
+    const both = await Promise.all([callTool(studio, "outreach_attach", { batchId, why: "One." }), callTool(studio, "outreach_attach", { batchId, why: "Two." })]);
+    expect(both.every((reply) => reply.ok)).toBe(true);
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
   });
 
   it("is refused for a batch that is not outreach, not done, or whose final failed a check", async () => {
@@ -236,18 +308,60 @@ describe("an outreach batch and outreach_attach", () => {
     expect((await outreach().store.all()).flatMap((file) => file.ads)).toEqual([]);
   });
 
-  it("attaches a second ad only after the owner's no, and none after two noes", async () => {
-    await loadProspects(studio);
-    const { sequence } = outreach();
-    const first = await outreachBatch(studio, "00001");
-    await callTool(studio, "outreach_attach", { batchId: first, why: "One." });
-    await sequence.verdict("00001", { ad: 1, yes: false, ownerSaid: "the pack is too small" });
-    const second = await outreachBatch(studio, "00001");
-    expect((await callTool(studio, "outreach_attach", { batchId: second, why: "Two." })).value).toMatchObject({ already: false, ad: { n: 2 } });
-    await sequence.verdict("00001", { ad: 2, yes: false, ownerSaid: "still no" });
+  it("goes back to the drafts after the owner's no to the full-size ad, and makes the final of his next pick in the same batch", async () => {
+    const [id] = await loadProspects(studio);
+    const { picks, sequence, store } = outreach();
+    const batchId = await outreachBatch(studio, id!);
+    await callTool(studio, "outreach_attach", { batchId, why: "One." });
+    const tick = () => {
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    };
+    tick();
+    await sequence.verdict(id!, { ad: 1, yes: false, ownerSaid: "the pack went soft at full size" });
+    tick();
+    const stages = async () => (await callTool(studio, "outreach_state", {})).value.stages;
+    // A no to the final of his own pick uses up no try: he chooses among the drafts again.
+    expect(await stages()).toMatchObject({ pick_waits: 1 });
+    const view = (await picks.view((await store.all())[0]!, new Set()))!;
+    const [first, second] = view.drafts;
+    expect(first).toMatchObject({ blocked: "You said no to its full-size version." });
+    await expect(picks.pick(id!, first!.imageId, "owner@studio.example")).rejects.toThrow(/cannot be sent/);
+    await picks.pick(id!, second!.imageId, "owner@studio.example");
+    tick();
+    expect(await stages()).toMatchObject({ pick_made: 1 });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ batchId, owes: "final", imageId: second!.imageId }]);
+    // The old final is not the final of his new pick.
+    expect(await callTool(studio, "outreach_attach", { batchId, why: "Two." })).toMatchObject({ ok: false });
+    const rules = { rulesVersion: RULES_VERSION };
+    tick();
+    const sent = await callTool(studio, "render_submit", { ...rules, batchId, ideaId: second!.ideaId, kind: "final", prompt: "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it.", fromId: second!.imageId });
+    expect(sent.ok).toBe(true);
+    const final = (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id;
+    await callTool(studio, "checks_save", { ...rules, batchId, imageId: final, items: [] });
+    const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });
+    await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+    expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
+    tick();
+    expect((await callTool(studio, "outreach_attach", { batchId, why: "Two." })).value).toMatchObject({ already: false, ad: { n: 2, picked: true } });
+    expect(await stages()).toMatchObject({ ready: 1 });
+    expect((await callTool(studio, "outreach_next", {})).value).toMatchObject({ owed: [], brands: [] });
+  });
+
+  it("makes a second batch only after the owner's none, and none after two", async () => {
+    const [id] = await loadProspects(studio);
+    const { picks } = outreach();
+    await outreachBatch(studio, id!, { upTo: "shown" });
+    await picks.none(id!, "the headline says nothing");
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await outreachBatch(studio, id!, { upTo: "shown" });
+    // Two clicks at one moment are one no.
+    await Promise.all([picks.none(id!, "still no"), picks.none(id!, "still no")]);
+    const file = (await outreach().store.all())[0]!;
+    expect(file.events.filter((event) => event.type === "none")).toHaveLength(2);
     expect((await callTool(studio, "outreach_state", {})).value.stages.parked).toBe(1);
+    await expect(picks.none(id!, "a third")).rejects.toThrow(/takes no ad now/);
     const { brand, product } = await batchAtTruth(studio);
-    expect(await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id, prospectId: "00001" })).toMatchObject({ ok: false, error: expect.stringMatching(/"parked": it needs no ad now/) });
+    expect(await callTool(studio, "batch_create", { kind: "v1", brandId: brand.id, productId: product.id, prospectId: id })).toMatchObject({ ok: false, error: expect.stringMatching(/"parked": it needs no ad now/) });
   });
 
   it("reports the campaign's spend against its cap", async () => {
