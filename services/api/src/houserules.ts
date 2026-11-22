@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.12";
+export const RULES_VERSION = "2026-11-22.13";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -152,7 +152,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     id: "v3-drafts",
     roles: MAKERS,
     kinds: CONCEPTS,
-    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows, with a skeleton too. A concept with no rough starts from a plan of its real photos (skeleton_make). Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft that shows the pack with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong. Keep each pack whole, apart from the other packs and things, and seen from the front, upright or turned in the plane (pack_check with tilted): a pack that touches another or lies in steep perspective cannot be measured, so it cannot pass. A draft that shows the food alone names no pack photo and needs no pack_check; a pack the model drew into it all the same is a D item, because no real photo stands behind it. The model does not empty, open or flatten a pack from the photo of a full one: a concept that needs the pack in another state needs a real photo of it in that state. A draft that its checks reject (a D item, or two F items) is made again once, with the same number and a prompt that names the fault. With fewer than two drafts of a concept that pass after that, save a new direction with a lower risk for that concept (direction_save takes it while the drafts are made, and leaves the other concepts as they are); its three drafts start again. Do not send a third.",
+    text: "A draft of a concept ad answers one draft of the direction (render_submit with draft 1, 2 or 3). The studio gives the model the concept's rough first, then the real photos you name: name the real photo of each thing the concept shows, with a skeleton too. A concept with no rough starts from a plan of its real photos (skeleton_make). Change only what that draft's question asks. The model draws the product from its real photos, so measure each draft that shows the pack with pack_check before it counts; a skeleton that holds the real pack is the fallback when the shape or the print comes out wrong. Keep each pack whole, apart from the other packs and things, and seen from the front, upright or turned in the plane (pack_check with tilted): a pack that touches another or lies in steep perspective cannot be measured, so it cannot pass. Leave a clear gap between two packs, and between one pack above another at least 5% of the picture height: pack_check joins what lies nearer. A concept that shows two packs or more is built round a skeleton plan from the start (skeleton_make, each pack apart): from the photo alone the model draws several packs too tall. A draft that shows the food alone names no pack photo and needs no pack_check; a pack the model drew into it all the same is a D item, because no real photo stands behind it. The model does not empty, open or flatten a pack from the photo of a full one: a concept that needs the pack in another state needs a real photo of it in that state. A draft that its checks reject (a D item, or two F items) is made again once, with the same number and a prompt that names the fault. A draft built round a skeleton may be made again round the same one. With fewer than two drafts of a concept that pass after that, save a new direction with a lower risk for that concept (direction_save takes it while the drafts are made, and leaves the other concepts as they are); its three drafts start again. Do not send a third.",
   },
   {
     id: "v3-finals",
@@ -246,7 +246,7 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     id: "judge-the-ad",
     roles: MAKERS,
     kinds: WORDS,
-    text: "A draft check judges an ad, not only defects: check each draft with its words and logo set. A draft that lost the idea's device, or no longer says the line at first glance, is weak: fail it and say why.",
+    text: "A draft check judges an ad, not only defects: check each draft with its words and logo set. A draft that lost the idea's device, or no longer says the line at first glance, is weak: fail it and say why. Save a fault of the bare picture on the bare picture, and on the picture with its words only what the words add: the board asks for the type again while the picture with its words has a D item or two F items.",
   },
   {
     id: "food",
