@@ -1074,3 +1074,77 @@ export interface ProspectFile {
   sends: OutreachSend[];
   events: OutreachEvent[];
 }
+
+/** One message of the owner's sequence: two versions of its title, and its text. `{Brand}` is the only placeholder. */
+export interface OutreachTemplate {
+  titles: [string, string];
+  body: string;
+}
+
+/** The owner's three messages, in his words. Only he changes them. */
+export interface OutreachTemplates {
+  steps: [OutreachTemplate, OutreachTemplate, OutreachTemplate];
+  savedAt: string;
+}
+
+/** A message with the brand's name filled in, and the link that opens it in WhatsApp or the mail program. */
+export interface OutreachMessage {
+  title: string;
+  text: string;
+  /** Missing when the brand has no checked contact for its channel. */
+  href?: string;
+}
+
+/** One prospect as a line of a list. It holds no number and no address. */
+export interface ProspectRow {
+  id: string;
+  n: number;
+  brand: string;
+  sector: string;
+  liveAds: number;
+  tier: OutreachTier;
+  stage: OutreachStage;
+  channel?: OutreachChannel;
+  /** True when a new ad waits for the owner's yes or no. */
+  adWaits: boolean;
+  /** The next message of the sequence and the day it is due. */
+  next?: { step: OutreachStep; due: string };
+  /** The brand earlier in the list that has the same number or address. */
+  sameContactAs?: string;
+  test?: true;
+}
+
+/** An outreach ad with a short-lived address of its picture. */
+export interface OutreachAdView extends OutreachAd {
+  viewUrl: string;
+  verdict?: "yes" | "no";
+}
+
+/** One line of the Today page: a brand, its ad and the message to send. */
+export interface TodayLine {
+  prospect: ProspectRow;
+  /** The ad the message carries, or the ad that waits for a yes or a no. */
+  ad?: OutreachAdView;
+  /** The message this line is about. Missing for an ad that waits. */
+  step?: OutreachStep;
+  /** Both versions of the message, with the link of the brand's channel. */
+  messages?: [OutreachMessage, OutreachMessage];
+  /** The reply that is owed an answer. */
+  reply?: { text?: string; at: string };
+}
+
+export interface TodayPage {
+  /** The Singapore day, as YYYY-MM-DD. */
+  day: string;
+  sendingDay: boolean;
+  nextSendingDay: string;
+  /** The daily number of first messages, and how many are marked as sent today. */
+  daily: number;
+  firstsSent: number;
+  /** False until the owner's message text is loaded. */
+  templates: boolean;
+  owed: TodayLine[];
+  followUps: TodayLine[];
+  firsts: TodayLine[];
+  adsWaiting: TodayLine[];
+}
