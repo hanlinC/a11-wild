@@ -416,6 +416,22 @@ describe("the owner's own picture", () => {
     expect(studio.pictures.files.has(kept)).toBe(false);
   });
 
+  it("keeps the test prospect when its picture could not be removed, so the removal can be run again", async () => {
+    const made = await json(await post("/api/outreach/test-prospect", {}));
+    const { started } = await upload(made.id, PNG);
+    const kept = `outreach/owner/${made.id}/${started.uploadId}.png`;
+    const remove = studio.pictures.remove.bind(studio.pictures);
+    studio.pictures.remove = async () => {
+      throw new Error("store is down");
+    };
+    expect((await on(made.id, "remove")).status).toBeGreaterThanOrEqual(400);
+    expect(await outreach().store.find(made.id)).toBeDefined();
+    studio.pictures.remove = remove;
+    expect(await json(await on(made.id, "remove"))).toEqual({ removed: true });
+    expect(studio.pictures.files.has(kept)).toBe(false);
+    expect(await outreach().store.find(made.id)).toBeUndefined();
+  });
+
   it("lets a brand that sells a service go on with his picture, and keeps none for a contact that opted out", async () => {
     const [id] = await loadProspects(studio);
     await on(id!, "kind", { kind: "service" });
