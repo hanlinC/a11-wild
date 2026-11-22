@@ -15,6 +15,18 @@ const state = async () => (await callTool(studio, "batch_get", { batchId })).val
 const all = (packet: { value?: { concepts: { id: string }[] } }, extra: (ideaId: string) => object = () => ({})) => (packet.value?.concepts ?? []).map((entry) => review(entry.id, extra(entry.id)));
 
 describe("the critic's review of the concepts", () => {
+  it("does not keep the writer's order: the order comes from the set, so one set in 720 may fall on it by chance", async () => {
+    const written = ["idea-1", "idea-2", "idea-3", "idea-4", "idea-5", "idea-6"];
+    const orders: string[][] = [];
+    for (const ideaId of written.slice(0, 4)) {
+      // Each new rough makes a new set, and a new set has its own order.
+      await roughOf(studio, batchId, ideaId);
+      orders.push((await open()).value.concepts.map((entry: { id: string }) => entry.id));
+    }
+    expect(orders.some((order) => order.join() !== written.join())).toBe(true);
+    for (const order of orders) expect([...order].sort()).toEqual(written);
+  });
+
   it("gets every concept in another order, with its roughs as pictures and none of the writer's own answers", async () => {
     const roughId = await roughOf(studio, batchId, "idea-2");
     const packet = await open();
@@ -22,7 +34,6 @@ describe("the critic's review of the concepts", () => {
     expect(packet.value.readFirst).toMatch(/references_get/);
     const ids = packet.value.concepts.map((entry: { id: string }) => entry.id);
     expect([...ids].sort()).toEqual(["idea-1", "idea-2", "idea-3", "idea-4", "idea-5", "idea-6"]);
-    expect(ids).not.toEqual(["idea-1", "idea-2", "idea-3", "idea-4", "idea-5", "idea-6"]);
     // The order is the same for one set.
     expect((await open()).value.concepts.map((entry: { id: string }) => entry.id)).toEqual(ids);
     const second = packet.value.concepts.find((entry: { id: string }) => entry.id === "idea-2");
