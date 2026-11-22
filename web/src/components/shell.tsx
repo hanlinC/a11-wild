@@ -10,6 +10,7 @@ const NAV = [
   { to: "/brands", label: "Brands" },
   { to: "/outreach", label: "Outreach", ownerOnly: true },
   { to: "/packs", label: "Packs" },
+  { to: "/clients", label: "Clients", ownerOnly: true },
   { to: "/taste", label: "Taste" },
   { to: "/calibration", label: "Calibration" },
   { to: "/spend", label: "Spend" },
