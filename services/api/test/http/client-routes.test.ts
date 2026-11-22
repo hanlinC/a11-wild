@@ -72,6 +72,20 @@ describe("a client's link", () => {
     expect((await get(`/api/client/${clientToken}/packs/${otherRef}/download/0`)).status).toBe(404);
   });
 
+  it("answers a wrong link the same whatever is sent with it", async () => {
+    const wrong = "x".repeat(43);
+    for (const path of [`/api/client/${wrong}/packs/${ref}/comments`, `/api/client/${wrong}/packs/${ref}/uploads`, `/api/pack/${wrong}/comments`, `/api/pack/${wrong}/uploads`]) {
+      for (const body of [{}, { text: "hello" }, { name: "a.png", type: "image/png", bytes: 1 }]) {
+        const answer = await post(path, body);
+        expect(answer.status).toBe(404);
+        expect(await answer.json()).toEqual({ error: "not_found" });
+      }
+    }
+    // A real link still says what is wrong with what was sent.
+    expect((await post(`/api/client/${clientToken}/packs/${ref}/uploads`, { text: "hello" })).status).toBe(400);
+    expect((await post(`/api/client/${clientToken}/packs/${ref}/comments`, {})).status).toBe(400);
+  });
+
   it("is never written to a log line", () => {
     expect(loggedPath(`/api/client/${clientToken}/packs/${ref}/comments`)).toBe(`/api/client/<token>/packs/${ref}/comments`);
     expect(loggedPath(`/api/pack/${packToken}/download/0`)).toBe("/api/pack/<token>/download/0");

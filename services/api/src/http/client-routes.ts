@@ -60,10 +60,11 @@ export function clientRoutes(
 
     routes.post(`${prefix}/comments`, async (c) => {
       quiet(c);
-      const body = COMMENT.safeParse(await c.req.json().catch(() => undefined));
-      if (!body.success) return c.json({ error: "bad_request", message: "Write your comment as plain text." }, 400);
+      // The link is read first: a wrong link answers the same whatever is sent with it.
       const found = await find(c);
       if (!found) return notFound(c);
+      const body = COMMENT.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json({ error: "bad_request", message: "Write your comment as plain text." }, 400);
       try {
         const comment = await comments.send(found.pack, found.version, body.data);
         log.info("pack_comment", { change: comment.change !== undefined });
@@ -76,10 +77,10 @@ export function clientRoutes(
     // The client says which file is coming and gets one address to send it to. The file itself never passes through the studio's server.
     routes.post(`${prefix}/uploads`, async (c) => {
       quiet(c);
-      const body = FILE.safeParse(await c.req.json().catch(() => undefined));
-      if (!body.success) return c.json({ error: "bad_request", message: "Send a JPEG or PNG screenshot, or a CSV export." }, 400);
       const found = await find(c);
       if (!found) return notFound(c);
+      const body = FILE.safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json({ error: "bad_request", message: "Send a JPEG or PNG screenshot, or a CSV export." }, 400);
       try {
         const taken = await pack.uploadTo(found.pack, body.data);
         log.info("pack_upload_started", { upload: taken.upload.id, type: body.data.type, bytes: body.data.bytes });
