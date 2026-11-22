@@ -1,5 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { approvedClient, config, createStudio, json, ORIGIN, sessionCookie, type Studio } from "../helpers/deps.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RULES_VERSION } from "../../src/houserules.js";
+import { approvedClient, callTool, config, createStudio, json, ORIGIN, sessionCookie, type Studio } from "../helpers/deps.js";
+import { outreachBatch } from "../helpers/outreach-batch.js";
 import { JPEG, PNG } from "../helpers/pictures.js";
 import { loadProspects, row } from "../outreach/helpers.js";
 
@@ -41,6 +43,9 @@ const WRITES: [string, unknown][] = [
   ["/api/outreach/prospects/00001/remove", {}],
   ["/api/outreach/prospects/00001/picture", { type: "image/png", bytes: 12 }],
   [`/api/outreach/prospects/00001/picture/${UPLOAD}/done`, {}],
+  ["/api/outreach/prospects/00001/pick", { imageId: "image-1" }],
+  ["/api/outreach/prospects/00001/none", { ownerSaid: "The headline says nothing." }],
+  ["/api/outreach/prospects/00001/words", { imageId: "image-1", ownerSaid: "Say the price." }],
   ["/api/outreach/templates", { steps: TEMPLATES }],
   ["/api/outreach/daily", { daily: 9 }],
   ["/api/outreach/test-prospect", {}],
@@ -464,5 +469,128 @@ describe("the owner's own picture", () => {
     expect((await json((await upload(id!, PNG)).done)).prospect.stage).toBe("ready");
     await on(id!, "optout");
     expect((await post(`/api/outreach/prospects/${id}/picture`, { type: "image/png", bytes: 12 })).status).toBe(400);
+  });
+});
+
+describe("the owner's pick of the ad", () => {
+  const RULES = { rulesVersion: RULES_VERSION };
+  const page = async (id = "00001") => json(await get(`/api/outreach/prospects/${id}`));
+  const attention = async () => (await json(await get("/api/attention"))).lines as { kind: string; count: number; to: string }[];
+
+  /** One brand whose nine drafts are shown; the second draft of the first idea has a pack that is too tall. */
+  async function shown() {
+    await loadProspects(studio);
+    await outreach().sequence.saveTemplates(TEMPLATES as never);
+    const batchId = await outreachBatch(studio, "00001", { upTo: "checked" });
+    const board = (await callTool(studio, "board_show", { batchId })).value;
+    const bad = board.ideas[0].drafts[1].image.id as string;
+    await callTool(studio, "checks_save", { ...RULES, batchId, imageId: bad, items: [{ code: "D11", note: "The pouch is too tall." }] });
+    await callTool(studio, "outreach_show", { batchId });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    return { batchId, bad };
+  }
+
+  it("shows every draft of every idea, a failed one with its reason, and counts the brand as waiting for him", async () => {
+    const { batchId, bad } = await shown();
+    const { prospect, candidates } = await page();
+    expect(prospect).toMatchObject({ stage: "pick_waits" });
+    expect(candidates).toMatchObject({ batchId, choosing: "open", waits: true, words: false });
+    expect(candidates.picked).toBeUndefined();
+    expect(candidates.drafts).toHaveLength(9);
+    expect(new Set(candidates.drafts.map((draft: { ideaId: string }) => draft.ideaId))).toEqual(new Set(["idea-1", "idea-2", "idea-3"]));
+    expect(candidates.drafts.filter((draft: { blocked?: string }) => draft.blocked)).toEqual([expect.objectContaining({ imageId: bad, blocked: "The pouch is too tall." })]);
+    for (const draft of candidates.drafts) expect(draft.viewUrl).toMatch(/^https:\/\//);
+    const today = await json(await get("/api/outreach/today"));
+    expect(today.picks).toMatchObject([{ prospect: { id: "00001", brand: "Brand 1", stage: "pick_waits" }, drafts: 8 }]);
+    expect(today.firsts).toEqual([]);
+    expect(await attention()).toContainEqual(expect.objectContaining({ kind: "ad_picks", count: 1, to: "/outreach" }));
+  });
+
+  it("refuses a failed draft, a picture that is no draft of the brand, and words where the ad has none", async () => {
+    const { bad } = await shown();
+    const failed = await on("00001", "pick", { imageId: bad });
+    expect(failed.status).toBe(400);
+    expect((await json(failed)).message).toMatch(/cannot be sent: The pouch is too tall/);
+    expect((await json(await on("00001", "pick", { imageId: "no-such-picture" }))).message).toMatch(/not one of this brand's drafts/);
+    const { candidates } = await page();
+    const good = candidates.drafts.find((draft: { blocked?: string }) => !draft.blocked).imageId;
+    expect((await on("00001", "words", { imageId: good, ownerSaid: "Say the price." })).status).toBe(400);
+    expect((await on("00001", "none", { ownerSaid: "   " })).status).toBe(400);
+    expect((await page()).prospect.stage).toBe("pick_waits");
+  });
+
+  it("takes his pick once, sends nothing, and lets him pick another before the final is made", async () => {
+    const { batchId } = await shown();
+    const before = await page();
+    const [first, second] = before.candidates.drafts.filter((draft: { blocked?: string }) => !draft.blocked);
+    const picked = await json(await on("00001", "pick", { imageId: first.imageId }));
+    expect(picked).toMatchObject({ prospect: { stage: "pick_made" }, candidates: { picked: { imageId: first.imageId }, choosing: "open", waits: false }, ads: [] });
+    // The same pick again, twice at one moment, changes nothing.
+    await Promise.all([on("00001", "pick", { imageId: first.imageId }), on("00001", "pick", { imageId: first.imageId })]);
+    const file = async () => (await outreach().store.all())[0]!;
+    expect((await file()).events.filter((event) => event.type === "pick")).toHaveLength(1);
+    expect((await file()).sends).toEqual([]);
+    expect((await json(await get("/api/outreach/today"))).picks).toEqual([]);
+    expect((await attention()).some((group) => group.kind === "ad_picks")).toBe(false);
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ batchId, owes: "final", imageId: first.imageId }]);
+    await on("00001", "pick", { imageId: second.imageId });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ batchId, owes: "final", imageId: second.imageId }]);
+    // "None of these" is for drafts that wait: he has picked.
+    expect((await json(await on("00001", "none", { ownerSaid: "On second thought." }))).message).toMatch(/do not wait for your pick now/);
+  });
+
+  it("makes the brand ready with the final of his pick, and only his own click marks the message as sent", async () => {
+    await loadProspects(studio);
+    await outreach().sequence.saveTemplates(TEMPLATES as never);
+    const batchId = await outreachBatch(studio, "00001");
+    await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const ready = await page();
+    expect(ready).toMatchObject({ prospect: { stage: "ready", adWaits: false }, ads: [{ n: 1, verdict: "yes", picked: true }] });
+    expect((await outreach().store.all())[0]!.sends).toEqual([]);
+    expect((await json(await get("/api/outreach/today"))).firsts).toMatchObject([{ prospect: { id: "00001" } }]);
+    expect((await on("00001", "sent", { step: 0, title: 0 })).status).toBe(200);
+    // After the message has gone he cannot take back his yes to the ad it carried.
+    expect((await on("00001", "ad", { ad: 1, yes: false, ownerSaid: "Too late." })).status).toBe(400);
+  });
+
+  it("takes his no to the full-size ad without a second try used up, and brings the drafts back", async () => {
+    await loadProspects(studio);
+    const batchId = await outreachBatch(studio, "00001");
+    await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const after = await json(await on("00001", "ad", { ad: 1, yes: false, ownerSaid: "The pack went soft." }));
+    expect(after).toMatchObject({ prospect: { stage: "pick_waits" }, ads: [{ n: 1, verdict: "no" }], candidates: { choosing: "open", waits: true } });
+    expect(after.candidates.drafts.filter((draft: { blocked?: string }) => draft.blocked)).toMatchObject([{ blocked: "You said no to its full-size version." }]);
+  });
+
+  it("parks the brand after his second none, and gives his words to the agent after the first", async () => {
+    await shown();
+    const first = await json(await on("00001", "none", { ownerSaid: "The headline says nothing." }));
+    expect(first).toMatchObject({ prospect: { stage: "new" }, candidates: { waits: false } });
+    expect((await callTool(studio, "outreach_next", {})).value.brands).toMatchObject([{ id: "00001", why: "again", ownerSaid: "The headline says nothing." }]);
+    await outreachBatch(studio, "00001", { upTo: "shown" });
+    const second = await json(await on("00001", "none", { ownerSaid: "Still nothing." }));
+    expect(second).toMatchObject({ prospect: { stage: "parked" }, candidates: { choosing: "closed" } });
+    expect((await on("00001", "pick", { imageId: second.candidates.drafts[0].imageId })).status).toBe(400);
+  });
+
+  it("asks nothing for a brand that opted out", async () => {
+    await shown();
+    await on("00001", "optout");
+    const { prospect, candidates } = await page();
+    expect(prospect.stage).toBe("opted_out");
+    expect(candidates).toMatchObject({ choosing: "closed" });
+    expect((await on("00001", "pick", { imageId: candidates.drafts[0].imageId })).status).toBe(400);
+    expect((await json(await get("/api/outreach/today"))).picks).toEqual([]);
+  });
+
+  it("puts none of the owner's words in a log line", async () => {
+    await shown();
+    const lines: string[] = [];
+    const spy = vi.spyOn(console, "log").mockImplementation((line: string) => void lines.push(String(line)));
+    await on("00001", "none", { ownerSaid: "A secret thought about the brand." });
+    spy.mockRestore();
+    expect(lines.join("\n")).not.toMatch(/secret thought/);
   });
 });
