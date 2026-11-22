@@ -205,6 +205,15 @@ class Cutout(Tmp):
         mask = self.cut(self.photo(shadow=True))
         self.assertEqual(mask[425:495, 60:140].sum(), 0)
 
+    def test_a_pale_part_at_an_edge_that_is_not_backdrop_stays_with_the_pack(self):
+        # A pale pack fills the bottom edge of its photo. With that edge left out (--edges), it is not read as backdrop.
+        rgb = np.full((300, 300, 3), 255, np.uint8)
+        rgb[100:300, 80:220] = (70, 45, 30)
+        rgb[240:300, 83:217] = 250
+        path = self.save("cropped.png", rgb)
+        self.assertGreater(self.cut(path, edges="top,left,right")[250:295, 90:210].mean(), 0.99)
+        self.assertLess(self.cut(path)[250:295, 90:210].mean(), 0.01)
+
     def test_a_bad_outline_is_refused(self):
         self.assertIn("--outline", exit_message(lambda: self.cut(self.photo(), outline=-1)))
 

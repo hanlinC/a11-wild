@@ -77,7 +77,7 @@ def alpha_from_png(path, box, size, packshot_size=None):
     return m.crop(box).resize(size, Image.LANCZOS)
 
 
-def inside_outline(light, lum, outline):
+def inside_outline(light, lum, outline, border):
     """The light backdrop that the picture's border reaches without a step over an outline.
 
     A white label at the edge of a pack is as light as a white backdrop, and only the pack's thin outline parts them. A fill from
@@ -91,7 +91,7 @@ def inside_outline(light, lum, outline):
     calm = (light & (step < outline)).astype(np.uint8)
     r = max(2, round(min(H, W) * 0.004))
     _, parts = cv2.connectedComponents(cv2.erode(calm, np.ones((2 * r + 1, 2 * r + 1), np.uint8)), connectivity=4)
-    at_border = np.unique(np.concatenate([parts[0], parts[-1], parts[:, 0], parts[:, -1]]))
+    at_border = np.unique([parts[y, x] for x, y in border])  # only the edges the backdrop may touch (--edges)
     reached = np.isin(parts, at_border[at_border > 0]).astype(np.uint8)
     near = np.ones((3, 3), np.uint8)
     for _ in range(2 * r):  # back to the full width of the calm backdrop, round each corner
@@ -149,7 +149,7 @@ def cutout(a):
         return out
 
     light = (sat < a.light_sat) & (mx > a.light_min)
-    bg = backdrop((mx < a.dark_max) & (smooth if smooth is not None else True)) | (backdrop(light) if a.outline <= 0 else inside_outline(light, lum, a.outline))
+    bg = backdrop((mx < a.dark_max) & (smooth if smooth is not None else True)) | (backdrop(light) if a.outline <= 0 else inside_outline(light, lum, a.outline, border))
     if not bg.any():
         sys.exit("no backdrop found on the chosen --edges. Check --dark-max, --light-sat and --edges (an edge the product fills is not backdrop).")
     m = Image.fromarray(((~bg) * 255).astype("uint8"), "L").filter(ImageFilter.MinFilter(a.open)).filter(ImageFilter.MaxFilter(a.open))
