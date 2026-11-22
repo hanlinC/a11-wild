@@ -57,6 +57,13 @@ describe("the start page", () => {
     expect(within(section(/in work/i)).getByRole("link", { name: "drafting" })).toHaveAttribute("href", "/batches/drafting");
   });
 
+  it("counts the brands whose ad the owner picks, and sends him to Outreach for them", () => {
+    show({ batches: [], lines: [{ kind: "ad_picks", count: 2, to: "/outreach" }] });
+    const needs = within(section(/needs you/i));
+    expect(needs.getByText(/2 brands whose ad you pick/)).toBeInTheDocument();
+    expect(needs.getByRole("link", { name: /Outreach/ })).toHaveAttribute("href", "/outreach");
+  });
+
   it("says where the answer is given when the dashboard has no button for it", () => {
     show({ batches: [line("words", { who: "owner", chat: true, text: "Say yes or no to the words." })] });
 

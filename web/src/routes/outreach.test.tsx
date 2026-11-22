@@ -76,6 +76,20 @@ describe("Today page", () => {
     await waitFor(() => expect(sent).toEqual([{ ad: 1, yes: false, ownerSaid: "The cup is too small." }]));
   });
 
+  it("lists a brand whose drafts wait for his pick with one link to its page, and no section when none waits", async () => {
+    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ picks: [{ prospect: prospectRow({ stage: "pick_waits" }), drafts: 8 }] }) }) });
+    const first = renderSignedIn(<Outreach />);
+    expect(await screen.findByText(/8 drafts to choose from/)).toBeInTheDocument();
+    const picks = section("Brands that wait for your pick");
+    expect(picks.getByRole("link", { name: "Pick the ad" })).toHaveAttribute("href", "/outreach/prospects/00001");
+    expect(picks.queryByRole("button")).not.toBeInTheDocument();
+    first.unmount();
+    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage() }) });
+    renderSignedIn(<Outreach />);
+    await screen.findAllByRole("heading", { level: 2 });
+    expect(screen.queryByRole("heading", { name: /Brands that wait for your pick/ })).not.toBeInTheDocument();
+  });
+
   it("shows a brand name with markup as text", async () => {
     stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ firsts: [firstLine({ prospect: prospectRow({ brand: '<img src=x onerror="alert(1)">' }) })] }) }) });
     renderSignedIn(<Outreach />);
