@@ -974,3 +974,103 @@ export interface Reference {
   addedAt: string;
   savedBy: string;
 }
+
+/** The spend tiers of the owner's outreach list, by live Meta ads. */
+export const OUTREACH_TIERS = ["20+", "5-19", "<5"] as const;
+export type OutreachTier = (typeof OUTREACH_TIERS)[number];
+
+export const OUTREACH_STAGES = ["new", "no_route", "needs_service_ad", "ad_waits", "ready", "contacted", "replied", "in_talks", "client", "lost", "parked", "opted_out"] as const;
+export type OutreachStage = (typeof OUTREACH_STAGES)[number];
+
+export type OutreachChannel = "whatsapp" | "email";
+/** The three messages of the sequence: the first message, follow-up 1, follow-up 2. */
+export type OutreachStep = 0 | 1 | 2;
+
+/** One brand of the owner's outreach list, as the list gives it. Only the load writes it. */
+export interface Prospect {
+  id: string;
+  /** Its number in the list: the owner's order of priority. */
+  n: number;
+  brand: string;
+  sector: string;
+  liveAds: number;
+  tier: OutreachTier;
+  /** The day of its newest ad, as YYYY-MM-DD. */
+  newestAd?: string;
+  bestRoute?: string;
+  secondRoute?: string;
+  /** WhatsApp numbers: digits only, with the country code. */
+  whatsapp: string[];
+  /** A verified address, in lower case. */
+  email?: string;
+  phone?: string;
+  instagram?: string;
+  decisionMaker?: string;
+  dmTitle?: string;
+  linkedin?: string;
+  /** Made to try the pages. It is left out of every number and every limit, and it can be removed. */
+  test?: true;
+  loadedAt: string;
+}
+
+/** What an agent may read of a prospect: nothing that reaches a person. */
+export interface ProspectBrief {
+  id: string;
+  n: number;
+  brand: string;
+  sector: string;
+  liveAds: number;
+  tier: OutreachTier;
+  newestAd?: string;
+  instagram?: string;
+}
+
+/** A finished outreach ad, attached to its prospect. */
+export interface OutreachAd {
+  /** 1 for the prospect's first ad. */
+  n: number;
+  batchId: string;
+  imageId: string;
+  kind: BatchKind;
+  /** Where the studio's own copy of the final sits in the private store. */
+  key: string;
+  /** One line from the agent: what the ad shows and why it fits the brand. */
+  why: string;
+  at: string;
+}
+
+/** A message the owner sent by hand and marked as sent, with the exact text. */
+export interface OutreachSend {
+  step: OutreachStep;
+  /** The Singapore day, as YYYY-MM-DD. */
+  day: string;
+  channel: OutreachChannel;
+  title: string;
+  text: string;
+  at: string;
+}
+
+export type OutreachEventBody =
+  | { type: "kind"; kind: "product" | "service" }
+  /** `auto` takes a set stage away again: the stage then comes from the history. */
+  | { type: "stage"; stage: "in_talks" | "client" | "lost" | "parked" | "auto"; reason?: string }
+  | { type: "ad_yes"; ad: number }
+  | { type: "ad_no"; ad: number; ownerSaid: string }
+  | { type: "reply"; reply: "more" | "no" | "other"; text?: string }
+  | { type: "answered" }
+  | { type: "optout" }
+  | { type: "unsent"; step: OutreachStep }
+  | { type: "note"; text: string }
+  | { type: "channel"; channel: OutreachChannel }
+  /** The owner chose to send to a prospect that shares its contact with an earlier one. */
+  | { type: "chosen" };
+
+export type OutreachEvent = OutreachEventBody & { id: string; at: string; by: "owner" | "agent" };
+
+/** A prospect with everything that happened to it. */
+export interface ProspectFile {
+  profile: Prospect;
+  ads: OutreachAd[];
+  sends: OutreachSend[];
+  events: OutreachEvent[];
+}
