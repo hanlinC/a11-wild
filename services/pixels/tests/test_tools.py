@@ -478,6 +478,14 @@ class Headline(Tmp):
         out, msg = self.run_("--font", self.FONT, "--headline", "Ten flavours | for S$58.90.", "--case", "upper", "--area", "0.5,0.2,0.95,0.6")
         self.assertIn("in 2 line(s)", msg)
 
+    def test_a_headline_the_writer_broke_keeps_his_lines_and_gets_no_other(self):
+        # Found live (IRVINS concept ads, 22-11-2026): in a narrow column the larger size won, and the second line broke again.
+        narrow = ["--font", self.FONT, "--case", "upper", "--area", "0.5,0.16,0.94,0.5"]
+        _, msg = self.run_(*narrow, "--headline", "Three bags. | Free delivery.")
+        self.assertIn("in 2 line(s)", msg)
+        _, free = self.run_(*narrow, "--headline", "Three bags. Free delivery.")
+        self.assertIn("in 3 line(s)", free)  # with no break of the writer's, the largest size that fits still wins
+
     def test_an_accent_needs_a_colour_and_a_word_of_the_headline(self):
         self.assertIn("--accent needs --accent-color", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi there", "--area", "0,0,1,1", "--accent", "hi"))
         self.assertIn("not in the headline", exit_message(self.run_, "--font", self.FONT, "--headline", "Hi there", "--area", "0,0,1,1", "--accent", "bye", "--accent-color", "FF0000"))

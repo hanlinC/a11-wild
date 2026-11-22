@@ -216,6 +216,19 @@ describe("a draft that its checks reject", () => {
     expect(redo.ok ? "" : redo.error).toBe("");
   });
 
+  it("is made again round the skeleton it was built round", async () => {
+    // Found live (IRVINS concept ads, 22-11-2026): the redo of a draft from its own skeleton was refused as R23.
+    await studio.services.images.add({ id: "s1", batchId, kind: "skeleton", key: `batches/${batchId}/skeletons/s1.png` });
+    const sent = await send("idea-2", 1, { fromId: "s1" });
+    const first = (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id as string;
+    await look(first, [{ code: "D11", note: "The pouch is too tall." }]);
+    // Another draft of the concept still needs its own skeleton.
+    expect(await send("idea-2", 2, { fromId: "s1" })).toMatchObject({ ok: false, error: expect.stringMatching(/R23/) });
+    const redo = await send("idea-2", 1, { fromId: "s1" });
+    expect(redo.ok ? "" : redo.error).toBe("");
+    expect(redo.value).toMatchObject({ fromId: "s1" });
+  });
+
   it("is not made a third time", async () => {
     const first = await made("idea-2", 1);
     await look(first, [{ code: "F1", note: "The pouch is as big as the hand." }, { code: "F6", note: "Seven things in the frame." }]);

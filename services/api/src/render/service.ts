@@ -212,7 +212,8 @@ export class RenderService {
       if (input.fromId) {
         from = await images.get(batch.id, input.fromId);
         if (from.kind !== "skeleton") throw new Refusal(`Picture ${from.id} is a ${from.kind}, not a skeleton. A draft is built round a skeleton (skeleton_make).`);
-        if (mine.some((render) => render.fromId === from?.id)) {
+        // A draft made again keeps its question, so it may keep its skeleton: only another draft of the idea needs its own.
+        if (mine.some((render) => render.id !== redoOf && render.fromId === from?.id)) {
           throw new Refusal("R23: each draft of an idea comes from its own skeleton. This skeleton already has a draft of this idea. Make another skeleton, with another camera, crop or scale.");
         }
       } else if (hasPack && batch.kind !== "v3") {

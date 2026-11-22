@@ -20,7 +20,8 @@ between headline lines, x the font size (capitals have no descenders, so 0.95 to
 1.05 for mixed case). --align center centres each line in the area. --accent names one or more
 headline words (matched without case) that are set in --accent-color, the kit's accent colour.
 A " | " in the headline forces a line break there (the words stay the approved words), so a line can
-end on the idea, as in "WAIT, | THERE'S TEN?".
+end on the idea, as in "WAIT, | THERE'S TEN?". A headline broken so keeps those lines and gets no other: in a
+narrow area the size comes down.
 
 The font, for every brand: give --family with the brand kit's font name (brand_get kit.fonts; the
 first one is the headline font unless the kit notes say otherwise). The script gets that family at
@@ -186,7 +187,9 @@ def stub(lines):
 def layout(draw, path, sub_path, headline, subline, box_w, box_h, wght, sub_wght, sub_ratio, gap, leading=1.05, caps=False):
     """The largest size that fits: (head font, head lines, sub font, sub lines, line height, sub height).
     With caps, the block is measured from the top of the capitals (no space is kept for accents or ascenders).
-    A size whose wrap leaves a stub line is skipped when a smaller size avoids it."""
+    A size whose wrap leaves a stub line is skipped when a smaller size avoids it. A headline the writer broke with
+    "|" keeps his lines and gets no other (IRVINS concept ads, 22-11-2026: "THREE BAGS. | FREE DELIVERY." came out as
+    "THREE BAGS. / FREE / DELIVERY." in a narrow column, because the larger size won)."""
     for avoid_stub in (True, False):
         fit = _layout(draw, path, sub_path, headline, subline, box_w, box_h, wght, sub_wght, sub_ratio, gap, leading, caps, avoid_stub)
         if fit:
@@ -195,10 +198,13 @@ def layout(draw, path, sub_path, headline, subline, box_w, box_h, wght, sub_wght
 
 
 def _layout(draw, path, sub_path, headline, subline, box_w, box_h, wght, sub_wght, sub_ratio, gap, leading, caps, avoid_stub):
+    words = headline.split()
+    # The writer who broke the lines with "|" chose them: the wrap adds no break of its own, and the size comes down instead.
+    most = min(MAX_LINES, words.count("|") + 1) if "|" in words else MAX_LINES
     for size in range(int(box_h), 7, -1):
         hf = load_font(path, size, wght)
-        hl = wrap(draw, headline.split(), hf, box_w)
-        if not hl or len(hl) > MAX_LINES or (avoid_stub and stub(hl)):
+        hl = wrap(draw, words, hf, box_w)
+        if not hl or len(hl) > most or (avoid_stub and stub(hl)):
             continue
         lh = int(size * leading)
         first = cap_height(hf, hl[0]) if caps else lh
