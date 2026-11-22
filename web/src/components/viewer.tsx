@@ -285,8 +285,8 @@ export function ZoomMark() {
   );
 }
 
-/** One picture of a page that opens large by itself. What the page says about it, in a line or two, goes at its foot as children. */
-export function Zoom({ url, alt, className, children }: { url: string; alt: string; className: string; children?: ReactNode }) {
+/** One picture of a page that opens large by itself. The whole screen is the picture; `note` is the one thing the page says about it there, cut at two lines. */
+export function Zoom({ url, alt, className, note }: { url: string; alt: string; className: string; note?: string }) {
   const [large, setLarge] = useState(false);
   return (
     <>
@@ -296,7 +296,11 @@ export function Zoom({ url, alt, className, children }: { url: string; alt: stri
       </button>
       {large ? (
         <Viewer shots={[{ url, alt }]} at={0} onAt={() => undefined} onClose={() => setLarge(false)}>
-          {children ? <div className={NOTE}>{children}</div> : null}
+          {note ? (
+            <p className={NOTE} title={note}>
+              {note}
+            </p>
+          ) : null}
         </Viewer>
       ) : null}
     </>

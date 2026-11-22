@@ -239,14 +239,7 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
   const items = [...(draft.checks?.items ?? []), ...(draft.words?.checks?.items ?? [])];
   return (
     <figure>
-      <Zoom url={url} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
-        <p className="text-body font-medium">{label}</p>
-        {items.map((item, index) => (
-          <p key={`${item.code}-${item.tool ?? "seen"}-${index}`} className="text-caption text-muted-foreground">
-            {item.code}: {item.note}
-          </p>
-        ))}
-      </Zoom>
+      <Zoom url={url} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" note={[label, ...items.map((item) => `${item.code}: ${item.note}`)].join(" · ")} />
       <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-caption">
         <span className="font-medium">{label}</span>
         {picked ? <Badge color="green">Your pick</Badge> : null}

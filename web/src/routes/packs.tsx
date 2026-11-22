@@ -68,10 +68,7 @@ function PackCard({ pack }: { pack: PackSummary }) {
             <ul className="grid gap-4 sm:grid-cols-3">
               {current.ads.map((ad) => (
                 <li key={ad.adName}>
-                  <Zoom url={ad.viewUrl} alt={`The ad ${ad.adName}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
-                    <p className="break-all font-mono text-caption">{ad.adName}</p>
-                    <p className="text-caption text-muted-foreground">{ad.why}</p>
-                  </Zoom>
+                  <Zoom url={ad.viewUrl} alt={`The ad ${ad.adName}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
                   <p className="mt-2 break-all font-mono text-caption">{ad.adName}</p>
                   <p className="mt-1 text-caption text-muted-foreground">{ad.why}</p>
                 </li>

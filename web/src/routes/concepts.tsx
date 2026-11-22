@@ -201,10 +201,7 @@ function Concept({ entry, picked, chosen, full, onToggle }: { entry: Entry; pick
           <ul className="grid content-start gap-3">
             {roughs.map((rough, index) => (
               <li key={rough.imageId}>
-                <Zoom url={rough.viewUrl} alt={`${idea.title}, rough ${index + 1}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
-                  <p className="text-body font-medium">{idea.title}</p>
-                  <p className="text-caption text-muted-foreground">Rough {index + 1}</p>
-                </Zoom>
+                <Zoom url={rough.viewUrl} alt={`${idea.title}, rough ${index + 1}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" note={`${idea.title}, rough ${index + 1}`} />
               </li>
             ))}
           </ul>

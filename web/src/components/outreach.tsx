@@ -74,11 +74,7 @@ export function BrandLine({ prospect }: { prospect: ProspectRow }) {
 export function AdPicture({ ad, brand }: { ad: OutreachAdView; brand: string }) {
   return (
     <figure className="w-full max-w-64 shrink-0">
-      <Zoom url={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className={`aspect-[4/5] w-full rounded-lg border border-border bg-muted ${ad.from === "owner" ? "object-contain" : "object-cover"}`}>
-        <p className="text-body font-medium">Ad {ad.n}</p>
-        {ad.why ? <p className="text-body text-muted-foreground">{ad.why}</p> : null}
-        <CheckNote warning={ad.warning} />
-      </Zoom>
+      <Zoom url={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className={`aspect-[4/5] w-full rounded-lg border border-border bg-muted ${ad.from === "owner" ? "object-contain" : "object-cover"}`} {...(ad.warning ? { note: `The checks found: ${ad.warning}` } : {})} />
       <figcaption className="mt-1.5 text-caption text-muted-foreground">{ad.why}</figcaption>
     </figure>
   );
