@@ -69,7 +69,7 @@ A private ad studio. An AI agent takes one brand and one product to three finish
 ## 8. Ask the owner first
 
 - Any spend on Parallel or fal at US$1 or more, and any AWS resource that costs money outside the plan.
-- Inviting, disabling or removing a person. Approving an MCP client is the owner's own click.
+- Inviting, disabling or removing a person. Approving an MCP client is the owner's own click. One exception (owner, 22-11-2026): a temporary sign-in for a check or a test of the live studio needs no yes. It writes only on made-up test data, and you remove it and its test data right after and confirm the sign-in list is as it was.
 - Deleting data, replacing a key.
 - Anything sent to another person.
 
