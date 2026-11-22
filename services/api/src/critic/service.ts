@@ -271,7 +271,7 @@ export class CriticService {
       saved: ranks.map((rank) => rank.ideaId),
       state: after.state,
       ...(missing.length > 0 ? { stillMissing: missing } : {}),
-      nextStep: "Report that the drafts are ranked. Do not tell the main agent or the owner your order: the owner picks first.",
+      nextStep: "Report that the drafts are ranked, and whether any draft of each idea meets the bar. Do not tell the main agent or the owner your order: the owner picks first. The state checked means that every draft has its checks and its rank; it is no verdict on the drafts.",
     };
   }
 }
