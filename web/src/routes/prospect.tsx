@@ -102,13 +102,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
                       {ad.verdict ? <Badge color={ad.verdict === "yes" ? "green" : "gray"}>{ad.verdict === "no" ? "You said no" : ad.picked ? "Your pick, full size" : "You said yes"}</Badge> : null}
                     </p>
                     {!ad.verdict && ad.n === newest?.n && !out ? <AdVerdict prospect={prospect} ad={ad} done={done} /> : null}
-                    {ad.picked && ad.verdict === "yes" && ad.n === newest?.n && !out && !sends.some((send) => send.at >= ad.at) ? (
-                      <div>
-                        <Button type="button" variant="secondary" className={TAP} loading={busy === "ad"} onClick={() => write({ action: "ad", body: { ad: ad.n, yes: false } })}>
-                          Not this after all
-                        </Button>
-                      </div>
-                    ) : null}
+                    {ad.picked && ad.verdict === "yes" && ad.n === newest?.n && !out && !sends.some((send) => send.at >= ad.at) ? <AdVerdict prospect={prospect} ad={ad} done={done} takeBack /> : null}
                     <a href={ad.downloadUrl} className="text-body underline underline-offset-4">
                       Save the picture
                     </a>

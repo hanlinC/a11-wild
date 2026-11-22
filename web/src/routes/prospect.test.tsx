@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { adView, messages, prospectPage, prospectRow } from "@/outreach-fixtures";
+import { adView, candidates, messages, prospectPage, prospectRow } from "@/outreach-fixtures";
 import { renderSignedIn, stubApi } from "@/test-helpers";
 import { Prospect } from "./prospect";
 
@@ -152,3 +152,101 @@ describe("Prospect page", () => {
     await waitFor(() => expect(calls).toContain("POST /api/outreach/prospects/00001/remove"));
   });
 });
+
+describe("the owner's pick on the prospect page", () => {
+  const waiting = (overrides = {}) => prospectPage({ prospect: prospectRow({ stage: "pick_waits" }), ads: [], candidates: candidates(overrides) });
+
+  it("shows every draft under its headline before anything else, and a failed one with its reason and no button", async () => {
+    stubApi({ [GET]: () => ({ body: waiting() }) });
+    open();
+    expect(await screen.findByRole("heading", { name: /Pick the ad to send/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "One fork tap and it crumbles." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your visiting gift, baked fresh." })).toBeInTheDocument();
+    expect(screen.getByText("Twelve tarts in a box.")).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /^Draft \d of/ })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    expect(screen.getByText("Cannot be sent: The box is too tall.")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is sent by a pick/)).toBeInTheDocument();
+    // A picture opens large in a new tab: a click on it picks nothing.
+    expect(screen.getAllByRole("link", { name: /^Draft \d of/ })[0]).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("button", { name: "Mark as sent" })).not.toBeInTheDocument();
+  });
+
+  it("saves the pick of one draft, and then says that the agent makes it full size", async () => {
+    const sent: unknown[] = [];
+    stubApi({
+      [GET]: () => ({ body: waiting() }),
+      "POST /api/outreach/prospects/00001/pick": (body) => (
+        sent.push(body),
+        { body: prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates({ waits: false, agentOwes: true, picked: { ideaId: "idea-2", imageId: "idea-2-draft-1" } }) }) }
+      ),
+    });
+    open();
+    const user = userEvent.setup();
+    await user.click((await screen.findAllByRole("button", { name: "Pick this one" }))[2]!);
+    expect(sent).toEqual([{ imageId: "idea-2-draft-1" }]);
+    expect(await screen.findByText("Your pick")).toBeInTheDocument();
+    expect(screen.getByText(/Waits for the agent: it makes the full-size version of your pick/)).toBeInTheDocument();
+    // He can still pick another, and no longer says none: he has picked.
+    expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "None of these" })).not.toBeInTheDocument();
+  });
+
+  it("asks for one line with none of these, and with other words for one draft", async () => {
+    const sent: unknown[] = [];
+    stubApi({
+      [GET]: () => ({ body: waiting() }),
+      "POST /api/outreach/prospects/00001/none": (body) => (sent.push(body), { body: prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [], candidates: candidates({ waits: false }) }) }),
+      "POST /api/outreach/prospects/00001/words": (body) => (
+        sent.push(body),
+        { body: prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates({ waits: false, agentOwes: true, choosing: "agent", wordsAsked: { imageId: "idea-1-draft-2", ownerSaid: "Say the price." } }) }) }
+      ),
+    });
+    const user = userEvent.setup();
+    const first = open();
+    await user.click(await screen.findByRole("button", { name: "None of these" }));
+    await user.type(screen.getByLabelText(/What is missing, in one line/), "The headlines say nothing.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent).toEqual([{ ownerSaid: "The headlines say nothing." }]));
+    first.unmount();
+    open();
+    await user.click((await screen.findAllByRole("button", { name: "Other words" }))[1]!);
+    await user.type(screen.getByLabelText(/Draft 2 with other words/), "Say the price.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/it sets the other words you asked for \("Say the price\."\)/)).toBeInTheDocument();
+    expect(sent[1]).toEqual({ imageId: "idea-1-draft-2", ownerSaid: "Say the price." });
+    expect(screen.queryByRole("button", { name: "Pick this one" })).not.toBeInTheDocument();
+  });
+
+  it("offers no other words when the pictures carry none, and no choice for a brand that takes no ad", async () => {
+    stubApi({ [GET]: () => ({ body: waiting({ words: false }) }) });
+    const first = open();
+    expect(await screen.findAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Other words" })).not.toBeInTheDocument();
+    first.unmount();
+    stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "opted_out" }), ads: [], candidates: candidates({ choosing: "closed", waits: false }) }) }) });
+    open();
+    expect(await screen.findByText("This brand takes no ad now, so nothing is picked.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pick this one" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "None of these" })).not.toBeInTheDocument();
+  });
+
+  it("shows the full-size ad of his pick with his yes, and takes it back with one line", async () => {
+    const sent: unknown[] = [];
+    const final = adView({ verdict: "yes", picked: true });
+    stubApi({
+      [GET]: () => ({ body: prospectPage({ ads: [final], candidates: candidates({ waits: false, picked: { ideaId: "idea-1", imageId: "idea-1-draft-1" } }), message: { step: 0, messages: messages() } }) }),
+      "POST /api/outreach/prospects/00001/ad": (body) => (sent.push(body), { body: waiting() }),
+    });
+    open();
+    const user = userEvent.setup();
+    expect(await screen.findByText("Your pick, full size")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Not this after all" }));
+    await user.type(screen.getByLabelText(/What is wrong with the full-size version/), "The pack went soft.");
+    await user.click(screen.getByRole("button", { name: "Save the no" }));
+    await waitFor(() => expect(sent).toEqual([{ ad: 1, yes: false, ownerSaid: "The pack went soft." }]));
+    expect(await screen.findByRole("heading", { name: /Pick the ad to send/ })).toBeInTheDocument();
+  });
+});
+

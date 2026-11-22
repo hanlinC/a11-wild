@@ -1,4 +1,4 @@
-import type { OutreachAdView, OutreachMessage, ProspectPage, ProspectRow, TodayLine, TodayPage } from "@a11-wild/shared";
+import type { OutreachAdView, OutreachCandidate, OutreachCandidates, OutreachMessage, ProspectPage, ProspectRow, TodayLine, TodayPage } from "@a11-wild/shared";
 
 /** Made-up outreach data for the page tests. No real brand and no real contact. */
 export const prospectRow = (overrides: Partial<ProspectRow> = {}): ProspectRow => ({ id: "00001", n: 1, brand: "Koi Tea", sector: "F&B", liveAds: 24, tier: "20+", stage: "ready", channel: "whatsapp", adWaits: false, ...overrides });
@@ -47,3 +47,29 @@ export const prospectPage = (overrides: Partial<ProspectPage> = {}): ProspectPag
   day: "2026-11-23",
   ...overrides,
 });
+
+const draftOf = (ideaId: string, number: number, words: { headline: string; subline: string }, overrides: Partial<OutreachCandidate> = {}): OutreachCandidate => ({
+  ideaId,
+  title: `Idea ${ideaId}`,
+  ...words,
+  number,
+  imageId: `${ideaId}-draft-${number}`,
+  viewUrl: `https://pictures.example/${ideaId}-${number}.jpg`,
+  ...overrides,
+});
+
+/** Two ideas with two drafts each; the second draft of the second idea failed a check. */
+export const candidates = (overrides: Partial<OutreachCandidates> = {}): OutreachCandidates => {
+  const crumbles = { headline: "One fork tap and it crumbles.", subline: "Baked this morning in Katong." };
+  const gift = { headline: "Your visiting gift, baked fresh.", subline: "Twelve tarts in a box." };
+  return {
+    batchId: "batch-1",
+    words: true,
+    waits: true,
+    agentOwes: false,
+    choosing: "open",
+    drafts: [draftOf("idea-1", 1, crumbles), draftOf("idea-1", 2, crumbles), draftOf("idea-2", 1, gift), draftOf("idea-2", 2, gift, { blocked: "The box is too tall." })],
+    ...overrides,
+  };
+};
+
