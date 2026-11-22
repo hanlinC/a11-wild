@@ -18,7 +18,8 @@ export function checkTemplate(template: OutreachTemplate, what: string): Outreac
   ] as const) {
     if (text === "") throw new Refusal(`The ${name} of ${what} is empty.`);
     if (text.length > max) throw new Refusal(`The ${name} of ${what} is longer than ${max} characters.`);
-    const unknown = text.replace(/\{Brand\}/g, "").match(/[{}[\]]/);
+    // The whole unknown placeholder is named when there is one, so the owner sees which word to change.
+    const unknown = text.replace(/\{Brand\}/g, "").match(/\{[^{}\n]*\}|\[[^[\]\n]*\]|[{}[\]]/);
     if (unknown) throw new Refusal(`The ${name} of ${what} holds "${unknown[0]}", which is not the placeholder ${BRAND}. Take it out, or write ${BRAND}.`);
   }
   if (titles.some((title) => /\n/.test(title))) throw new Refusal(`A title of ${what} is one line.`);

@@ -49,8 +49,9 @@ describe("a message", () => {
 
   it("refuses a template with a placeholder it does not know, an empty text and a title of two lines", () => {
     expect(checkTemplate(template, "the first message")).toEqual(template);
-    expect(() => checkTemplate({ ...template, body: "Hi {Name}" }, "the first message")).toThrow(/holds "\{", which is not the placeholder \{Brand\}/);
-    expect(() => checkTemplate({ ...template, body: "Hi\n[ad image]" }, "the first message")).toThrow(/holds "\["/);
+    expect(() => checkTemplate({ ...template, body: "Hi {Name}" }, "the first message")).toThrow(/holds "\{Name\}", which is not the placeholder \{Brand\}/);
+    expect(() => checkTemplate({ ...template, body: "Hi\n[ad image]" }, "the first message")).toThrow(/holds "\[ad image\]"/);
+    expect(() => checkTemplate({ ...template, body: "Hi {Brand" }, "the first message")).toThrow(/holds "\{"/);
     expect(() => checkTemplate({ ...template, body: "  " }, "follow-up 1")).toThrow(/text of follow-up 1 is empty/);
     expect(() => checkTemplate({ ...template, titles: ["a\nb", "c"] }, "follow-up 1")).toThrow(/one line/);
   });

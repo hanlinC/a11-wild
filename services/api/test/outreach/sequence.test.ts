@@ -267,6 +267,6 @@ describe("a reply and the owner's choices", () => {
   it("loads the message text once, and lets the owner change it after", async () => {
     expect(await sequence.saveTemplates([{ titles: ["x", "y"], body: "z" }, STEPS[1], STEPS[2]], { onlyFirst: true })).toBeUndefined();
     expect((await sequence.templates())!.steps[0].body).toBe("Hi, I made this ad for {Brand}.");
-    await expect(sequence.saveTemplates([{ titles: ["x", "y"], body: "Hi {Name}" }, STEPS[1], STEPS[2]])).rejects.toThrow(/first message holds "\{"/);
+    await expect(sequence.saveTemplates([{ titles: ["x", "y"], body: "Hi {Name}" }, STEPS[1], STEPS[2]])).rejects.toThrow(/first message holds "\{Name\}"/);
   });
 });
