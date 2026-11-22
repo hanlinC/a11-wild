@@ -155,8 +155,15 @@ export class OutreachPicks {
     const shown = candidatesWait(file);
     if (shown?.batchId !== view.batchId) throw new Refusal("These drafts do not wait for your pick now. To drop an ad that is made, say \"Not this after all\" on it first.");
     // One no for one showing of the drafts: two clicks at one moment do not use up both tries.
-    if (!(await this.deps.store.once(file.profile.id, `none-${shown.id}`))) return;
-    await this.deps.store.addEvent(file.profile.id, { type: "none", batchId: view.batchId, ownerSaid: ownerSaid.trim() }, "owner");
+    const mark = `none-${shown.id}`;
+    if (!(await this.deps.store.once(file.profile.id, mark))) return;
+    try {
+      await this.deps.store.addEvent(file.profile.id, { type: "none", batchId: view.batchId, ownerSaid: ownerSaid.trim() }, "owner");
+    } catch (error) {
+      // His no was not saved: the mark goes back, so that his next click saves it.
+      await this.deps.store.giveBack(file.profile.id, mark).catch(() => undefined);
+      throw error;
+    }
   }
 
   /** The owner wants one draft with other words. The agent sets them and shows the drafts again. */

@@ -600,6 +600,30 @@ describe("the owner's pick of the ad", () => {
     expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ id: "00001", owes: "final", imageId: second.imageId }]);
   });
 
+  it("saves his none on the next click when the first one could not be saved", async () => {
+    await shown();
+    const file = async () => (await outreach().store.all())[0]!;
+    const save = vi.spyOn(outreach().store, "addEvent").mockRejectedValueOnce(new Error("The table did not answer."));
+    expect((await on("00001", "none", { ownerSaid: "The headline says nothing." })).status).toBe(500);
+    save.mockRestore();
+    expect((await file()).events.filter((event) => event.type === "none")).toHaveLength(0);
+    expect(await json(await on("00001", "none", { ownerSaid: "The headline says nothing." }))).toMatchObject({ prospect: { stage: "new" } });
+    expect((await file()).events.filter((event) => event.type === "none")).toMatchObject([{ ownerSaid: "The headline says nothing." }]);
+  });
+
+  it("saves his none after a minute when the call that took it was cut off before it saved", async () => {
+    await shown();
+    const file = async () => (await outreach().store.all())[0]!;
+    const drafts = (await file()).events.find((event) => event.type === "candidates")!;
+    // A call that was stopped after it took the mark and before it saved his words.
+    expect(await outreach().store.once("00001", `none-${drafts.id}`)).toBe(true);
+    await on("00001", "none", { ownerSaid: "The headline says nothing." });
+    expect((await file()).events.filter((event) => event.type === "none")).toHaveLength(0);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 61_000);
+    expect(await json(await on("00001", "none", { ownerSaid: "The headline says nothing." }))).toMatchObject({ prospect: { stage: "new" } });
+    expect((await file()).events.filter((event) => event.type === "none")).toHaveLength(1);
+  });
+
   it("asks nothing for a brand that opted out", async () => {
     await shown();
     await on("00001", "optout");

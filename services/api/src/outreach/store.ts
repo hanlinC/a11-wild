@@ -20,7 +20,7 @@ const sendKey = (id: string, step: OutreachStep) => `P#${id}#S#${step}`;
 const uploadKey = (id: string, uploadId: string) => `P#${id}#U#${uploadId}`;
 const onceKey = (id: string, mark: string) => `P#${id}#O#${mark}`;
 /** Longer than any one call can run. */
-const UPLOAD_HOLD_MS = 60_000;
+const HOLD_MS = 60_000;
 
 /** The id of a list row: its number, padded so that the table's order is the list's order. */
 export const prospectId = (n: number): string => String(n).padStart(5, "0");
@@ -89,18 +89,22 @@ export class OutreachStore {
   }
 
   /**
-   * Takes an owner's upload for one call to work on. False when another call holds it, so one upload is one ad.
-   * A call that was cut off (the server stops one after 29 seconds) cannot give its upload back, so a hold older than a minute is taken over.
+   * Takes a hold for one call to work under. False when another call has it.
+   * A call that was cut off (the server stops one after 29 seconds) cannot give its hold back, so a hold older than a minute is taken over.
    */
-  async claimUpload(id: string, uploadId: string): Promise<boolean> {
-    const sk = uploadKey(id, uploadId);
+  private async hold(sk: string): Promise<boolean> {
     const take = () => this.table.put({ pk: PK, sk, at: this.now().toISOString() }, { ifNotExists: true });
     if (await take()) return true;
     const held = await this.table.get<Item & { at: string }>(PK, sk);
     if (!held) return take();
-    if (this.now().getTime() - Date.parse(held.at) < UPLOAD_HOLD_MS) return false;
+    if (this.now().getTime() - Date.parse(held.at) < HOLD_MS) return false;
     // Only one call removes the old hold: the others find its time changed or the hold gone.
     return (await this.table.delete(PK, sk, { ifEquals: { attribute: "at", value: held.at } })) && take();
+  }
+
+  /** Takes an owner's upload for one call to work on. False when another call holds it, so one upload is one ad. */
+  async claimUpload(id: string, uploadId: string): Promise<boolean> {
+    return this.hold(uploadKey(id, uploadId));
   }
 
   /** Gives an upload back when the call that took it could not attach it, so it can be confirmed again. */
@@ -108,9 +112,17 @@ export class OutreachStore {
     await this.table.delete(PK, uploadKey(id, uploadId));
   }
 
-  /** Takes a one-time mark for a prospect. False when it is taken, so an answer that arrives twice at one moment is saved once. */
+  /**
+   * Takes a one-time mark for a prospect. False when it is taken, so an answer that arrives twice at one moment is saved once.
+   * Ask only while the answer is not saved yet: a mark whose call was cut off before it saved is taken over after a minute.
+   */
   async once(id: string, mark: string): Promise<boolean> {
-    return this.table.put({ pk: PK, sk: onceKey(id, mark), at: this.now().toISOString() }, { ifNotExists: true });
+    return this.hold(onceKey(id, mark));
+  }
+
+  /** Gives a mark back when the call that took it could not save its answer, so the answer can be given again at once. */
+  async giveBack(id: string, mark: string): Promise<void> {
+    await this.table.delete(PK, onceKey(id, mark));
   }
 
   /** Saves an ad under one exact number. False when that number is taken: another attach came first. */
