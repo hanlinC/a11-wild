@@ -309,17 +309,17 @@ describe("the message text and the test prospect", () => {
   });
 });
 
-describe("the owner's own picture", () => {
-  /** Asks for an address, puts `body` where it points, as the owner's browser would, and lets the studio read it. */
-  async function upload(id: string, body: Uint8Array, type = "image/png") {
-    const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type, bytes: body.length }));
-    const key = new URL(started.putUrl).pathname.slice(1);
-    await studio.pictures.put(key, body, type);
-    const done = await post(`/api/outreach/prospects/${id}/picture/${started.uploadId}/done`);
-    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
-    return { started, key, done };
-  }
+/** Asks for an address, puts `body` where it points, as the owner's browser would, and lets the studio read it. */
+async function upload(id: string, body: Uint8Array, type = "image/png") {
+  const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type, bytes: body.length }));
+  const key = new URL(started.putUrl).pathname.slice(1);
+  await studio.pictures.put(key, body, type);
+  const done = await post(`/api/outreach/prospects/${id}/picture/${started.uploadId}/done`);
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+  return { started, key, done };
+}
 
+describe("the owner's own picture", () => {
   it("attaches his picture as the newest ad with his yes, so the first message is ready with no batch", async () => {
     const [id] = await loadProspects(studio);
     await outreach().sequence.saveTemplates(TEMPLATES as never);
@@ -573,6 +573,31 @@ describe("the owner's pick of the ad", () => {
     const second = await json(await on("00001", "none", { ownerSaid: "Still nothing." }));
     expect(second).toMatchObject({ prospect: { stage: "parked" }, candidates: { choosing: "closed" } });
     expect((await on("00001", "pick", { imageId: second.candidates.drafts[0].imageId })).status).toBe(400);
+  });
+
+  it("is ready with his own picture when he uploads it while the drafts wait, and asks for no pick any more", async () => {
+    await shown();
+    const after = await json((await upload("00001", PNG)).done);
+    expect(after).toMatchObject({ prospect: { stage: "ready" }, ads: [{ n: 1, from: "owner", verdict: "yes" }], candidates: { choosing: "open", waits: false, agentOwes: false } });
+    const today = await json(await get("/api/outreach/today"));
+    expect(today.picks).toEqual([]);
+    expect(today.firsts).toMatchObject([{ prospect: { id: "00001" } }]);
+    expect(await attention()).not.toContainEqual(expect.objectContaining({ kind: "ad_picks" }));
+  });
+
+  it("owes the agent nothing once he uploads his own picture after his pick, and owes it again when he picks after that", async () => {
+    await shown();
+    const { candidates } = await page();
+    const [first, second] = candidates.drafts.filter((draft: { blocked?: string }) => !draft.blocked);
+    await on("00001", "pick", { imageId: first.imageId });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    const uploaded = await json((await upload("00001", PNG)).done);
+    expect(uploaded).toMatchObject({ prospect: { stage: "ready" }, candidates: { agentOwes: false } });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toEqual([]);
+    const again = await json(await on("00001", "pick", { imageId: second.imageId }));
+    // His picture stays ready to send while the agent makes the final of the draft he picked after it.
+    expect(again).toMatchObject({ prospect: { stage: "ready" }, candidates: { agentOwes: true, picked: { imageId: second.imageId } } });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ id: "00001", owes: "final", imageId: second.imageId }]);
   });
 
   it("asks nothing for a brand that opted out", async () => {

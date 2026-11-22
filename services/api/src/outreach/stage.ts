@@ -43,6 +43,9 @@ export const refusedDrafts = (file: ProspectFile, batchId: string): Set<string> 
     }),
   );
 
+/** True when the owner put his own picture on the page at or after a moment, and his yes on it stands. It answers the drafts in place of a pick. */
+const ownPictureSince = (file: ProspectFile, at: string): boolean => file.ads.some((ad) => ad.from === "owner" && ad.at >= at && verdictOf(file, ad)?.type === "ad_yes");
+
 /**
  * The drafts that wait for the owner's pick: the newest ones shown, with no answer of his after them.
  * A pick whose final he then refused is no answer any more: he chooses among the drafts again.
@@ -51,6 +54,7 @@ export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | unde
   const shown = last(file.events, "candidates");
   if (!shown) return undefined;
   const answer = choices(file, shown.batchId).filter((event) => event.at >= shown.at).at(-1);
+  if (ownPictureSince(file, (answer ?? shown).at)) return undefined;
   if (!answer) return shown;
   if (answer.type !== "pick") return undefined;
   const ad = adOfPick(file, answer);
@@ -64,6 +68,8 @@ export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | unde
 export function owedByAgent(file: ProspectFile): EventOf<"pick"> | EventOf<"words"> | undefined {
   const choice = choices(file).at(-1);
   if (!choice || choice.type === "none") return undefined;
+  // His own picture after his choice wins: the agent makes nothing more for that choice.
+  if (ownPictureSince(file, choice.at)) return undefined;
   if (choice.type === "pick") return adOfPick(file, choice) ? undefined : choice;
   return file.events.some((event) => event.type === "candidates" && event.batchId === choice.batchId && event.at >= choice.at) ? undefined : choice;
 }
@@ -128,8 +134,10 @@ export function stageOf(file: ProspectFile, optOuts: ReadonlySet<string>): Outre
   // The studio makes no ad for a service. The owner's own picture is one, so the brand then goes on like any other.
   if (last(file.events, "kind")?.kind === "service" && ad?.from !== "owner") return "needs_service_ad";
   if (!hasRoute(file.profile)) return "no_route";
-  if (owedByAgent(file)) return "pick_made";
   const verdict = ad && verdictOf(file, ad);
+  // His own picture is ready to send whatever the drafts wait for.
+  if (ad?.from === "owner" && verdict?.type === "ad_yes") return "ready";
+  if (owedByAgent(file)) return "pick_made";
   if (ad && !verdict) return "ad_waits";
   if (candidatesWait(file)) return "pick_waits";
   if (verdict?.type === "ad_yes") return "ready";
