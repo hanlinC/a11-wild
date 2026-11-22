@@ -7,6 +7,14 @@ import { showUsd, toMicro, toUsd } from "./money.js";
 /** The owner's caps. A batch cannot spend more than its cap, and all batches together cannot pass the month's. */
 export const CAPS = { monthUsd: 25, batchUsd: 5 } as const;
 
+/**
+ * The owner's cap for the outreach campaign: US$75, less the US$1.37 that the paid tests of the studio had cost
+ * when the campaign began (22-11-2026). It is counted apart from the month. One outreach batch makes one ad, so its limit is small.
+ */
+export const CAMPAIGN_CAPS = { campaignUsd: 73.6, outreachBatchUsd: 1.5 } as const;
+
+type Caps = { monthUsd: number; batchUsd: number; campaignUsd?: number; outreachBatchUsd?: number };
+
 /** A cap would be passed. Nothing was sent and nothing was written. */
 export class BudgetError extends Refusal {}
 
@@ -33,6 +41,8 @@ export interface Reservation {
   sk: string;
   batchId?: string;
   micro: number;
+  /** The call belongs to the outreach campaign: its amount is in the campaign's total, not in the month's. */
+  campaign?: true;
 }
 
 interface LineItem extends Item {
@@ -43,24 +53,32 @@ interface LineItem extends Item {
   micro: number;
   status: SpendLine["status"];
   at: string;
+  campaign?: true;
 }
 
 const monthKey = (month: string) => `SPEND#${month}`;
 const batchKey = (batchId: string) => `BATCH#${batchId}`;
+const CAMPAIGN = "SPEND#CAMPAIGN";
 const TOTAL = "TOTAL";
 const BATCH_TOTAL = "SPEND";
 
 export class SpendLedger {
   private readonly monthCap: number;
   private readonly batchCap: number;
+  private readonly campaignCap: number;
+  private readonly outreachBatchCap: number;
 
   constructor(
     private readonly table: Table,
     private readonly now: () => Date,
-    caps: { monthUsd: number; batchUsd: number } = CAPS,
+    caps: Caps = CAPS,
+    /** What a batch was made for. The ledger asks at each paid call, so no caller can count an outreach call against the month. */
+    private readonly purposeOf: (batchId: string) => Promise<"outreach" | undefined> = async () => undefined,
   ) {
     this.monthCap = toMicro(caps.monthUsd);
     this.batchCap = toMicro(caps.batchUsd);
+    this.campaignCap = toMicro(caps.campaignUsd ?? CAMPAIGN_CAPS.campaignUsd);
+    this.outreachBatchCap = toMicro(caps.outreachBatchUsd ?? CAMPAIGN_CAPS.outreachBatchUsd);
   }
 
   private month(): string {
@@ -81,14 +99,16 @@ export class SpendLedger {
     const micro = toMicro(call.usd);
     if (!(micro > 0)) throw new BudgetError("A paid call needs an estimate above zero.");
 
-    if (!(await this.table.add(monthKey(month), TOTAL, "micro", micro, { ceiling: this.monthCap }))) {
-      throw new BudgetError(await this.refusal("month", await this.used(monthKey(month), TOTAL), this.monthCap, micro));
+    const campaign = call.batchId !== undefined && (await this.purposeOf(call.batchId)) === "outreach";
+    const [totalPk, totalCap, batchCap] = campaign ? [CAMPAIGN, this.campaignCap, this.outreachBatchCap] : [monthKey(month), this.monthCap, this.batchCap];
+    if (!(await this.table.add(totalPk, TOTAL, "micro", micro, { ceiling: totalCap }))) {
+      throw new BudgetError(await this.refusal(campaign ? "campaign" : "month", await this.used(totalPk, TOTAL), totalCap, micro));
     }
     if (call.batchId) {
       const pk = batchKey(call.batchId);
-      if (!(await this.table.add(pk, BATCH_TOTAL, "micro", micro, { ceiling: this.batchCap }))) {
-        await this.table.add(monthKey(month), TOTAL, "micro", -micro);
-        throw new BudgetError(await this.refusal("batch", await this.used(pk, BATCH_TOTAL), this.batchCap, micro));
+      if (!(await this.table.add(pk, BATCH_TOTAL, "micro", micro, { ceiling: batchCap }))) {
+        await this.table.add(totalPk, TOTAL, "micro", -micro);
+        throw new BudgetError(await this.refusal("batch", await this.used(pk, BATCH_TOTAL), batchCap, micro));
       }
     }
 
@@ -104,19 +124,20 @@ export class SpendLedger {
       micro,
       status: "reserved",
       at,
+      ...(campaign ? { campaign: true as const } : {}),
     };
     await this.table.put(line);
-    return { month, sk, micro, ...(call.batchId ? { batchId: call.batchId } : {}) };
+    return { month, sk, micro, ...(call.batchId ? { batchId: call.batchId } : {}), ...(campaign ? { campaign: true as const } : {}) };
   }
 
-  private refusal(cap: "month" | "batch", used: number, limit: number, asked: number): string {
+  private refusal(cap: "month" | "batch" | "campaign", used: number, limit: number, asked: number): string {
     return `The ${cap}'s spend cap would be passed: ${showUsd(used)} used of ${showUsd(limit)}, and this call needs about ${showUsd(asked)}. Nothing was sent.`;
   }
 
   private async close(reservation: Reservation, status: "spent" | "released", micro: number): Promise<void> {
     const delta = micro - reservation.micro;
     if (delta !== 0) {
-      await this.table.add(monthKey(reservation.month), TOTAL, "micro", delta);
+      await this.table.add(reservation.campaign ? CAMPAIGN : monthKey(reservation.month), TOTAL, "micro", delta);
       if (reservation.batchId) await this.table.add(batchKey(reservation.batchId), BATCH_TOTAL, "micro", delta);
     }
     const line = await this.table.get<LineItem>(monthKey(reservation.month), reservation.sk);
@@ -173,6 +194,7 @@ export class SpendLedger {
           ...(item.batchId ? { batchId: item.batchId } : {}),
           usd: toUsd(item.micro),
           status: item.status,
+          ...(item.campaign ? { campaign: true as const } : {}),
         }),
       );
     return {
@@ -181,6 +203,7 @@ export class SpendLedger {
       monthCapUsd: toUsd(this.monthCap),
       batchCapUsd: toUsd(this.batchCap),
       ...(batchId ? { batchId, batchUsd: toUsd(await this.used(batchKey(batchId), BATCH_TOTAL)) } : {}),
+      campaign: { usd: toUsd(await this.used(CAMPAIGN, TOTAL)), capUsd: toUsd(this.campaignCap), batchCapUsd: toUsd(this.outreachBatchCap) },
       lines,
     };
   }

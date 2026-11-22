@@ -41,13 +41,22 @@ export function Spend() {
             <div className="h-full bg-foreground" style={{ width: `${Math.min(100, (spend.monthUsd / spend.monthCapUsd) * 100)}%` }} />
           </div>
 
+          <Section title="Outreach campaign">
+            <Card className="grid gap-6 sm:grid-cols-3">
+              <Figure label="Spent on outreach ads" value={usd(spend.campaign.usd)} />
+              <Figure label="Campaign cap" value={usd(spend.campaign.capUsd)} />
+              <Figure label="Cap for one outreach ad" value={usd(spend.campaign.batchCapUsd)} />
+            </Card>
+            <p className="mt-3 text-caption text-muted-foreground">Counted apart from the month: an outreach ad never spends from the monthly cap.</p>
+          </Section>
+
           {spend.lines.length === 0 ? (
             <Section title="This month">
               <Empty>Nothing spent this month.</Empty>
             </Section>
           ) : (
             byBatch(spend.lines).map(([batchId, lines]) => (
-              <Section key={batchId} title={batchId ? `Batch ${batchId}` : "Outside a batch"} count={lines.length}>
+              <Section key={batchId} title={batchId ? `${lines[0]?.campaign ? "Outreach batch" : "Batch"} ${batchId}` : "Outside a batch"} count={lines.length}>
                 <Card className="overflow-x-auto p-0">
                   <table className="w-full text-left text-caption">
                     <thead className="text-muted-foreground">

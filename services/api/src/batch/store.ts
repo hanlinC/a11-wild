@@ -19,17 +19,22 @@ export class BatchStore {
     private readonly now: () => Date,
   ) {}
 
-  async create(input: Pick<Batch, "kind" | "brandId" | "productId" | "format" | "createdBy"> & { test?: true; formatNote?: string; label?: string }): Promise<Batch> {
+  async create(input: Pick<Batch, "kind" | "brandId" | "productId" | "format" | "createdBy"> & { test?: true; purpose?: "outreach"; prospectId?: string; formatNote?: string; label?: string }): Promise<Batch> {
     const at = this.now().toISOString();
     const batch: Batch = { ...input, id: randomUUID(), state: "intake", createdAt: at, updatedAt: at };
     await this.table.put({ pk: PK, sk: batch.id, ...batch });
     return batch;
   }
 
-  async get(batchId: string): Promise<Batch> {
+  async find(batchId: string): Promise<Batch | undefined> {
     const item = await this.table.get<Item & Batch>(PK, batchId);
-    if (!item) throw new Refusal(`There is no batch ${batchId}. batch_list gives the batches.`);
-    return stored(item);
+    return item && stored(item);
+  }
+
+  async get(batchId: string): Promise<Batch> {
+    const batch = await this.find(batchId);
+    if (!batch) throw new Refusal(`There is no batch ${batchId}. batch_list gives the batches.`);
+    return batch;
   }
 
   /** Newest first. */

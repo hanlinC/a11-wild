@@ -36,6 +36,8 @@ export interface SpendLine {
   batchId?: string;
   usd: number;
   status: "reserved" | "spent" | "released";
+  /** The call belongs to the outreach campaign: it is in the campaign's total, not in the month's. */
+  campaign?: true;
 }
 
 export interface SpendSummary {
@@ -46,6 +48,8 @@ export interface SpendSummary {
   batchCapUsd: number;
   batchId?: string;
   batchUsd?: number;
+  /** The outreach campaign: counted apart from the month, against its own cap. */
+  campaign: { usd: number; capUsd: number; batchCapUsd: number };
   lines: SpendLine[];
 }
 
@@ -264,6 +268,10 @@ export interface Batch {
   kind: BatchKind;
   /** A batch made to try the studio, set at its start and never after. The picks and the approvals in it are the tester's: they teach the studio nothing, and the batch is never a deliverable. */
   test?: true;
+  /** A batch that makes one ad for a brand of the outreach list, set at its start and never after. The agent chooses in the owner's place in it, so it teaches the studio nothing; it is done with one final, and it makes no client pack. */
+  purpose?: "outreach";
+  /** The prospect an outreach batch makes its ad for. */
+  prospectId?: string;
   brandId: string;
   productId: string;
   /** `static_4x5` is the one picture the studio makes. Any other format gets a text spec. */

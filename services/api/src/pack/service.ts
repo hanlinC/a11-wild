@@ -52,6 +52,7 @@ export class PackService {
   private async content(batch: Batch, input: PackContent, before: PackVersion | undefined, version: number, versions: PackVersion[] = []): Promise<Omit<PackVersion, "at" | "by">> {
     const { batches, brands, facts, board, copy, meta } = this.deps;
     if (batch.test) throw new Refusal("This is a test batch. A test batch is never done, and nothing of it goes to a client.");
+    if (batch.purpose === "outreach") throw new Refusal("This is an outreach batch. Its one ad goes to the owner's outreach page (outreach_attach); it makes no client pack.");
     if (batch.state !== "done") throw new Refusal(`This batch is "${batch.state}". A pack holds the finals of a done batch: run batch_done first.`);
     const [finals, ideas, words, brand, product, all] = await Promise.all([board.finals(batch), batches.ideas(batch.id), copy.list(batch.id), brands.brand(batch.brandId), brands.product(batch.productId), batches.list()]);
     const known = await facts.list(product.id);

@@ -118,4 +118,12 @@ describe("the owner's pick of three concepts", () => {
     expect(saved.value).toMatchObject({ state: "judged", note: expect.stringMatching(/test batch.*not in the taste log/) });
     expect(await logged()).toEqual([]);
   });
+
+  it("teaches the studio nothing in an outreach batch: the pick is the agent's", async () => {
+    await start({ prospectId: "p-0001" });
+    await reviewed();
+    const saved = await pick();
+    expect(saved.value).toMatchObject({ state: "judged", note: expect.stringMatching(/outreach batch.*agent's.*not in the taste log/) });
+    expect(await logged()).toEqual([]);
+  });
 });

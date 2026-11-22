@@ -28,14 +28,21 @@ export class DoneGate {
     const { brands, facts, truth, board } = this.deps;
     const [finals, product, sheet] = await Promise.all([board.finals(batch), brands.product(batch.productId), truth.get(batch.productId, batch.truthVersion)]);
 
+    const outreach = batch.purpose === "outreach";
+    // An outreach batch makes one ad: the ideas with no pick are not owed one.
     const unpicked = finals.filter((entry) => !entry.pick?.imageId);
+    const chosen = finals.length - unpicked.length;
     const picks: DoneCondition = {
       name: "picks",
-      asks: "The owner has picked one draft for each idea.",
-      passed: finals.length > 0 && unpicked.length === 0,
+      asks: outreach ? "One draft is picked: an outreach batch makes one ad." : "The owner has picked one draft for each idea.",
+      passed: outreach ? chosen === 1 : finals.length > 0 && unpicked.length === 0,
       evidence:
         finals.length === 0
           ? "The batch has no idea yet."
+          : outreach
+            ? chosen === 1
+              ? finals.filter((entry) => entry.pick?.imageId).map((entry) => `${entry.ideaId}: picture ${entry.pick?.imageId}`).join("; ")
+              : `${chosen} drafts are picked. Pick one, and pass on the drafts of each other idea (pick_save with imageId null).`
           : unpicked.length > 0
             ? unpicked.map((entry) => (entry.pick ? `${entry.ideaId}: he passed on all its drafts, so it has no final` : `${entry.ideaId}: no pick yet`)).join("; ")
             : finals.map((entry) => `${entry.ideaId}: picture ${entry.pick?.imageId}`).join("; "),
@@ -107,7 +114,9 @@ export class DoneGate {
       nextStep: batch.test
         ? `This is a test batch, so it is never marked done and its ads go to no one. ${failed.length === 0 ? "Every condition holds" : `Not met: ${failed.map((condition) => condition.name).join(", ")}`}.`
         : done
-        ? "The batch is done. Give the owner the strangerTest list: he runs that test himself."
+        ? batch.purpose === "outreach"
+          ? "The batch is done. Attach its final to the prospect (outreach_attach): it then waits for the owner's yes on his outreach page."
+          : "The batch is done. Give the owner the strangerTest list: he runs that test himself."
         : failed.length > 0
           ? `The batch is not done. Not met: ${failed.map((condition) => condition.name).join(", ")}. Each one's evidence says what is missing.`
           : `The batch is not done: it is at "${batch.state}".`,

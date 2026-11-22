@@ -1,8 +1,14 @@
-import type { BatchKind, BatchState } from "@a11-wild/shared";
+import type { Batch, BatchKind, BatchState } from "@a11-wild/shared";
 import { Refusal } from "../mcp/registry.js";
 
 /** A kind with words stops for the owner's approval of them before any draft. */
 export const hasWords = (kind: BatchKind): boolean => kind !== "v1";
+
+/**
+ * In a test batch and in an outreach batch another person chooses in the owner's place.
+ * Those choices are not his taste: no pick, approval, lesson or note of such a batch reaches what the studio learns from.
+ */
+export const teachesNothing = (batch: Pick<Batch, "test" | "purpose">): boolean => batch.test === true || batch.purpose === "outreach";
 
 /** What must be done to reach each state: the words a refusal gives the agent. */
 const STEP: Record<BatchState, string> = {

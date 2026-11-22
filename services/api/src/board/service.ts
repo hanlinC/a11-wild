@@ -1,5 +1,5 @@
 import { type ApprovedCopy, type Batch, type BatchImage, type BatchState, type Board, type BoardDraft, type CheckItem, type Direction, FINAL_POINTS, type FinalPoints, type ImageChecks, type ImageKind, type Pick as OwnerPick, type Role } from "@a11-wild/shared";
-import { hasWords } from "../batch/state.js";
+import { hasWords, teachesNothing } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { failedPoints, type PointStore } from "../checks/points.js";
@@ -20,6 +20,7 @@ import type { TruthStore } from "../truth/store.js";
 export const PACK_CHECK = "pack_check";
 
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log and not in the calibration.";
+const OUTREACH_PICK = "This is an outreach batch: the pick is the agent's, saved for the batch only. It is not in the taste log and not in the calibration.";
 
 /** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
 // A finished batch still takes a newer choice: the owner may pick a draft of an idea he passed on.
@@ -344,8 +345,8 @@ export class BoardService implements FinalRule {
     const pick = await picks.save(batchId, { ideaId: input.ideaId, imageId: input.imageId, ...(draft ? { shownId: seenOf(draft).id } : {}), ownerSaid, by: user.email });
     // A newer choice in a finished batch names a draft with no final yet: the batch goes back to its finals.
     if (batch.state === "finished") await this.progress(batch);
-    // A pick in a test batch is the tester's, not the owner's taste.
-    if (batch.test) return { pick, note: TEST_PICK };
+    // A pick in a test batch or an outreach batch is not the owner's taste.
+    if (teachesNothing(batch)) return { pick, note: batch.test ? TEST_PICK : OUTREACH_PICK };
     await tasteLog.add({
       kind: draft ? "pick" : "pass",
       ownerSaid,

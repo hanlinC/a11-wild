@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BATCH_KINDS, CANON_SCOPES, type CanonScope } from "@a11-wild/shared";
+import { BATCH_KINDS, type Batch, CANON_SCOPES, type CanonScope } from "@a11-wild/shared";
 import type { BatchReads } from "../../batch/reads.js";
 import type { BatchStore } from "../../batch/store.js";
 import { copyPicture, type Pictures } from "../../pictures/store.js";
@@ -13,6 +13,7 @@ import { EVIDENCE_FOR_EVERY_BRAND, type ProposalStore } from "../../taste/propos
 import type { TasteLog } from "../../taste/log.js";
 import type { SwipeFile } from "../../taste/swipe.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
+import { teachesNothing } from "../../batch/state.js";
 
 export interface TasteToolDeps {
   canon: CanonStore;
@@ -39,6 +40,8 @@ const scope = z
 const scopesOf = (brandId: string): CanonScope[] => [{ kind: "brand", brandId }, { kind: "craft" }, { kind: "performance" }];
 
 const batchId = z.string().min(1).max(64).optional().describe("The batch you read this for. The studio records the read; ideas_save needs all three reads.");
+
+const aBatch = (batch: Batch) => (batch.test ? "A test batch" : "An outreach batch");
 
 export function tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net, brands, learning, proposals, brandNotes }: TasteToolDeps): ToolDefinition[] {
   /** A scope that names a brand names one the studio has. */
@@ -123,7 +126,7 @@ export function tasteTools({ canon, tasteLog, swipe, reads, references, batches,
         const batch = batchId ? await batches.get(batchId) : undefined;
         if (batch && found.kind === "brand" && found.brandId !== batch.brandId) throw new Refusal(`Batch ${batch.id} is for another brand than the scope names.`);
         // What a tester did in a test batch is not what the studio saw the owner do.
-        if (batch?.test) throw new Refusal("A test batch teaches the studio nothing: no learning record is saved from it.");
+        if (batch && teachesNothing(batch)) throw new Refusal(`${aBatch(batch)} teaches the studio nothing: no learning record is saved from it.`);
         return learning.add({ ...input, scope: found, ...(testResult ? { testResult } : {}), ...(batchId ? { batchId } : {}), savedBy: context.user.email });
       },
     }),
@@ -186,7 +189,7 @@ export function tasteTools({ canon, tasteLog, swipe, reads, references, batches,
         await brands.brand(brandId);
         const batch = batchId ? await batches.get(batchId) : undefined;
         if (batch && batch.brandId !== brandId) throw new Refusal(`Batch ${batch.id} is for another brand.`);
-        if (batch?.test) throw new Refusal("A test batch teaches the studio nothing: no brand note is saved from it.");
+        if (batch && teachesNothing(batch)) throw new Refusal(`${aBatch(batch)} teaches the studio nothing: no brand note is saved from it.`);
         return brandNotes.add({ brandId, note, ownerSaid, ...(batchId ? { batchId } : {}), savedBy: context.user.email });
       },
     }),

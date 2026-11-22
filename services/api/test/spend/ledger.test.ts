@@ -84,3 +84,46 @@ describe("spend ledger", () => {
     expect((await ledger.summary("batch-1")).batchUsd).toBe(0.3);
   });
 });
+
+describe("the outreach campaign", () => {
+  const caps = { monthUsd: 25, batchUsd: 5, campaignUsd: 2, outreachBatchUsd: 1.5 };
+  const outreach = async (batchId: string) => (batchId.startsWith("out-") ? ("outreach" as const) : undefined);
+
+  beforeEach(() => {
+    ledger = new SpendLedger(table, now, caps, outreach);
+  });
+
+  it("counts a paid call of an outreach batch against the campaign and not against the month", async () => {
+    await ledger.reserve(draft(0.5, "out-1"));
+    const summary = await ledger.summary("out-1");
+    expect(summary).toMatchObject({ monthUsd: 0, batchUsd: 0.5, campaign: { usd: 0.5, capUsd: 2, batchCapUsd: 1.5 } });
+    expect(summary.lines).toEqual([expect.objectContaining({ batchId: "out-1", usd: 0.5, status: "reserved" })]);
+  });
+
+  it("still counts a paid call of another batch against the month", async () => {
+    await ledger.reserve(draft(0.5));
+    expect(await ledger.summary()).toMatchObject({ monthUsd: 0.5, campaign: { usd: 0 } });
+  });
+
+  it("refuses a call that would pass the campaign cap and writes nothing", async () => {
+    await ledger.reserve(draft(1.2, "out-1"));
+    await expect(ledger.reserve(draft(0.9, "out-2"))).rejects.toThrow(/campaign's spend cap would be passed: US\$1\.20 used of US\$2\.00/);
+    const summary = await ledger.summary("out-2");
+    expect(summary).toMatchObject({ batchUsd: 0, campaign: { usd: 1.2 } });
+    expect(summary.lines).toEqual([]);
+  });
+
+  it("refuses a call that would take one outreach batch past its own limit, and gives the campaign its amount back", async () => {
+    await ledger.reserve(draft(1, "out-1"));
+    await expect(ledger.reserve(draft(0.6, "out-1"))).rejects.toThrow(/batch's spend cap would be passed: US\$1\.00 used of US\$1\.50/);
+    expect(await ledger.summary()).toMatchObject({ campaign: { usd: 1 } });
+  });
+
+  it("settles and releases against the campaign", async () => {
+    const first = await ledger.reserve(draft(0.5, "out-1"));
+    await ledger.settle(first, 0.3);
+    const second = await ledger.reserve(draft(0.5, "out-1"));
+    await ledger.release(second);
+    expect(await ledger.summary("out-1")).toMatchObject({ monthUsd: 0, batchUsd: 0.3, campaign: { usd: 0.3 } });
+  });
+});

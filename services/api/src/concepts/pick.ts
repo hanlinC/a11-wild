@@ -1,5 +1,5 @@
 import { CONCEPT_SCORES, type ConceptPick, type ConceptReview, type Idea, type Role } from "@a11-wild/shared";
-import { requireMove } from "../batch/state.js";
+import { requireMove, teachesNothing } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import type { BriefStore } from "../brief/store.js";
@@ -17,6 +17,7 @@ const low = (review: ConceptReview) => CONCEPT_SCORES.filter((score) => review.s
 
 const SK = "CONCEPT_PICK";
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log.";
+const OUTREACH_PICK = "This is an outreach batch: the pick is the agent's, saved for the batch only. It is not in the taste log.";
 
 interface Deps {
   table: Table;
@@ -88,7 +89,7 @@ export class ConceptPicks {
       ...(warnings.length > 0 ? { warnings } : {}),
       nextStep: "Show the owner the words of the three concepts as text, and wait for his yes (copy_approve). His pick of a concept is not his yes to its words.",
     };
-    if (batch.test) return { ...result, note: TEST_PICK };
+    if (teachesNothing(batch)) return { ...result, note: batch.test ? TEST_PICK : OUTREACH_PICK };
 
     const brand = await brands.brand(batch.brandId);
     const product = await brands.product(batch.productId);

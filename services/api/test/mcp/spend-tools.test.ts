@@ -25,7 +25,7 @@ async function callTool(name: string, args: unknown, token = ownerToken) {
 describe("spend tools", () => {
   it("shows the caps and a zero month before anything is spent", async () => {
     const reply = await callTool("spend_get", {});
-    expect(JSON.parse(reply.text)).toEqual({ month: "2026-11", monthUsd: 0, monthCapUsd: 25, batchCapUsd: 5, lines: [] });
+    expect(JSON.parse(reply.text)).toEqual({ month: "2026-11", monthUsd: 0, monthCapUsd: 25, batchCapUsd: 5, campaign: { usd: 0, capUsd: 73.6, batchCapUsd: 1.5 }, lines: [] });
   });
 
   it("shows a batch's own total and lines", async () => {

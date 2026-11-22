@@ -30,7 +30,7 @@ import { RenderService } from "../../render/service.js";
 import { RenderStore } from "../../render/store.js";
 import type { ProviderKeys } from "../../secrets.js";
 import { SpendGate } from "../../spend/gate.js";
-import { SpendLedger } from "../../spend/ledger.js";
+import { CAPS, SpendLedger } from "../../spend/ledger.js";
 import type { Table } from "../../store/table.js";
 import { CanonStore } from "../../taste/canon.js";
 import { TasteLog } from "../../taste/log.js";
@@ -81,7 +81,8 @@ export interface StudioParts {
 /** Builds the studio's services and every tool over them, the same way for the live server and for tests. */
 export function studioTools(parts: StudioParts) {
   const { config, table, now, pictures, net } = parts;
-  const ledger = new SpendLedger(table, now);
+  const batches = new BatchStore(table, now);
+  const ledger = new SpendLedger(table, now, CAPS, async (batchId) => (await batches.find(batchId))?.purpose);
   const gate = new SpendGate(table, now);
   const parallel = new ParallelClient(parts.keys, ledger, parts.parallelFetch, gate);
   const brands = new BrandStore(table, now);
@@ -91,7 +92,6 @@ export function studioTools(parts: StudioParts) {
   const swipe = new SwipeFile(table, now);
   const reads = new BatchReads(table, now);
   const importer = new Importer({ table, canon, tasteLog, swipe, brands, pictures, net, now });
-  const batches = new BatchStore(table, now);
   const truth = new TruthStore(table, facts, now);
   const images = new ImageStore(table, now);
   const renders = new RenderStore(table, now);

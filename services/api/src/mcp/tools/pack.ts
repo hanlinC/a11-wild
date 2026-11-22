@@ -22,7 +22,7 @@ export function packTools({ batches, pack, packs }: { batches: BatchStore; pack:
     defineTool({
       name: "pack_publish",
       description:
-        "Makes the client pack of a done batch and its private link: the finals, the Meta text the owner approved, the ad names, one line of why for each ad, the launch plan and the fact check. The studio copies the pictures and the approved text itself; you give only the why lines and the launch plan. It refuses a batch that is not done, a test batch, a final that fails a check, and an ad with no approved Meta text. The link is returned once and the studio keeps only its hash: give it to the owner, who sends it to his client himself. Send it to no one.",
+        "Makes the client pack of a done batch and its private link: the finals, the Meta text the owner approved, the ad names, one line of why for each ad, the launch plan and the fact check. The studio copies the pictures and the approved text itself; you give only the why lines and the launch plan. It refuses a batch that is not done, a test batch, an outreach batch, a final that fails a check, and an ad with no approved Meta text. The link is returned once and the studio keeps only its hash: give it to the owner, who sends it to his client himself. Send it to no one.",
       input: { batchId: id, ...content },
       writes: true,
       needsRules: true,
