@@ -29,6 +29,11 @@ export class JobStore {
     return stored;
   }
 
+  async find(batchId: string, jobId: string): Promise<StoredJob | undefined> {
+    const item = await this.table.get<Item & StoredJob>(pk(batchId), sk(jobId));
+    return item ? record<StoredJob>(item) : undefined;
+  }
+
   async get(batchId: string, jobId: string): Promise<StoredJob> {
     const item = await this.table.get<Item & StoredJob>(pk(batchId), sk(jobId));
     if (!item) throw new Refusal(`This batch has no pixel job ${jobId}.`);

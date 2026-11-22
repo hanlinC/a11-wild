@@ -303,7 +303,7 @@ describe("a v2 outreach batch: the burst", () => {
     for (const imageId of rest) await typeSet(imageId);
     const look = (imageId: string, items: object[]) => callTool(studio, "checks_save", { ...rules, batchId, imageId, items });
     // The agent sees a D item on the draft with its words: in a client's batch that sends the type back, here it is a note.
-    const set = await typeSet(over, {}, false);
+    const set = await typeSet(over, { area: [0.05, 0.19, 0.55, 0.75], colour: "EEEEEE", logoWidth: 0.12, logoX: 0.05, minHead: 0.03, weight: 900 }, false);
     const seen = await look(set.value.image.id, [{ code: "D1", note: "The headline runs over the pack." }]);
     expect(seen.value).toMatchObject({ state: "checked", note: expect.stringMatching(/a check rejects nothing/) });
     expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ drafts: 9, canBePicked: 9 });
@@ -321,7 +321,19 @@ describe("a v2 outreach batch: the burst", () => {
     await look(final, [{ code: "F2", note: "The shadow under the pack is hard." }]);
     const finish = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });
     await callTool(studio, "pixel_status", { batchId, jobId: finish.value.id });
-    const worded = await typeSet(final, {}, false);
+    // Found live (23-11-2026): the agent set the final's words anew, dark at the bottom under a large centred logo, where the
+    // picked draft had them light at the top left under a small logo. The final takes the picked draft's place, size and colour.
+    const bare = await callTool(studio, "type_set", { ...rules, batchId, imageId: final });
+    expect(bare.ok ? "" : bare.error).toBe("");
+    expect(bare.value.next).toMatch(/as on the draft the owner picked/);
+    await callTool(studio, "pixel_status", { batchId, jobId: bare.value.id });
+    const worded = await typeSet(final, { area: [0.05, 0.8, 0.66, 0.96], colour: "282828", logoWidth: 0.25, logo: false, weight: 700 }, false);
+    const [onDraft, onBare, onFinal] = studio.pixels.events.filter((event) => event.tool === "headline").slice(-3).map((event) => event.input);
+    const how = ({ renderKey: _renderKey, ...rest }: Record<string, unknown>) => rest;
+    expect(onDraft).toMatchObject({ area: [0.05, 0.19, 0.55, 0.75], colour: "EEEEEE", logoWidth: 0.12, logoX: 0.05, weight: 900 });
+    expect(how(onBare!)).toEqual(how(onDraft!));
+    expect(how(onFinal!)).toEqual(how(onDraft!));
+    expect(onFinal!.renderKey).not.toBe(onDraft!.renderKey);
     await look(worded.value.image.id, [{ code: "D1", note: "The headline runs over the pack." }]);
     expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
     const attached = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value;

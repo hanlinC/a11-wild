@@ -297,26 +297,42 @@ export class PixelService {
     // The words of a concept ad stand where its direction says: the place follows the picture, not a habit.
     const plan = batch.kind === "v3" ? (await this.deps.directions.get(input.batchId))?.concepts.find((concept) => concept.ideaId === root.ideaId) : undefined;
     if (batch.kind === "v3" && !plan) throw new Refusal(`Concept ${root.ideaId} has no direction, so the studio does not know where its words stand. Save it first (direction_save).`);
-    const layout = plan && root.ideaId ? lockupLayout(plan.lockup, root.ideaId, input.layout) : input.layout;
-    return this.start(
+    // A final carries its words as the draft the owner picked carries them: the place, the size, the colour, the font and the logo are that draft's, not a second choice.
+    const picked = root.kind === "final" && root.fromId ? await this.setAs(input.batchId, root.fromId, all) : undefined;
+    if (!picked && !input.layout.area) throw new Refusal("Give area: the place of the words on this picture, as x0,y0,x1,y1.");
+    const layout = picked ? {} : plan && root.ideaId ? lockupLayout(plan.lockup, root.ideaId, input.layout) : input.layout;
+    const view = await this.start(
       "headline",
       input.batchId,
       {
-        ...layout,
+        ...(picked ?? {
+          ...layout,
+          fontKey: font.key,
+          ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
+          // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
+          weight: input.weight,
+          ...(input.subWeight ? { subWeight: input.subWeight } : {}),
+          ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
+        }),
         headline: words.headline,
         subline: words.subline,
         ...(words.footnote ? { footnote: words.footnote } : {}),
-        fontKey: font.key,
-        ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
-        // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
-        weight: input.weight,
-        ...(input.subWeight ? { subWeight: input.subWeight } : {}),
-        ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
         renderKey: on.key,
       },
       // The picture keeps the version of the words it was sent with: the owner can change them while the job runs.
       { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, wordsVersion: words.version, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
     );
+    return picked ? { ...view, next: `The words and the logo are set as on the draft the owner picked; the place, the colour and the logo you gave were not used. ${view.next}` } : view;
+  }
+
+  /** How the words stand on a draft as the owner last saw it: what its newest set of words was made with, less the words and the picture. Nothing for a draft whose words were never set. */
+  private async setAs(batchId: string, draftId: string, all: BatchImage[]): Promise<Record<string, unknown> | undefined> {
+    const newest = all.filter((image) => image.kind === "typeset" && image.rootId === draftId).sort((one, other) => other.createdAt.localeCompare(one.createdAt))[0];
+    // The picture of a set of words has the id of the job that made it.
+    const job = newest ? await this.deps.jobs.find(batchId, newest.id) : undefined;
+    if (!job) return undefined;
+    const { headline: _headline, subline: _subline, footnote: _footnote, renderKey: _renderKey, ...how } = job.input;
+    return how;
   }
 
   private async result(job: StoredJob): Promise<PixelResult | undefined> {
