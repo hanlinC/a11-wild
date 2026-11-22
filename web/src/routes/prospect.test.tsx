@@ -190,11 +190,45 @@ describe("the one next step on the prospect page", () => {
   });
 
   it("says when the agent acts, and what a brand with no ad or no route waits for", async () => {
-    expect(await step(prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates() }))).toMatch(/^In workYou picked\. The agent makes the full-size version/);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates({ waits: false, agentOwes: true }) }))).toMatch(/^In workYou picked\. The agent makes the full-size version of your pick, and the message is then ready\./);
     expect(await step(prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [] }))).toMatch(/^Nothing is asked of youNo ad yet\./);
-    expect(await step(prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [], candidates: candidates() }))).toMatch(/The drafts made so far are below, and you can pick one now\./);
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "new" }), ads: [], candidates: candidates({ waits: false }) }))).toMatch(/The drafts made so far are below, and you can pick one now\./);
     expect(await step(prospectPage({ prospect: prospectRow({ stage: "no_route" }), ads: [] }))).toMatch(/no WhatsApp number and no address/);
     expect(await step(prospectPage({ prospect: prospectRow({ stage: "ready" }), ads: [adView({ verdict: "yes" })] }))).toMatch(/^Asked of youReady to send, but your message text is not saved yet\./);
+  });
+
+  it("asks for the pick of a later ad, and names the agent's work on it, when the stage stays at the reply", async () => {
+    // After the first message the stage is "Contacted", "Replied" or "In talks" whatever the drafts wait for.
+    const sends = [sendOf("2026-11-20")];
+    const asked = prospectPage({ prospect: prospectRow({ stage: "replied" }), sends, candidates: candidates() });
+    expect(await step(asked)).toBe("Asked of you4 draftsPick the one draft to send. The agent then makes it full size.");
+    stubApi({ [GET]: () => ({ body: asked }) });
+    const { unmount } = open();
+    expect(await screen.findByRole("heading", { name: /^Pick the ad to send/ })).toBeInTheDocument();
+    unmount();
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "in_talks" }), sends, candidates: candidates({ waits: false, agentOwes: true }) }))).toBe(
+      "In workYou picked. The agent makes the full-size version of your pick, and it then shows under Ads.",
+    );
+    expect(await step(prospectPage({ prospect: prospectRow({ stage: "contacted" }), sends, ads: [adView()] }))).toBe("Asked of youSay yes or no to the ad.");
+  });
+
+  it("gives the reason a write failed beside its own action, not inside a closed fold", async () => {
+    const refused = () => ({ status: 409, body: { error: "refused", message: "The studio could not save that." } });
+    stubApi({
+      [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "replied", sameContactAs: "Kopi Lane" }), sends: [sendOf("2026-11-20")], owed: { at: "2026-11-23T03:00:00.000Z" } }) }),
+      "POST /api/outreach/prospects/00001/answered": refused,
+      "POST /api/outreach/prospects/00001/choose": refused,
+      "POST /api/outreach/prospects/00001/channel": refused,
+    });
+    open();
+    await userEvent.click(await screen.findByRole("button", { name: "I answered" }));
+    expect(await screen.findByText("The studio could not save that.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Note, stage and opt-out" })).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Send to this brand too" }));
+    await waitFor(() => expect(screen.getAllByText("The studio could not save that.")).toHaveLength(1));
+    await userEvent.click(screen.getByRole("button", { name: "How to reach it" }));
+    await userEvent.click(screen.getByRole("button", { name: "Use Email" }));
+    await waitFor(() => expect(within(screen.getByRole("button", { name: "How to reach it" }).closest("section")!).getByText("The studio could not save that.")).toBeInTheDocument());
   });
 });
 

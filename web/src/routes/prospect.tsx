@@ -8,7 +8,7 @@ import { AdPicture, AdVerdict, BrandLine, CHANNELS, Failure, MessageCard, Outrea
 import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { api, describeError } from "@/lib/api";
+import { api, describeError, type ProspectWrite } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
 import { dayName, when } from "@/lib/when";
 
@@ -31,11 +31,14 @@ export function Prospect() {
 
 function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) => void }) {
   const { prospect, contact, ads, sends } = page;
-  const { write, busy, error } = useWrite(prospect.id, done);
+  const { write, busy, error, failed } = useWrite(prospect.id, done);
+  // The reason a write failed is drawn beside its own action: one inside a closed fold would not be seen.
+  const failure = (...actions: ProspectWrite["action"][]) => (failed && actions.includes(failed) ? <Failure error={error} /> : null);
   const newest = ads[0];
   const out = prospect.stage === "opted_out";
   const lastSend = sends.at(-1);
-  const picking = prospect.stage === "pick_waits";
+  // After the first message the stage no longer says it: a later ad is picked while the brand is "Contacted" or "Replied".
+  const picking = page.candidates?.waits === true && page.candidates.choosing !== "closed";
   const drafts = page.candidates ? (
     <Section title={picking ? "Pick the ad to send" : "Every draft for this brand"} count={page.candidates.drafts.length}>
       <Candidates id={prospect.id} brand={prospect.brand} candidates={page.candidates} done={done} />
@@ -60,6 +63,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
             </Button>
           </div>
         ) : null}
+        {failure("choose")}
       </Card>
 
       {page.owed ? (
@@ -71,6 +75,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
                 I answered
               </Button>
             </div>
+            {failure("answered")}
           </Card>
         </Section>
       ) : null}
@@ -153,6 +158,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
               </Button>
             </div>
           ) : null}
+          {failure("channel")}
         </Fold>
 
         {out ? null : (
@@ -189,7 +195,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
               ) : null}
               <OptOut onYes={() => write({ action: "optout" })} busy={busy === "optout"} />
             </div>
-            <Failure error={error} />
+            {failure("stage", "kind", "unsent", "optout")}
             </div>
           </Fold>
         )}
@@ -212,20 +218,22 @@ function Next({ page }: { page: ProspectPage }) {
   const { prospect, ads, candidates } = page;
   const drafts = candidates?.drafts.length ?? 0;
   const stage = prospect.stage;
+  // Before the first message is sent. After it, a pick or a yes is for a later ad, and the stage does not say it.
+  const first = page.sends.length === 0;
   if (stage === "opted_out") return <Step who="nobody">This contact opted out. No message goes to it, and none is recorded.</Step>;
   if (page.owed) return <Step who="you">Answer the reply yourself, then mark it as answered.</Step>;
   if (stage === "lost" || stage === "parked") return <SetAside page={page} />;
   if (candidates?.choosing === "agent") return <Step who="agent">The agent sets the other words you asked for. The drafts come back for your pick after that.</Step>;
-  if (stage === "pick_waits") {
+  if (candidates?.waits && candidates.choosing === "open") {
     return (
       <Step who="you" left={drafts === 1 ? "1 draft" : `${drafts} drafts`}>
         Pick the one draft to send. The agent then makes it full size.
       </Step>
     );
   }
-  if (ads[0] && !ads[0].verdict) return <Step who="you">Say yes or no to the ad. A yes makes the first message ready.</Step>;
+  if (ads[0] && !ads[0].verdict) return <Step who="you">Say yes or no to the ad.{first ? " A yes makes the first message ready." : ""}</Step>;
   if (page.message) return <Step who="you">{STEPS[page.message.step]} is ready. Send it yourself, then mark it as sent.</Step>;
-  if (stage === "pick_made") return <Step who="agent">You picked. The agent makes the full-size version of your pick, and the message is then ready.</Step>;
+  if (candidates?.agentOwes) return <Step who="agent">You picked. The agent makes the full-size version of your pick{first ? ", and the message is then ready" : ", and it then shows under Ads"}.</Step>;
   if (stage === "ready") {
     return (
       <Step who="you">

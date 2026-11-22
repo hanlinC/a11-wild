@@ -103,24 +103,24 @@ export function CheckNote({ warning, before, short }: { warning: string | undefi
   );
 }
 
-/** Runs one write and says in words why it failed. */
+/** Runs one write and says in words why it failed. `failed` is the action that failed, so a page shows the reason beside that action. */
 export function useWrite(id: string, done: (page: ProspectPage) => void) {
   const [busy, setBusy] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [failure, setFailure] = useState<{ action: ProspectWrite["action"]; error: string }>();
   async function write(change: ProspectWrite): Promise<boolean> {
     setBusy(change.action);
     try {
       done(await api.prospectWrite(id, change));
-      setError(undefined);
+      setFailure(undefined);
       return true;
     } catch (cause) {
-      setError(describeError(cause));
+      setFailure({ action: change.action, error: describeError(cause) });
       return false;
     } finally {
       setBusy(undefined);
     }
   }
-  return { write, busy, error };
+  return { write, busy, error: failure?.error, failed: failure?.action };
 }
 
 export function Failure({ error }: { error: string | undefined }) {
