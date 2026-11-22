@@ -1,5 +1,6 @@
 import type { OutreachAd, OutreachEvent, OutreachEventBody, OutreachSend, Prospect, ProspectFile } from "@a11-wild/shared";
-import type { LoadRow } from "../../src/outreach/load.js";
+import { type LoadRow, loadRows } from "../../src/outreach/load.js";
+import type { OutreachStore } from "../../src/outreach/store.js";
 
 /** A row of a made-up list. No real brand and no real contact is in a test. */
 export const row = (n: number, extra: Partial<LoadRow> = {}): LoadRow => ({
@@ -37,3 +38,9 @@ export const ad = (n: number): OutreachAd => ({ n, batchId: `batch-${n}`, imageI
 export const send = (step: 0 | 1 | 2, day = "2026-11-23"): OutreachSend => ({ step, day, channel: "whatsapp", title: "Brand, I made this for you", text: "Hi", at: `${day}T03:00:00.000Z` });
 
 export const file = (extra: Partial<ProspectFile> = {}, n = 1): ProspectFile => ({ profile: profile(n), ads: [], sends: [], events: [], ...extra });
+
+/** Loads made-up rows into a studio's list and gives the prospects' ids. */
+export async function loadProspects(studio: { services: { outreach: { store: OutreachStore } }; clock: { now: Date } }, rows: LoadRow[] = [row(1)]): Promise<string[]> {
+  await loadRows(studio.services.outreach.store, rows, () => studio.clock.now);
+  return rows.map((entry) => String(entry.n).padStart(5, "0"));
+}

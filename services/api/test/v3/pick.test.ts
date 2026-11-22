@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { concept, review, reviewConcepts, roughOf, rules, v3AtConcepts } from "../helpers/v3.js";
+import { loadProspects } from "../outreach/helpers.js";
 
 let studio: Studio;
 let batchId: string;
 const start = async (create: object = {}) => {
   studio = await createStudio();
   await approvedClient(studio);
+  if ("prospectId" in create) await loadProspects(studio);
   ({ batchId } = await v3AtConcepts(studio, create));
 };
 beforeEach(() => start());
@@ -120,7 +122,7 @@ describe("the owner's pick of three concepts", () => {
   });
 
   it("teaches the studio nothing in an outreach batch: the pick is the agent's", async () => {
-    await start({ prospectId: "p-0001" });
+    await start({ prospectId: "00001" });
     await reviewed();
     const saved = await pick();
     expect(saved.value).toMatchObject({ state: "judged", note: expect.stringMatching(/outreach batch.*agent's.*not in the taste log/) });

@@ -84,6 +84,13 @@ export class OutreachStore {
     throw new Refusal(`Prospect ${id} has ${ADS_MAX} ads already.`);
   }
 
+  /** Saves an ad under one exact number. False when that number is taken: another attach came first. */
+  async putAd(id: string, n: number, ad: Omit<OutreachAd, "n" | "at">): Promise<OutreachAd | undefined> {
+    if (n > ADS_MAX) throw new Refusal(`Prospect ${id} has ${ADS_MAX} ads already.`);
+    const saved: OutreachAd = { ...ad, n, at: this.now().toISOString() };
+    return (await this.table.put({ pk: PK, sk: adKey(id, n), ...saved }, { ifNotExists: true })) ? saved : undefined;
+  }
+
   /** Saves a step of the sequence once. False when that step is saved already. */
   async putSend(id: string, send: OutreachSend): Promise<boolean> {
     return this.table.put({ pk: PK, sk: sendKey(id, send.step), ...send }, { ifNotExists: true });

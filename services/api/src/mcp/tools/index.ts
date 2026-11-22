@@ -61,6 +61,10 @@ import { tasteTools } from "./taste.js";
 import { BrandNotes } from "../../brand/notes.js";
 import { LearningStore } from "../../taste/learning.js";
 import { ProposalStore } from "../../taste/proposals.js";
+import { OutreachDesk } from "../../outreach/desk.js";
+import { OutreachSequence } from "../../outreach/sequence.js";
+import { OutreachStore } from "../../outreach/store.js";
+import { outreachTools } from "./outreach.js";
 
 export interface StudioParts {
   config: Config;
@@ -119,7 +123,10 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
-  const services = { learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
+  const outreachStore = new OutreachStore(table, now);
+  const sequence = new OutreachSequence(outreachStore, now);
+  const desk = new OutreachDesk({ store: outreachStore, batches, board, ledger });
+  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -127,7 +134,7 @@ export function studioTools(parts: StudioParts) {
     ...factTools({ brands, facts, parallel }),
     ...tasteTools({ canon, tasteLog, swipe, reads, references, batches, pictures, net, brands, learning, proposals, brandNotes }),
     ...importTools({ importer }),
-    ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs }),
+    ...batchTools({ batches, brands, facts, truth, reads, critic: criticStore, done, copy, briefs, desk }),
     ...conceptTools({ batches, brands, facts, reads, briefs, conceptPicks, conceptBoard }),
     ...directionTools({ batches, copy, directions, drafts: board }),
     ...copyTools({ batches, brands, facts, copy }),
@@ -138,6 +145,7 @@ export function studioTools(parts: StudioParts) {
     ...renderTools({ render }),
     ...pixelTools({ pixels }),
     ...boardTools({ board }),
+    ...outreachTools({ store: outreachStore, sequence, desk, now }),
   ];
   return { tools, services };
 }
