@@ -74,7 +74,8 @@ describe("what waits for the owner", () => {
 
     const { batches, counts } = await read();
 
-    expect(batches.map((line) => line.who)).toEqual(["agent", "agent"]);
+    // The drafts of an outreach batch wait for the owner on the brand's page: Outreach counts them, the Studio does not.
+    expect(batches.map((line) => [line.batch.purpose ?? "test", line.who])).toEqual([["outreach", "nobody"], ["test", "agent"]]);
     expect(counts.studio).toBe(0);
   });
 
