@@ -17,6 +17,7 @@ import { FalClient } from "../../fal/client.js";
 import { ImageStore } from "../../images/store.js";
 import { MetaStore } from "../../meta/store.js";
 import { Importer } from "../../import/ingest.js";
+import { ClientService } from "../../pack/client.js";
 import { PackService } from "../../pack/service.js";
 import { PackStore } from "../../pack/store.js";
 import { ParallelClient } from "../../parallel/client.js";
@@ -123,10 +124,11 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, pictures, publicOrigin: config.publicOrigin, now });
+  const clients = new ClientService({ brands, packs, pack, publicOrigin: config.publicOrigin, now });
   const outreachStore = new OutreachStore(table, now);
   const sequence = new OutreachSequence(outreachStore, now);
   const desk = new OutreachDesk({ store: outreachStore, batches, board, ledger });
-  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, results };
+  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),

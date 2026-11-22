@@ -1,4 +1,4 @@
-import type { Pack, PackVersion } from "@a11-wild/shared";
+import type { ClientLink, Pack, PackVersion } from "@a11-wild/shared";
 import { type Item, record, type Table } from "../store/table.js";
 
 const LINKS = "PACKLINK";
@@ -14,7 +14,9 @@ const read = (item: Stored): Pack => {
   const { id, source, ...rest } = record<Omit<Stored, keyof Item>>(item as never) as Omit<Pack, "id" | "source"> & Partial<Pick<Pack, "id" | "source">>;
   return { ...rest, id: id ?? (rest.batchId as string), source: source ?? "batch" };
 };
-type Link = Item & { packId?: string; batchId?: string };
+type Link = Item & { packId?: string; batchId?: string; brandId?: string };
+const CLIENTS = "CLIENTLINK";
+type StoredClient = ClientLink & { tokenHash?: string };
 const sk = (version: number) => `PACKV#${String(version).padStart(4, "0")}`;
 
 /** Each pack, every version of its content, and the way from a link's token hash to its pack. */
@@ -58,6 +60,46 @@ export class PackStore {
     await this.save(next);
     await this.table.delete(LINKS, pack.tokenHash);
     return next;
+  }
+
+  /** The brand a client's link opens, or nothing. A pack's token opens no client page: its link names a pack, not a brand. */
+  async brandByHash(tokenHash: string): Promise<string | undefined> {
+    const link = await this.table.get<Link>(LINKS, tokenHash);
+    if (!link?.brandId) return undefined;
+    const client = await this.table.get<Item & StoredClient>(CLIENTS, link.brandId);
+    return client?.state === "on" && client.tokenHash === tokenHash ? link.brandId : undefined;
+  }
+
+  async clientLink(brandId: string): Promise<ClientLink | undefined> {
+    const item = await this.table.get<Item & StoredClient>(CLIENTS, brandId);
+    if (!item) return undefined;
+    const { tokenHash: _tokenHash, ...shown } = record<StoredClient>(item);
+    return shown;
+  }
+
+  async clientLinks(): Promise<ClientLink[]> {
+    return (await this.table.query<Item & StoredClient>(CLIENTS)).map((item) => {
+      const { tokenHash: _tokenHash, ...shown } = record<StoredClient>(item);
+      return shown;
+    });
+  }
+
+  /** Gives the brand's client link this token hash. A hash it had before opens nothing from now on. */
+  async setClientLink(link: ClientLink, tokenHash: string): Promise<void> {
+    const before = await this.table.get<Item & StoredClient>(CLIENTS, link.brandId);
+    await this.table.put({ pk: LINKS, sk: tokenHash, brandId: link.brandId });
+    await this.table.put({ pk: CLIENTS, sk: link.brandId, ...link, tokenHash });
+    if (before?.tokenHash && before.tokenHash !== tokenHash) await this.table.delete(LINKS, before.tokenHash);
+  }
+
+  /** Turns the brand's client link off. False when the brand has no link that is on. */
+  async endClientLink(link: ClientLink): Promise<boolean> {
+    const before = await this.table.get<Item & StoredClient>(CLIENTS, link.brandId);
+    if (before?.state !== "on") return false;
+    // The record goes first: from that write on, the old hash opens nothing even while its link row is still there.
+    await this.table.put({ pk: CLIENTS, sk: link.brandId, ...link });
+    if (before.tokenHash) await this.table.delete(LINKS, before.tokenHash);
+    return true;
   }
 
   async versions(id: string): Promise<PackVersion[]> {

@@ -236,7 +236,7 @@ flowchart LR
 - A token of the wrong shape, an unknown token and a pack token used as a client token all get "nothing".
 - A brand with no pack: the link opens a page that says no pack is there yet.
 
-**Verification:** the view of a client link holds no id of a batch, no key of a picture and no token.
+**Verification:** the view of a client link holds no id of a batch, no key of a picture and no token, outside the signed picture addresses, which name the picture's place in the store as they do on a pack page today.
 
 ### U52. Comments and the read-only example
 

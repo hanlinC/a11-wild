@@ -35,7 +35,7 @@ import { CARRIED, type PackStore } from "./store.js";
 
 /** How long a picture link of a pack page works. The page asks again when it is opened again. */
 const PICTURE_SECONDS = 3600;
-const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+export const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 
 export const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
 
@@ -315,10 +315,23 @@ export class PackService {
 
   /** What a link shows, or nothing when no pack has this token. */
   async view(token: string): Promise<PackView | undefined> {
-    const { pictures } = this.deps;
     const found = await this.opened(token);
-    if (!found) return undefined;
-    const { pack, version } = found;
+    return found && this.viewOf(found.pack, found.version);
+  }
+
+  /** The version a pack shows now, or nothing for a pack that was never finished. */
+  async current(pack: Pack): Promise<PackVersion | undefined> {
+    return (await this.deps.packs.versions(pack.id)).find((entry) => entry.version === pack.current);
+  }
+
+  /** The brand a pack belongs to. */
+  async brandOf(pack: Pack): Promise<string> {
+    return pack.brandId ?? (await this.deps.batches.get(pack.batchId as string)).brandId;
+  }
+
+  /** A pack as a page shows it: no key of a picture and no id of the studio. */
+  async viewOf(pack: Pack, version: PackVersion): Promise<PackView> {
+    const { pictures } = this.deps;
     const { brand, product } = await this.names(pack);
     return {
       brand: brand.name,
@@ -341,14 +354,17 @@ export class PackService {
    * It is made at the click, so a page that stayed open for a day still downloads. The file of an example says so in its name.
    */
   async download(token: string, ad: number, format?: string): Promise<string | undefined> {
-    const { pictures } = this.deps;
     const found = await this.opened(token);
-    const chosen = found?.version.ads[ad];
-    if (!found || !chosen) return undefined;
+    return found && this.downloadOf(found.pack, found.version, ad, format);
+  }
+
+  async downloadOf(pack: Pack, version: PackVersion, ad: number, format?: string): Promise<string | undefined> {
+    const chosen = version.ads[ad];
+    if (!chosen) return undefined;
     const files = downloadsOf(chosen);
     const file = format === undefined ? files[0] : files.find((entry) => PACK_PICTURE_TYPES[entry.type] === format);
     if (!file) return undefined;
-    return pictures.downloadUrl(file.key, `${found.pack.example ? "example_" : ""}${chosen.adName}.${PACK_PICTURE_TYPES[file.type]}`);
+    return this.deps.pictures.downloadUrl(file.key, `${pack.example ? "example_" : ""}${chosen.adName}.${PACK_PICTURE_TYPES[file.type]}`);
   }
 
   /**
@@ -356,10 +372,13 @@ export class PackService {
    * Undefined when no pack has this token. The file goes to a folder apart from the studio's pictures.
    */
   async upload(token: string, file: { name: string; type: string; bytes: number }): Promise<{ upload: Pick<PackUpload, "id" | "name">; putUrl: string } | undefined> {
-    const { packs, results, pictures } = this.deps;
     if (!TOKEN.test(token)) return undefined;
-    const pack = await packs.byHash(hashToken(token));
-    if (!pack) return undefined;
+    const pack = await this.deps.packs.byHash(hashToken(token));
+    return pack && this.uploadTo(pack, file);
+  }
+
+  async uploadTo(pack: Pack, file: { name: string; type: string; bytes: number }): Promise<{ upload: Pick<PackUpload, "id" | "name">; putUrl: string }> {
+    const { results, pictures } = this.deps;
     // The link of an example is held by many strangers. It takes nothing, whatever the page that asks looks like.
     if (pack.example) throw new Refusal("This page is an example. It takes no file.");
     if (!Object.hasOwn(UPLOAD_TYPES, file.type)) throw new Refusal("Send a JPEG or PNG screenshot, or a CSV or XLSX export.");

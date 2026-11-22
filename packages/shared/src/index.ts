@@ -568,6 +568,26 @@ export interface PackAd {
   downloads?: { key: string; type: PackPictureType }[];
 }
 
+/** One pack on a client's page. `ref` names the pack on that page only: it is no id of the studio. */
+export interface ClientPack extends PackView {
+  ref: string;
+}
+
+/** What a client's link shows: every pack of that one brand, newest first, each at the version its own link shows. */
+export interface ClientView {
+  brand: string;
+  packs: ClientPack[];
+}
+
+/** A client's link as the owner sees it. The link itself is not kept: only the hash of its token. */
+export interface ClientLink {
+  brandId: string;
+  state: "on" | "off";
+  /** When the link that works now was made, or when it was turned off. */
+  at: string;
+  by: string;
+}
+
 /** The picture types a pack's download gives, with the ending of each. */
 export const PACK_PICTURE_TYPES = { "image/jpeg": "jpg", "image/png": "png" } as const;
 export type PackPictureType = keyof typeof PACK_PICTURE_TYPES;
