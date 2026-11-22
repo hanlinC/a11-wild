@@ -335,7 +335,7 @@ export class PackService {
     return pack.brandId ?? (await this.deps.batches.get(pack.batchId as string)).brandId;
   }
 
-  /** A pack as a page shows it: no key of a picture and no id of the studio. */
+  /** A pack as a page shows it: no key of a picture and no id of the studio as a field. A picture's signed address holds its key. */
   async viewOf(pack: Pack, version: PackVersion): Promise<PackView> {
     const { pictures } = this.deps;
     const { brand, product } = await this.names(pack);
