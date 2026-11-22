@@ -37,7 +37,7 @@ export function Prospects() {
 
   return (
     <>
-      <PageHeader title="Prospects" lead="Every brand of your list. A row shows no number and no address; those are on the brand's own page." />
+      <PageHeader title="Prospects" lead="Every brand of your list, without its number and address, which are on the brand's own page." />
       <OutreachTabs />
       {page === undefined ? (
         <Loading error={error} />

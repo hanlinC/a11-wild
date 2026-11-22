@@ -22,7 +22,7 @@ export function Prospect() {
 
   return (
     <>
-      <PageHeader title="Prospect" lead="One brand of your list. Only you see its number and its address." />
+      <PageHeader title="Prospect" lead="One brand of your list, with its number and its address shown only to you." />
       <OutreachTabs />
       {page === undefined ? <Loading error={error} /> : <Body page={page} done={setValue} />}
     </>

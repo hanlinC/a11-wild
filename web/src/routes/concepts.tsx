@@ -29,7 +29,7 @@ const SCORE_NAMES: Record<ConceptScore, string> = {
   commercial: "Sells",
   execution: "Can be made",
 };
-const LEAD = "Every concept of this batch, with its rough and the critic's notes. The critic advises; you choose.";
+const LEAD = "Every concept of this batch, with its rough and the critic's advice for your choice.";
 
 /** The concept board: the owner sees every concept and the critic's review of it, and picks three himself. */
 export function Concepts() {

@@ -39,7 +39,7 @@ export function Clients() {
 
   return (
     <>
-      <PageHeader title="Clients" lead="What your clients asked for, wrote and sent through their private links. You answer them by WhatsApp or email; a status here is what they see on their page." />
+      <PageHeader title="Clients" lead="What your clients asked for, wrote and sent through their private links." />
       {failure ? (
         <Banner status="error">
           <BannerTitle>{failure}</BannerTitle>
@@ -47,7 +47,7 @@ export function Clients() {
       ) : null}
       <Step who={waiting.length > 0 ? "you" : "nobody"}>
         {waiting.length > 0
-          ? `${waiting.length === 1 ? "1 change request waits" : `${waiting.length} change requests wait`} for you. Set each to In work, Done or Not done: your client sees that status on their page.`
+          ? `${waiting.length === 1 ? "1 change request waits" : `${waiting.length} change requests wait`} for you. Answer the client by WhatsApp or email, and set each to In work, Done or Not done: your client sees that status on their page.`
           : "No change request waits for you. One shows here when a client asks for a change on their page."}
       </Step>
       {waiting.length > 0 ? (

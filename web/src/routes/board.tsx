@@ -27,7 +27,7 @@ export function Board() {
   if (board === undefined) {
     return (
       <>
-        <PageHeader title="Pick board" lead="Each idea's drafts, in the order they were made. The numbers are names, not a rank." />
+        <PageHeader title="Pick board" lead="Each idea's drafts in the order they were made, numbered by name and not by rank." />
         <Loading error={error} />
       </>
     );
@@ -35,7 +35,7 @@ export function Board() {
   const { batch, picking, brand, product, truthSheet, ideas } = board;
   return (
     <>
-      <PageHeader title={`${brand.name}: ${product.name}`} lead="Each idea's drafts, in the order they were made. The numbers are names, not a rank." />
+      <PageHeader title={`${brand.name}: ${product.name}`} lead="Each idea's drafts in the order they were made, numbered by name and not by rank." />
       <BoardStep board={board} />
       <p className="mb-6 flex flex-wrap items-center gap-3 text-caption text-muted-foreground">
         <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>

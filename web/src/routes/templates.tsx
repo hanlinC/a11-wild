@@ -20,7 +20,7 @@ export function Templates() {
   const { value: page, error, reload } = useLoad(api.outreachTemplates);
   return (
     <>
-      <PageHeader title="Messages" lead="Your three messages, in your own words. Each has two versions of its title; you use either one when you send." />
+      <PageHeader title="Messages" lead="Your three messages in your own words, each with two versions of its title to choose from when you send." />
       <OutreachTabs />
       {page === undefined ? <Loading error={error} /> : <Body key={page.templates?.savedAt ?? "none"} page={page} reload={reload} />}
     </>

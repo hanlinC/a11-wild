@@ -19,17 +19,17 @@ export function Brands() {
 
   return (
     <>
-      <PageHeader title="Brands" lead="Each brand the studio knows. A brand with a batch that waits for you is marked." />
+      <PageHeader title="Brands" lead="Each brand the studio knows, marked when one of its batches waits for you." />
       {brands === undefined ? (
         <Loading error={error} />
       ) : brands.length === 0 ? (
         <Empty>No brand yet. Ask your agent to read a brand's home page; you choose the logo and colours it finds.</Empty>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {brands.map(({ brand, logoUrl, products }) => (
             <li key={brand.id}>
               <Link to={`/brands/${brand.id}`} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2">
-                <Card className="flex items-center gap-4 transition-colors hover:bg-(--tint)">
+                <Card className="@container flex items-center gap-4 transition-colors hover:bg-(--tint)">
                   <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-(--tint)">
                     {logoUrl ? <img src={logoUrl} alt="" className="max-h-10 max-w-10 object-contain" /> : null}
                   </div>
@@ -43,7 +43,7 @@ export function Brands() {
                     </span>
                     <Moves {...of(brand.id)} />
                   </div>
-                  <span className="ml-auto flex shrink-0 gap-1" aria-hidden="true">
+                  <span className="ml-auto hidden shrink-0 gap-1 @sm:flex" aria-hidden="true">
                     {brand.palette.slice(0, 5).map((colour) => (
                       <span key={`${colour.role}${colour.hex}`} className="size-4 rounded-full border border-border" style={{ backgroundColor: colour.hex }} />
                     ))}

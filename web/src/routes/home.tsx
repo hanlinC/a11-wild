@@ -58,7 +58,7 @@ export function Home() {
 
   return (
     <>
-      <PageHeader title="Studio" lead={isOwner ? "What waits for you, then what is in work." : "What is in work. The owner picks and approves."} />
+      <PageHeader title="Studio" lead={isOwner ? "What waits for you, then what is in work." : "What is in work, with each pick and approval left to the owner."} />
 
       {error ? (
         <div className="mb-6">

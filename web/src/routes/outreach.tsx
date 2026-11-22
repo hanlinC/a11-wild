@@ -96,7 +96,7 @@ const listOf = (parts: string[]): string => (parts.length < 2 ? parts.join("") :
 function Header() {
   return (
     <>
-      <PageHeader title="Outreach" lead="Your day: the answers you owe, the follow-ups that are due, and the new first messages. You send each one yourself; this page keeps the record." />
+      <PageHeader title="Outreach" lead="Your day: the answers you owe, the follow-ups that are due and the new first messages, each sent by you." />
       <OutreachTabs />
     </>
   );
