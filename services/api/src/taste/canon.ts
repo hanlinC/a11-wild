@@ -46,7 +46,8 @@ export class CanonStore {
     return item ? { ...record<CanonVersion>(item), scope } : { scope, version: 0, text: "", reason: "", savedBy: "", savedAt: "" };
   }
 
-  async save(input: { text: string; reason: string; by: string; scope?: CanonScope }): Promise<CanonVersion> {
+  /** Saves the next version. With `after`, it is saved only when that version is still the newest: a change made meanwhile is not written over. */
+  async save(input: { text: string; reason: string; by: string; scope?: CanonScope; after?: number }): Promise<CanonVersion> {
     const scope = input.scope ?? OWNER_TASTE;
     const PK = pkOf(scope);
     const text = input.text.trim();
@@ -57,7 +58,12 @@ export class CanonStore {
     // Two saves at the same moment each take their own number: a version is written only where none is yet.
     let version = (await this.latest(PK)) + 1;
     const saved = (): CanonVersion => ({ scope, version, text, reason, savedBy: input.by, savedAt: this.now().toISOString() });
-    while (!(await this.table.put({ pk: PK, sk: versionKey(version), ...saved() }, { ifNotExists: true }))) version += 1;
+    const moved = () => new Refusal(`The canon of ${scopeName(scope)} changed since version ${input.after}. Read it again, and write the change on top of what it says now.`);
+    if (input.after !== undefined && version !== input.after + 1) throw moved();
+    while (!(await this.table.put({ pk: PK, sk: versionKey(version), ...saved() }, { ifNotExists: true }))) {
+      if (input.after !== undefined) throw moved();
+      version += 1;
+    }
     await this.table.add(PK, "COUNT", "count", 1);
     return saved();
   }

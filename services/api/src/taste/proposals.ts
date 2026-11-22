@@ -11,6 +11,14 @@ const sk = (id: string) => `P#${id}`;
 export const EVIDENCE_FOR_EVERY_BRAND = 2;
 export const PROPOSALS_OPEN_MAX = 20;
 
+/** The owner's yes or no, as it was first given. */
+interface Decision {
+  approve: boolean;
+  ownerSaid: string;
+  by: string;
+  at: string;
+}
+
 /** Changes to a canon that wait for the owner. A proposal is words on a shelf: no batch reads it until he approves it. */
 export class ProposalStore {
   constructor(
@@ -74,22 +82,47 @@ export class ProposalStore {
     const ownerSaid = input.ownerSaid.trim();
     if (!ownerSaid) throw new Refusal("A decision needs the owner's own words.");
     if (proposal.status !== "proposed") throw new Refusal(`Proposal ${proposal.id} is already ${proposal.status}.`);
-    if (input.approve) {
+    const marker = `D#${proposal.id}`;
+    const started = await this.table.get<Item & Decision>(PK, marker);
+    // A decision that stopped half way is finished, not made again: its yes may already be the canon.
+    if (input.approve && !started) {
       const current = (await this.canon.get(proposal.scope)).version;
       if (current !== proposal.baseVersion) {
         throw new Refusal(`The canon of ${scopeName(proposal.scope)} changed since proposal ${proposal.id} was written (version ${proposal.baseVersion}, now ${current}). Approving it would drop that change. Decline it and propose again from the current canon.`);
       }
     }
-    // Two decisions at the same moment: only the first one counts.
-    if (!(await this.table.put({ pk: PK, sk: `D#${proposal.id}`, by: input.by }, { ifNotExists: true }))) throw new Refusal(`Proposal ${proposal.id} is being decided.`);
-    let canon: CanonVersion | undefined;
-    try {
-      if (input.approve) canon = await this.canon.save({ scope: proposal.scope, text: proposal.text, reason: `${proposal.reason} (proposal ${proposal.id}; the owner said: "${ownerSaid}")`, by: input.by });
-    } catch (error) {
-      await this.table.delete(PK, `D#${proposal.id}`);
-      throw error;
+    // The decision is written down first, so two at the same moment are one, and one that stopped half way is finished by the next try.
+    let decision: Decision = { approve: input.approve, ownerSaid, by: input.by, at: this.now().toISOString() };
+    if (!(await this.table.put({ pk: PK, sk: marker, ...decision }, { ifNotExists: true }))) {
+      const earlier = started ?? (await this.table.get<Item & Decision>(PK, marker));
+      if (!earlier) throw new Refusal(`Proposal ${proposal.id} is being decided. Try again.`);
+      if (earlier.approve !== input.approve) throw new Refusal(`Proposal ${proposal.id} already has the owner's ${earlier.approve ? "yes" : "no"}. It is being saved.`);
+      decision = record<Decision>(earlier);
     }
-    const decided: CanonProposal = { ...proposal, status: input.approve ? "approved" : "declined", decidedAt: this.now().toISOString(), ownerSaid, ...(canon ? { version: canon.version } : {}) };
+    let canon: CanonVersion | undefined;
+    if (decision.approve) {
+      const reason = `${proposal.reason} (proposal ${proposal.id}; the owner said: "${decision.ownerSaid}")`;
+      try {
+        // Only on top of the version it was written against: two proposals approved at the same moment cannot both land.
+        canon = await this.canon.save({ scope: proposal.scope, text: proposal.text, reason, by: decision.by, after: proposal.baseVersion });
+      } catch (error) {
+        if (!(error instanceof Refusal)) throw error;
+        // An earlier try of this same decision may have saved it already.
+        const next = (await this.canon.versions(proposal.scope)).find((entry) => entry.version === proposal.baseVersion + 1);
+        if (next?.reason !== reason) {
+          await this.table.delete(PK, marker);
+          throw error;
+        }
+        canon = await this.canon.version(next.version, proposal.scope);
+      }
+    }
+    const decided: CanonProposal = {
+      ...proposal,
+      status: decision.approve ? "approved" : "declined",
+      decidedAt: decision.at,
+      ownerSaid: decision.ownerSaid,
+      ...(canon ? { version: canon.version } : {}),
+    };
     await this.table.put({ pk: PK, sk: sk(proposal.id), ...decided });
     return { proposal: decided, ...(canon ? { canon } : {}) };
   }

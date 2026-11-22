@@ -187,6 +187,70 @@ describe("canon proposals", () => {
   });
 });
 
+describe("a decision on a proposal that meets trouble", () => {
+  const scope = { kind: "craft" as const };
+  const evidence = async () => [(await callTool(studio, "learn", record(scope, { evidence: 2 }))).value.id as string];
+  const propose = async (text: string) => (await studio.services.proposals.propose({ scope, text, reason: "Seen twice.", recordIds: await evidence(), by: "agent" })).id;
+  const yes = (id: string, ownerSaid = "yes") => studio.services.proposals.decide({ id, approve: true, ownerSaid, by: "owner@example.com" });
+  /** Makes the save of the decided proposal fail once, after the canon is written. */
+  const failOnce = (id: string) => {
+    const put = studio.table.put.bind(studio.table);
+    let failed = false;
+    studio.table.put = async (item, options) => {
+      if (!failed && item.pk === "CANONPROPOSAL" && item.sk === `P#${id}` && item.status !== "proposed") {
+        failed = true;
+        throw new Error("the table is away");
+      }
+      return put(item, options);
+    };
+  };
+
+  it("lets one of two proposals for the same canon land when both get a yes at the same moment", async () => {
+    const [first, second] = [await propose("One light source."), await propose("Two props at most.")];
+    const results = await Promise.allSettled([yes(first), yes(second)]);
+    expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { message: expect.stringMatching(/changed since/) } });
+    const canon = await studio.services.canon.get(scope);
+    expect(canon.version).toBe(1);
+    const all = await studio.services.proposals.list();
+    expect(all.map((proposal) => proposal.status).sort()).toEqual(["approved", "proposed"]);
+    expect(all.find((proposal) => proposal.status === "approved")?.text).toBe(canon.text);
+    // The one that lost can be declined, or decided again after a new proposal.
+    const lost = all.find((proposal) => proposal.status === "proposed")!;
+    expect((await studio.services.proposals.decide({ id: lost.id, approve: false, ownerSaid: "write it again", by: "owner@example.com" })).proposal.status).toBe("declined");
+  });
+
+  it("finishes a yes that stopped after the canon was written, and does not write the canon twice", async () => {
+    const id = await propose("One light source.");
+    failOnce(id);
+    await expect(yes(id, "yes, one light")).rejects.toThrow("the table is away");
+    expect((await studio.services.canon.get(scope)).version).toBe(1);
+    expect((await studio.services.proposals.get(id)).status).toBe("proposed");
+
+    // A no cannot take back the yes that is already the canon.
+    await expect(studio.services.proposals.decide({ id, approve: false, ownerSaid: "no", by: "owner@example.com" })).rejects.toThrow(/already has the owner's yes/);
+    const done = await yes(id, "yes again");
+    expect(done.proposal).toMatchObject({ status: "approved", version: 1, ownerSaid: "yes, one light" });
+    expect((await studio.services.canon.get(scope)).version).toBe(1);
+  });
+
+  it("finishes a no that stopped before it was saved", async () => {
+    const id = await propose("One light source.");
+    failOnce(id);
+    const no = () => studio.services.proposals.decide({ id, approve: false, ownerSaid: "not yet", by: "owner@example.com" });
+    await expect(no()).rejects.toThrow("the table is away");
+    expect((await no()).proposal).toMatchObject({ status: "declined", ownerSaid: "not yet" });
+    expect((await studio.services.canon.get(scope)).version).toBe(0);
+  });
+
+  it("frees a yes that the canon refused, so the owner can decline it", async () => {
+    const id = await propose("One light source.");
+    await studio.services.canon.save({ scope, text: "Daylight only.", reason: "He said so.", by: "owner@example.com" });
+    await expect(yes(id)).rejects.toThrow(/changed since proposal/);
+    expect((await studio.services.proposals.decide({ id, approve: false, ownerSaid: "old", by: "owner@example.com" })).proposal.status).toBe("declined");
+  });
+});
+
 describe("brand notes", () => {
   it("are the owner's to save, and stay with their brand", async () => {
     const { brand, product } = await savedProduct(studio);
