@@ -28,11 +28,14 @@ export interface Ticket {
 export interface SavedStages {
   picks: StagePick[];
   at: string;
+  /** How many times a critic has judged the ideas of this batch, this one counted. */
+  rounds?: number;
 }
 
 export interface SavedVerdicts {
   verdicts: IdeaVerdict[];
   at: string;
+  rounds?: number;
 }
 
 /** What a blind critic was given leave to judge, and what it said. */
@@ -63,8 +66,14 @@ export class CriticStore {
     return this.table.delete(pk(batchId), ticketSk(ticket), { ifEquals: { attribute: "state", value: OPEN } });
   }
 
+  /** How many times a critic has judged the ideas of this batch. A judgement saved before the count was kept is one. */
+  async ideaRounds(batchId: string): Promise<number> {
+    const saved = (await this.verdicts(batchId)) ?? (await this.stages(batchId));
+    return saved ? (saved.rounds ?? 1) : 0;
+  }
+
   async saveVerdicts(batchId: string, verdicts: IdeaVerdict[]): Promise<SavedVerdicts> {
-    const saved: SavedVerdicts = { verdicts, at: this.now().toISOString() };
+    const saved: SavedVerdicts = { verdicts, at: this.now().toISOString(), rounds: (await this.ideaRounds(batchId)) + 1 };
     await this.table.put({ pk: pk(batchId), sk: VERDICTS_SK, ...saved });
     return saved;
   }
@@ -76,7 +85,7 @@ export class CriticStore {
   }
 
   async saveStages(batchId: string, picks: StagePick[]): Promise<SavedStages> {
-    const saved: SavedStages = { picks, at: this.now().toISOString() };
+    const saved: SavedStages = { picks, at: this.now().toISOString(), rounds: (await this.ideaRounds(batchId)) + 1 };
     await this.table.put({ pk: pk(batchId), sk: STAGES_SK, ...saved });
     return saved;
   }

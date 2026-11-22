@@ -3,6 +3,7 @@ import { RULES_VERSION } from "../../src/houserules.js";
 import { idea, rankDrafts, readTaste, sheet } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { fakeNet } from "../helpers/net.js";
+import { loadProspects } from "../outreach/helpers.js";
 
 const rules = { rulesVersion: RULES_VERSION };
 const SCENE = "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it. The top third is plain dark sky.";
@@ -34,10 +35,10 @@ const burst = (extra: (n: number) => object = () => ({})) => Array.from({ length
 const PACK = { key: "products/p/pack.jpg", sourceUrl: "https://cdn.wongi.example/pack.jpg", kind: "pack" as const };
 const SLICE = { key: "products/p/slice.jpg", sourceUrl: "https://cdn.wongi.example/slice.jpg", kind: "food" as const };
 
-async function v2Batch(photos: (typeof PACK | typeof SLICE)[] = [PACK]) {
+async function v2Batch(photos: (typeof PACK | typeof SLICE)[] = [PACK], create: object = {}) {
   const brand = await studio.services.brands.saveBrand({ name: "WonGi", url: "https://wongi.example/", logo: { key: "brands/b/logo.png", sourceUrl: "https://wongi.example/logo.png" }, palette: [], fonts: ["Archivo"], savedBy: "owner@example.com" });
   const product = await studio.services.brands.saveProduct({ brandId: brand.id, name: "Seaweed crisps", url: "https://wongi.example/products/seaweed-crisps", photos, savedBy: "owner@example.com" });
-  const made = await callTool(studio, "batch_create", { kind: "v2", brandId: brand.id, productId: product.id });
+  const made = await callTool(studio, "batch_create", { kind: "v2", brandId: brand.id, productId: product.id, ...create });
   brandId = brand.id;
   batchId = made.value.batch.id as string;
   await callTool(studio, "truth_save", { batchId, ...sheet });
@@ -173,6 +174,32 @@ describe("a v2 batch: the burst", () => {
     const packet = await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true });
     const old = await callTool(studio, "critic_pick", { ...rules, batchId, ticket: packet.value.ticket, ideas: [] });
     expect(old.ok).toBe(false);
+  });
+});
+
+describe("a v2 outreach batch: the burst", () => {
+  const outreachBurst = async () => {
+    await loadProspects(studio);
+    await v2Batch([PACK], { prospectId: "00001" });
+    await readTaste(studio, batchId);
+    await callTool(studio, "references_get", { batchId });
+    await callTool(studio, "ideas_save", { ...rules, batchId, ideas: burst() });
+  };
+
+  it("goes on with the one stage the critic chose: it makes one ad", async () => {
+    await outreachBurst();
+    const { reply } = await choose(["tof", "bof"]);
+    expect(reply.value).toMatchObject({ state: "judged", refused: [{ stage: "tof" }, { stage: "bof" }], nextStep: expect.stringMatching(/starts no other critic/) });
+    expect(reply.value.chosen).toHaveLength(1);
+    expect((await studio.services.batches.ideas(batchId)).map((entry) => entry.stage)).toEqual(["mof"]);
+  });
+
+  it("is judged twice at most when the critic refuses every stage", async () => {
+    await outreachBurst();
+    expect((await choose([...STAGES])).reply.value).toMatchObject({ state: "ideas", nextStep: expect.stringMatching(/round 1 of 2/) });
+    expect((await choose([...STAGES])).reply.value).toMatchObject({ state: "ideas", nextStep: expect.stringMatching(/round 2 of 2, the last/) });
+    const third = await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true });
+    expect(third).toMatchObject({ ok: false, error: expect.stringMatching(/judged 2 times.*Park it/) });
   });
 });
 

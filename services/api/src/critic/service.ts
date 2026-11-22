@@ -31,6 +31,9 @@ interface Deps {
 /** The lowest score for the picture of a concept that the critic recommends. */
 export const RECOMMEND_VISUAL_MIN = 4;
 
+/** An outreach batch makes one ad. Its ideas are judged this many times at most; after that the brand is parked. */
+export const OUTREACH_IDEA_ROUNDS = 2;
+
 export const BLIND_NEEDED =
   "A blind critic is needed: a fresh helper that gets the batch id and nothing else. The session that wrote the ideas or made the drafts cannot judge them. If you cannot start a fresh helper, tell the owner and stop.";
 const BAD_TICKET = "This ticket is not valid: it was used, it ran out, or it is not of this batch. A ticket works once. Start a fresh helper and call critic_open again.";
@@ -47,6 +50,12 @@ const once = (ids: string[]) => new Set(ids).size === ids.length;
 const same = (a: string[], b: string[]) => a.length === b.length && once(a) && a.every((id) => b.includes(id));
 
 /** The blind judgement of a batch: a fresh critic opens a packet, and its word is taken once, with the packet's ticket. */
+/** What the critic reports when it kept no idea of an outreach batch. */
+const outreachRound = (rounds = 1): string =>
+  rounds >= OUTREACH_IDEA_ROUNDS
+    ? `Report that no idea was kept, with your reasons. This was round ${rounds} of ${OUTREACH_IDEA_ROUNDS}, the last: the main agent parks the brand with the reason (outreach_mark) and takes the next one.`
+    : `Report that no idea was kept, with your reasons. This was round ${rounds} of ${OUTREACH_IDEA_ROUNDS}: the main agent writes its ideas once more (ideas_save), and one more fresh critic judges them. That round is the last.`;
+
 export class CriticService {
   constructor(private readonly deps: Deps) {}
 
@@ -84,6 +93,11 @@ export class CriticService {
     if (step === "ideas") {
       if (batch.state !== "ideas") requireMove(batch, "judged", "critic_open");
       if (ideas.length === 0) throw new Refusal("This batch has no ideas yet. The main agent saves them first (ideas_save).");
+      if (batch.purpose === "outreach" && (await critic.ideaRounds(batchId)) >= OUTREACH_IDEA_ROUNDS) {
+        throw new Refusal(
+          `The ideas of this outreach batch were judged ${OUTREACH_IDEA_ROUNDS} times and none was kept. That is the limit: no good ad can be made for this brand now. Park it with the reason (outreach_mark) and take the next brand.`,
+        );
+      }
       if (hasWords(batch.kind)) {
         return { ...burstPacket(common, shuffled(ideas, stamp)), ...(await critic.issue(batchId, { step, ideaIds: ideas.map((idea) => idea.id), stamp })) };
       }
@@ -203,13 +217,17 @@ export class CriticService {
       chosen.push(idea);
     }
     if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
-    await critic.saveStages(batchId, picks);
+    const saved = await critic.saveStages(batchId, picks);
     const refused = picks.filter((pick) => pick.ideaId === null);
-    if (refused.length > 0) {
+    // An outreach batch makes one ad, so one chosen idea is enough: a refused stage starts no new round.
+    const outreach = batch.purpose === "outreach";
+    if (refused.length > 0 && !(outreach && chosen.length > 0)) {
       return {
         state: batch.state,
         refused: refused.map(({ stage, reason }) => ({ stage, reason })),
-        nextStep: "Report the refused stages and what is missing. The main agent writes more ideas for them (ideas_save with the whole burst again), and then a fresh critic chooses again.",
+        nextStep: outreach
+          ? outreachRound(saved.rounds)
+          : "Report the refused stages and what is missing. The main agent writes more ideas for them (ideas_save with the whole burst again), and then a fresh critic chooses again.",
       };
     }
     await batches.saveIdeas(batchId, chosen, "critic");
@@ -217,7 +235,10 @@ export class CriticService {
     return {
       state: moved.state,
       chosen: chosen.map((idea) => idea.id),
-      nextStep: "Report the three ideas you chose, with your reasons. The main agent shows the owner their words and waits for his yes (copy_approve).",
+      ...(refused.length > 0 ? { refused: refused.map(({ stage, reason }) => ({ stage, reason })) } : {}),
+      nextStep: outreach
+        ? "Report the ideas you chose, with your reasons. The main agent takes the one it is most sure of and goes on; it starts no other critic for the ideas."
+        : "Report the three ideas you chose, with your reasons. The main agent shows the owner their words and waits for his yes (copy_approve).",
     };
   }
 
@@ -229,19 +250,28 @@ export class CriticService {
     if (batch.state !== "ideas") requireMove(batch, "judged", "critic_pick");
     await this.ticket(batch, ticket, "ideas", verdicts.map((verdict) => verdict.ideaId));
     if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
-    await critic.saveVerdicts(batchId, verdicts);
+    const saved = await critic.saveVerdicts(batchId, verdicts);
     const cut = verdicts.filter((verdict) => verdict.verdict === "cut");
-    if (cut.length > 0) {
+    const kept = verdicts.filter((verdict) => verdict.verdict === "keep").map((verdict) => verdict.ideaId);
+    // An outreach batch makes one ad, so one kept idea is enough: a cut idea starts no new round.
+    const outreach = batch.purpose === "outreach";
+    if (cut.length > 0 && !(outreach && kept.length > 0)) {
       return {
         state: batch.state,
         cut: cut.map(({ ideaId, reason }) => ({ ideaId, reason })),
-        nextStep: "Report the cut ideas and your reasons. The main agent writes a new idea in place of each one (ideas_save with all three), and then a fresh critic judges again.",
+        nextStep: outreach
+          ? outreachRound(saved.rounds)
+          : "Report the cut ideas and your reasons. The main agent writes a new idea in place of each one (ideas_save with all three), and then a fresh critic judges again.",
       };
     }
+    if (cut.length > 0) await batches.saveIdeas(batchId, (await batches.ideas(batchId)).filter((idea) => kept.includes(idea.id)), "critic");
     const moved = await batches.move(batch, "judged", "critic_pick");
     return {
       state: moved.state,
-      nextStep: "Report that the three ideas are kept, with your reasons. The main agent now sends one draft to read its price.",
+      ...(cut.length > 0 ? { kept, cut: cut.map(({ ideaId, reason }) => ({ ideaId, reason })) } : {}),
+      nextStep: outreach
+        ? "Report the ideas you kept, with your reasons. The main agent takes the one it is most sure of and goes on; it starts no other critic for the ideas."
+        : "Report that the three ideas are kept, with your reasons. The main agent now sends one draft to read its price.",
     };
   }
 
