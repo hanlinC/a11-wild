@@ -256,6 +256,35 @@ describe("a v2 outreach batch: the burst", () => {
     expect(await view()).toMatchObject({ words: false });
   });
 
+  it("sets the words on a draft that only the pack measure faults: the owner may pick it, with a warning", async () => {
+    await outreachBurst();
+    await choose();
+    const ideas = await selected();
+    await approve(ideas);
+    await callTool(studio, "font_save", { brandId, family: "Archivo", weight: 800 });
+    const made: string[] = [];
+    for (const entry of ideas) {
+      for (let n = 0; n < 3; n++) {
+        const imageId = await render(entry.id, "draft", await skeleton(entry.id));
+        await checked(imageId);
+        made.push(imageId);
+      }
+    }
+    const [wide, ...rest] = made as [string, ...string[]];
+    await studio.services.checks.measure(batchId, wide, "pack_check", { code: "D11", note: "render H/W 0.955 (486 x 509 px); packshot H/W 1.000; difference -4.5%; FAIL at 2%" });
+    for (const imageId of rest) await typeSet(imageId);
+    // The measure rejects nothing here, so this draft is an ad like the others: it waits for its words.
+    expect(await callTool(studio, "outreach_show", { batchId })).toMatchObject({ ok: false, error: expect.stringMatching(/shown when each one is made, checked and carries its words/) });
+    await typeSet(wide);
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ drafts: 9, canBePicked: 9 });
+    const [files, optOuts] = await Promise.all([studio.services.outreach.store.all(), studio.services.outreach.store.optOuts()]);
+    const view = await studio.services.outreach.picks.view(files.find((file) => file.profile.id === "00001")!, optOuts);
+    const warned = view!.drafts.filter((draft) => draft.warning);
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toMatchObject({ imageId: wide, warning: "The pack is drawn 5% wider than in its photo. The limit is 2%." });
+    expect(warned[0]!.blocked).toBeUndefined();
+  });
+
   it("is judged twice at most when the critic refuses every stage", async () => {
     await outreachBurst();
     expect((await choose([...STAGES])).reply.value).toMatchObject({ state: "ideas", nextStep: expect.stringMatching(/round 1 of 2/) });
