@@ -112,12 +112,11 @@ Considered and not built:
 
 ### Assumptions
 
-The owner settled these on 22-11-2026: a client opens their page without a password; the example takes nothing from anyone, has downloads, has example comments and has no results upload.
+The owner settled these on 22-11-2026: a client opens their page without a password; the example takes nothing from anyone, has downloads, has example comments, which the agent writes by its own judgment, and has no results upload.
 
 These are the agent's bets. The owner left the rest of the design open and did not confirm each one.
 
 - A client is a brand of the studio. All packs of one brand belong to one client.
-- The words of the example comments are the owner's. The agent drafts them and he says yes before the link changes.
 - A comment cannot be changed or deleted by the client after it is sent. The owner can hide one.
 - The owner wants to see comments in the dashboard and not by email.
 
@@ -353,7 +352,7 @@ flowchart LR
 1. Make the brand of the example if the live studio does not have it.
 2. Carry the three ads from the old example, marked as an example, and read the page back against the old one, word for word.
 3. Draft three example comments and set them on the example.
-4. Send the owner the new example link with the example comments and wait for his yes to both (R40b, R42).
+4. Send the owner the new example link and wait for his yes to the link change (R42). The words of the example comments are the agent's: the owner left them to its judgment (22-11-2026) and sees them on the page.
 5. On his yes, change the link in the first message and read the message back.
 
 ---
