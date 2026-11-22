@@ -1,5 +1,5 @@
 import { type ApprovedCopy, type Batch, type BatchImage, type BatchState, type Board, type BoardDraft, type CheckItem, type Direction, FINAL_POINTS, type FinalPoints, type ImageChecks, type ImageKind, type Pick as OwnerPick, type Role } from "@a11-wild/shared";
-import { hasWords, teachesNothing } from "../batch/state.js";
+import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { failedPoints, type PointStore } from "../checks/points.js";

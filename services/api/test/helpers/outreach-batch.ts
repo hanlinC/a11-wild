@@ -1,5 +1,5 @@
 import { RULES_VERSION } from "../../src/houserules.js";
-import { batchAtTruth, idea, judgeIdeas, rankDrafts } from "./batch.js";
+import { batchAtTruth, idea, judgeIdeas } from "./batch.js";
 import { callTool, type Studio } from "./deps.js";
 
 const rules = { rulesVersion: RULES_VERSION };
