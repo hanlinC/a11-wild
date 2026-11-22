@@ -38,7 +38,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
   const picking = prospect.stage === "pick_waits";
   const drafts = page.candidates ? (
     <Section title={picking ? "Pick the ad to send" : "Every draft for this brand"} count={page.candidates.drafts.length}>
-      <Candidates id={prospect.id} brand={prospect.brand} candidates={page.candidates} waitsForAgent={prospect.stage === "pick_made"} done={done} />
+      <Candidates id={prospect.id} brand={prospect.brand} candidates={page.candidates} done={done} />
     </Section>
   ) : null;
 

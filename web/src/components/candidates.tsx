@@ -7,10 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 /** What the section says first: what is asked of the owner now, or who acts next. */
-function lead({ choosing, picked, wordsAsked }: OutreachCandidates, waitsForAgent: boolean): string {
+function lead({ choosing, picked, wordsAsked, agentOwes }: OutreachCandidates): string {
   if (choosing === "closed") return "This brand takes no ad now, so nothing is picked.";
   if (wordsAsked) return `Waits for the agent: it sets the other words you asked for ("${wordsAsked.ownerSaid}"). The drafts come back for your pick after that.`;
-  if (picked && waitsForAgent) return "You picked. Waits for the agent: it makes the full-size version of your pick, and the message is then ready. You can still pick another.";
+  if (picked && agentOwes) return "You picked. Waits for the agent: it makes the full-size version of your pick, and the message is then ready. You can still pick another.";
   if (picked) return "Your pick is under Ads. Pick another draft here if you want a different ad for the next message.";
   return "Every draft the studio made for this brand. Pick the one to send: the agent then makes it full size. Nothing is sent by a pick.";
 }
@@ -19,7 +19,7 @@ function lead({ choosing, picked, wordsAsked }: OutreachCandidates, waitsForAgen
  * Every draft the studio made for a brand, by idea, for the owner's own pick.
  * A draft that failed a check is shown greyed with what is wrong, and cannot be picked. A pick sends nothing.
  */
-export function Candidates({ id, brand, candidates, waitsForAgent, done }: { id: string; brand: string; candidates: OutreachCandidates; waitsForAgent: boolean; done: (page: ProspectPage) => void }) {
+export function Candidates({ id, brand, candidates, done }: { id: string; brand: string; candidates: OutreachCandidates; done: (page: ProspectPage) => void }) {
   const { write, busy, error } = useWrite(id, done);
   const [words, setWords] = useState<string>();
   const [none, setNone] = useState(false);
@@ -71,7 +71,7 @@ export function Candidates({ id, brand, candidates, waitsForAgent, done }: { id:
           <p className="text-caption text-muted-foreground">Cannot be sent: {draft.blocked}</p>
         ) : open ? (
           <div className="grid gap-2">
-            {mine && waitsForAgent ? null : (
+            {mine && candidates.agentOwes ? null : (
               <Button type="button" className={TAP} loading={busy === "pick"} onClick={() => write({ action: "pick", body: { imageId: draft.imageId } })}>
                 Pick this one
               </Button>
@@ -101,7 +101,7 @@ export function Candidates({ id, brand, candidates, waitsForAgent, done }: { id:
   return (
     <div className="grid gap-4">
       <p className="text-body" role="status">
-        {lead(candidates, waitsForAgent)}
+        {lead(candidates)}
       </p>
       {ideas.map((drafts) => {
         const first = drafts[0];

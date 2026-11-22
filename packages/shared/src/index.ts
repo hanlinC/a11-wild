@@ -1381,6 +1381,8 @@ export interface OutreachCandidates {
   words: boolean;
   /** True when these drafts wait for his pick now, so "none of these" can be said. */
   waits: boolean;
+  /** True when the agent owes him work on these drafts: the final of his pick, or the other words. */
+  agentOwes: boolean;
   /** `open`: the owner can choose. `agent`: his choice is saved and the agent's work is owed. `closed`: the first message is sent, or the brand takes no ad. */
   choosing: "open" | "agent" | "closed";
   /** The draft he picked. */

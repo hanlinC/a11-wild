@@ -81,6 +81,7 @@ export class OutreachPicks {
       batchId: batch.id,
       words: hasWords(batch.kind) && WORDS_OPEN.includes(batch.state),
       waits: candidatesWait(file)?.batchId === batch.id,
+      agentOwes: mine !== undefined,
       choosing: CLOSED.includes(stageOf(file, optOuts)) ? "closed" : mine?.type === "words" ? "agent" : "open",
       ...(picked?.type === "pick" ? { picked: { ideaId: picked.ideaId, imageId: picked.imageId } } : {}),
       ...(mine?.type === "words" ? { wordsAsked: { imageId: mine.imageId, ownerSaid: mine.ownerSaid } } : {}),
