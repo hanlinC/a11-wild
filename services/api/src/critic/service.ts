@@ -93,11 +93,7 @@ export class CriticService {
     if (step === "ideas") {
       if (batch.state !== "ideas") requireMove(batch, "judged", "critic_open");
       if (ideas.length === 0) throw new Refusal("This batch has no ideas yet. The main agent saves them first (ideas_save).");
-      if (batch.purpose === "outreach" && (await critic.ideaRounds(batchId)) >= OUTREACH_IDEA_ROUNDS) {
-        throw new Refusal(
-          `The ideas of this outreach batch were judged ${OUTREACH_IDEA_ROUNDS} times and none was kept. That is the limit: no good ad can be made for this brand now. Park it with the reason (outreach_mark) and take the next brand.`,
-        );
-      }
+      await this.roundLeft(batch);
       if (hasWords(batch.kind)) {
         return { ...burstPacket(common, shuffled(ideas, stamp)), ...(await critic.issue(batchId, { step, ideaIds: ideas.map((idea) => idea.id), stamp })) };
       }
@@ -113,6 +109,15 @@ export class CriticService {
   }
 
   /** A rough that is still being made is not in the packet yet: the critic waits for it, so that its review is of the whole set. */
+  /** Refuses a judgement of an outreach batch's ideas beyond the limit. Asked when a packet is opened and again when its judgement comes, so packets opened together cannot pass it. */
+  private async roundLeft(batch: Batch) {
+    if (batch.purpose === "outreach" && (await this.deps.critic.ideaRounds(batch.id)) >= OUTREACH_IDEA_ROUNDS) {
+      throw new Refusal(
+        `The ideas of this outreach batch were judged ${OUTREACH_IDEA_ROUNDS} times and none was kept. That is the limit: no good ad can be made for this brand now. Park it with the reason (outreach_mark) and take the next brand.`,
+      );
+    }
+  }
+
   private async noRoughInTheMaking(batchId: string) {
     const waiting = (await this.deps.renders.list(batchId)).filter((render) => render.kind === "rough" && render.status === "queued");
     if (waiting.length > 0) {
@@ -206,6 +211,7 @@ export class CriticService {
     const stages = picks.map((pick) => pick.stage);
     if (!same(stages, [...FUNNEL_STAGES])) throw new Refusal("Give each of tof, mof and bof once: an idea, or ideaId null to refuse the stage.");
     await this.ticket(batch, ticket, "ideas");
+    await this.roundLeft(batch);
     const burst = await batches.burst(batchId);
     const chosen: Idea[] = [];
     for (const stage of FUNNEL_STAGES) {
@@ -249,6 +255,7 @@ export class CriticService {
     if (hasWords(batch.kind)) throw new Refusal("A batch with words has a burst of ideas, and the critic chooses one for each funnel stage: use critic_select.");
     if (batch.state !== "ideas") requireMove(batch, "judged", "critic_pick");
     await this.ticket(batch, ticket, "ideas", verdicts.map((verdict) => verdict.ideaId));
+    await this.roundLeft(batch);
     if (!(await critic.use(batchId, ticket))) throw new Refusal(BAD_TICKET);
     const saved = await critic.saveVerdicts(batchId, verdicts);
     const cut = verdicts.filter((verdict) => verdict.verdict === "cut");

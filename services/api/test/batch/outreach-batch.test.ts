@@ -140,6 +140,17 @@ describe("an outreach batch", () => {
       expect(await state()).toBe("ideas");
     });
 
+    it("counts the limit when the judgement comes too: three packets opened together give two judgements", async () => {
+      await withIdeas({ prospectId: PROSPECT });
+      const tickets: string[] = [];
+      for (let n = 0; n < 3; n++) tickets.push((await callTool(studio, "critic_open", { batchId, step: "ideas", freshHelper: true })).value.ticket);
+      const cutAll = (ticket: string) => callTool(studio, "critic_pick", { ...rules, batchId, ticket, ideas: IDEAS.map((ideaId) => ({ ideaId, verdict: "cut", reason: "As a fresh helper saw it." })) });
+      expect((await cutAll(tickets[0]!)).ok).toBe(true);
+      expect((await cutAll(tickets[1]!)).ok).toBe(true);
+      expect(await cutAll(tickets[2]!)).toMatchObject({ ok: false, error: expect.stringMatching(/judged 2 times.*Park it/) });
+      expect((await callTool(studio, "batch_get", { batchId })).value.batch.state).toBe("ideas");
+    });
+
     it("leaves a client's batch as it was: every idea is kept before it goes on, and the studio counts no limit", async () => {
       await withIdeas({});
       for (let round = 0; round < 3; round++) {
