@@ -253,7 +253,10 @@ export class BoardService implements FinalRule {
       const hasPack = (await brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
       const [found, all, drafts, ranks] = await Promise.all([checks.all(batch.id), this.deps.images.list(batch.id), this.sent(batch.id, "draft"), critic.ranks(batch.id)]);
       const approved = hasWords(batch.kind) ? await this.deps.copy.list(batch.id) : [];
-      for (const idea of await batches.ideas(batch.id)) {
+      const ideas = await batches.ideas(batch.id);
+      // An outreach batch makes one ad: once the agent has sent a draft of one idea, an idea it sent none of is owed none.
+      const started = ideas.filter((idea) => (drafts.get(idea.id) ?? []).length > 0);
+      for (const idea of batch.purpose === "outreach" && started.length > 0 ? started : ideas) {
         const mine = drafts.get(idea.id) ?? [];
         const words = approved.find((copy) => copy.ideaId === idea.id);
         if (mine.length < DRAFTS_PER_IDEA) missing.push(`${DRAFTS_PER_IDEA - mine.length} more finished draft(s) of ${idea.id}`);

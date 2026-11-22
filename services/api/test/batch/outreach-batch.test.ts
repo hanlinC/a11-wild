@@ -140,6 +140,28 @@ describe("an outreach batch", () => {
       expect(await state()).toBe("ideas");
     });
 
+    it("owes drafts only to the idea the agent took: two kept ideas, one ad", async () => {
+      await withIdeas({ prospectId: PROSPECT });
+      expect((await judge(["idea-3"])).value).toMatchObject({ state: "judged", kept: ["idea-1", "idea-2"] });
+      drafts = {};
+      for (let n = 0; n < 3; n++) {
+        const imageId = await render("idea-2", "draft");
+        await check(imageId);
+        drafts["idea-2"] ??= imageId;
+      }
+      expect((await rankDrafts(studio, batchId)).ok).toBe(true);
+      await callTool(studio, "board_show", { batchId });
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      expect(await state()).toBe("waiting_pick");
+      await pick("idea-2", drafts["idea-2"]!);
+      await pick("idea-1", null);
+      const imageId = await render("idea-2", "final", drafts["idea-2"]);
+      await check(imageId);
+      const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId });
+      await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+      expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true, batch: { state: "done" } });
+    });
+
     it("counts the limit when the judgement comes too: three packets opened together give two judgements", async () => {
       await withIdeas({ prospectId: PROSPECT });
       const tickets: string[] = [];
