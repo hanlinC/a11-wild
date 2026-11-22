@@ -48,14 +48,16 @@ The owner's first outreach message shows an example pack on the address of the o
 - R33. One private link for each client opens a page with every pack of that client, newest first, each at the version its own link shows.
 - R34. A pack on the client's page shows all that a pack page shows today (see `web/src/routes/pack.tsx`), and nothing of another client or of the studio.
 - R35. A link to one pack that exists today keeps working and shows the same pack.
-- R36. Each ad can be downloaded as JPEG and as PNG.
+- R36. Each ad has a download of its full-size picture, as the studio keeps it (JPEG). A carried ad that came with a PNG has that download too. A download link is made fresh at each click and works for a few minutes.
 - R37. The client can write a comment on a pack as a whole or on one ad of it. The comment is plain text of 1,000 characters or fewer, and a pack takes 50 comments.
 - R38. The client sees the comments already sent on their own packs, with the time of each.
 - R39. The results upload of today works from the client's page for each pack, with the same limits.
 
 **The example**
 
-- R40. A pack can be marked as an example. An example is read-only: its page has no comment box and no upload box, and the server refuses both.
+- R40. A pack can be marked as an example. The example is a page of its own, made only for cold outreach: it shows a prospect what a paying client gets. It belongs to no client's page.
+- R40a. The example shows the ads, the Meta text, the reasons, the fact check, the launch plan and the downloads (R36). It has no results upload.
+- R40b. Nobody can send anything on the example. In the place of the comment box it shows a few example comments, written by the owner and labelled "Example comments". The server refuses a comment and an upload for an example, whatever the page shows.
 - R41. The example pack holds the three Cat & the Fiddle ads of the old example with their ad names, Meta text, reasons, fact check and launch plan unchanged.
 - R42. The link in the owner's first message changes only after he has seen the new example and said yes.
 
@@ -78,14 +80,14 @@ The owner's first outreach message shows an example pack on the address of the o
 
 - F7. A client opens their link. R33, R34: the newest pack is on top, older packs under it. They download a picture (R36), copy the Meta text, and write a comment on one ad (R37, R38).
 - F8. The client sends a results file from a pack on the page (R39). The owner opens the client's page and sees the comment and the file (R43, R46).
-- F9. A prospect opens the example link. R40: they see the three ads and their text, and no box to write in or send to.
+- F9. A prospect opens the example link. R40 to R40b: they see the three ads and their text, can download a picture, and read the example comments. There is no box to write in or send to.
 - F10. The owner thinks a link went to the wrong person. He replaces it on the client's page (R44), gets the new link once (R45), and the old one opens nothing (R47).
 
 ### Scope Boundaries
 
-- No client accounts, passwords or sign-in. The link is the key, as it is for a pack today.
-- No payments, invoices or contracts.
-- No email or message to a client from the studio. The owner sends each link himself.
+- No client accounts, passwords or sign-in: the owner said they add friction (22-11-2026). The link is the key, as it is for a pack today.
+- No payments, invoices or contracts. Odoo handles payments; links to its invoices on the client's page are on hold until the owner takes it up again (22-11-2026).
+- No email or message to a client from the studio, on hold by the owner's word (22-11-2026). The owner sends each link himself.
 - No approval step for a client. A comment is the client's whole voice on the page.
 - No access to a client's Meta ad account. Results come from the client's files.
 - The packs of other clients in a11-adgen are not moved. Only the example is carried.
@@ -110,17 +112,17 @@ Considered and not built:
 
 ### Assumptions
 
-These are the agent's bets. The owner left the design open and did not confirm each one.
+The owner settled these on 22-11-2026: a client opens their page without a password; the example takes nothing from anyone, has downloads, has example comments and has no results upload.
+
+These are the agent's bets. The owner left the rest of the design open and did not confirm each one.
 
 - A client is a brand of the studio. All packs of one brand belong to one client.
-- A client opens their page without a password.
-- The example is read-only for everyone who holds its link.
+- The words of the example comments are the owner's. The agent drafts them and he says yes before the link changes.
 - A comment cannot be changed or deleted by the client after it is sent. The owner can hide one.
 - The owner wants to see comments in the dashboard and not by email.
 
 ### Open Questions
 
-- Deferred to implementation: whether a final is kept as JPEG or PNG, and where the other format is made (at publish, by the pixel service). R36 needs both for each ad.
 - Deferred to implementation: whether the brand "Cat & the Fiddle" already exists in the live studio. If not, the operational run makes it before the example is carried.
 
 ---
@@ -132,7 +134,8 @@ These are the agent's bets. The owner left the design open and did not confirm e
 - KTD13. A pack has a source: `batch` (as today) or `carried`. A carried pack gets its whole content from the caller: brand, product name, and for each ad the picture, the ad name, the stage, the Meta text, the reason and the claims. It has its own id and belongs to a brand. Rationale: the example's ads have no batch here, and a made-up batch would pass through the gates of a real one with nothing behind them. A batch pack keeps its keys, so R35 holds with no data move.
 - KTD14. The client link is a second kind of link in the same link store: its token hash points to a brand, where a pack link's points to a pack. The view is built from the brand's packs at read time. Rationale: one token rule, one hash rule and one "replaced opens nothing" rule for both (R44, R45, R47).
 - KTD15. Comments are items under the pack, written through a link, with the count taken in one step so two senders cannot pass the cap together. Rationale: the results upload does the same (`services/api/src/results/store.ts`).
-- KTD16. "Example" is a field of the pack. The service refuses a comment and an upload for an example, and the page hides both boxes. The client link of a brand does not list an example pack. Rationale: the refusal lives on the server, so a hidden box is not the only guard (R40).
+- KTD16. "Example" is a field of the pack, and the example comments are a field of it too: a short list of author ("client" or "studio"), text and, if it is on one ad, the ad. The service refuses a comment and an upload for an example, the comment store is never read for one, and the page shows the example comments under their label. The client link of a brand does not list an example pack. Rationale: the owner does not want to watch a box that many strangers can write in; with no write path there is nothing to watch, and the refusal lives on the server, so a hidden box is not the only guard.
+- KTD16a. A download is a route behind the link: it checks the token, then sends the browser to a signed address of that one picture that works for a few minutes and names the file by the ad name. Rationale: the pictures stay private, a page left open does not hold a dead link, and the route gives out nothing the page does not already show.
 - KTD17. The pictures of a carried pack are copied into the studio's private store from https addresses with the existing copy step (`copyPicture`, used by `reference_add`). Rationale: no new upload route, and the address safety checks are already there.
 - KTD18. Only the owner can carry a pack, mark an example, and manage a client link. The dashboard routes for it sit behind the owner guard that the outreach routes use.
 - KTD19. The link in the owner's first message is his own text. The agent changes it with the owner's yes through the same save the Messages page uses, and through no other path (R42).
@@ -251,7 +254,9 @@ flowchart LR
 - A comment on an ad name the pack does not hold is refused.
 - An empty comment and one over 1,000 characters are refused.
 - The 51st comment of a pack is refused, also when two arrive together.
-- A comment and an upload on an example are refused.
+- A comment and an upload on an example are refused, also with a body that is right in every other way.
+- The view of an example holds its example comments and no comment from the comment store.
+- Example comments on a pack that is not an example are refused, and so are more than six, an empty one and one over 1,000 characters.
 - A hidden comment is absent from the client's view and present on the owner's.
 - A comment that holds markup comes back as the same text.
 
@@ -294,6 +299,7 @@ flowchart LR
 
 - Each link route answers 404 with the same body for a wrong, an old and a badly shaped token.
 - Each link route sets no-index and no-referrer.
+- A download answers with a redirect to a signed address for a right token and a number of an ad the pack holds, and 404 for all else.
 - Each owner route answers 401 with no session and 403 for a member.
 - A comment body with an unknown field is refused.
 - The answer of a link action holds the link once, and the list of clients holds none.
@@ -315,9 +321,9 @@ flowchart LR
 **Test scenarios:**
 
 - A client with two packs sees the newest open and the older one folded under it.
-- An ad has a JPEG and a PNG download.
+- An ad has a download, and a carried ad with a PNG has two. A click asks the server for a fresh address.
 - A sent comment appears in the list without a reload, and a refusal shows the server's sentence.
-- An example shows no comment box and no upload box.
+- An example shows its downloads and its example comments under the label "Example comments", and no comment box and no upload box.
 - A link that opens nothing shows the same page as an unknown address.
 - The owner's page shows a new link once, with a copy button, and not after a reload.
 - At 390 px no part of the page scrolls sideways.
@@ -346,8 +352,9 @@ flowchart LR
 
 1. Make the brand of the example if the live studio does not have it.
 2. Carry the three ads from the old example, marked as an example, and read the page back against the old one, word for word.
-3. Send the owner the new example link and wait for his yes (R42).
-4. On his yes, change the link in the first message and read the message back.
+3. Draft three example comments and set them on the example.
+4. Send the owner the new example link with the example comments and wait for his yes to both (R40b, R42).
+5. On his yes, change the link in the first message and read the message back.
 
 ---
 
