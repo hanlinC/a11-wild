@@ -120,6 +120,22 @@ describe("The owner's Clients page", () => {
     expect(sent).toEqual([{ action: "make" }, { action: "off" }]);
   });
 
+  it("makes a new link for a brand whose link was turned off, where the studio refuses to replace", async () => {
+    const sent: unknown[] = [];
+    stubApi({
+      "GET /api/portal": () => ({ body: { clients: clients.map((client) => (client.brand.id === "brand-1" ? { ...client, link: { ...client.link, state: "off" } } : client)) } }),
+      "POST /api/portal/brand-1/link": (body) => {
+        sent.push(body);
+        return { body: { url: "https://studio.example.com/client/again" } };
+      },
+    });
+    const user = userEvent.setup();
+    renderSignedIn(<Clients />);
+    await user.click(await screen.findByRole("button", { name: "Make a new link" }));
+    expect(await screen.findByText("https://studio.example.com/client/again")).toBeInTheDocument();
+    expect(sent).toEqual([{ action: "make" }]);
+  });
+
   it("says so when nothing waits and no brand has a pack", async () => {
     stubApi({ "GET /api/portal": () => ({ body: { clients: [] } }) });
     renderSignedIn(<Clients />);

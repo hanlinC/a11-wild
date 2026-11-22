@@ -158,7 +158,7 @@ function Link({ client }: { client: OwnerClient }) {
             Make the link
           </Button>
         ) : (
-          <Button variant="secondary" size="compact" onClick={() => void act("replace")}>
+          <Button variant="secondary" size="compact" onClick={() => void act(state === "on" ? "replace" : "make")}>
             {state === "on" ? "Replace the link" : "Make a new link"}
           </Button>
         )}
