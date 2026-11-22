@@ -10,6 +10,27 @@ const ROUND = "grid size-11 place-items-center rounded-full bg-black/50 text-whi
 /** A sideways move of the finger this long, in pixels, is a swipe to the next picture. */
 const SWIPE = 48;
 
+interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Whether a point is on a picture that is drawn whole and centred in its box. The box is larger than the picture on two sides.
+ * A picture that has not loaded yet has no size: the point counts as on it, so a click then closes nothing.
+ */
+export function onPicture(box: Box, natural: { width: number; height: number }, x: number, y: number): boolean {
+  if (natural.width <= 0 || natural.height <= 0 || box.width <= 0 || box.height <= 0) return true;
+  const scale = Math.min(box.width / natural.width, box.height / natural.height);
+  const width = natural.width * scale;
+  const height = natural.height * scale;
+  const left = box.left + (box.width - width) / 2;
+  const top = box.top + (box.height - height) / 2;
+  return x >= left && x <= left + width && y >= top && y <= top + height;
+}
+
 /**
  * One picture large, over the page it came from: the owner looks, steps to the next one and stays where he was.
  * It is the browser's own dialog, so Esc closes it and the focus goes back to the picture he opened.
@@ -21,10 +42,11 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
   const shot = shots[at];
   const many = shots.length > 1;
 
+  // After every draw, not only the first: a viewer that is on the page is always open.
   useEffect(() => {
     const node = dialog.current;
     if (node && !node.open) node.showModal();
-  }, []);
+  });
 
   if (!shot) return null;
   // The dialog closes itself, so the focus goes back to the picture he opened; its close event tells the page.
@@ -58,7 +80,7 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
       <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1">
         {/* A click beside the picture closes it; the key for that is Esc. */}
         <div
-          className="relative flex min-h-0 items-center justify-center p-3 sm:p-6"
+          className="relative min-h-0"
           onClick={(event) => (event.target === event.currentTarget ? close() : undefined)}
           onTouchStart={(event) => {
             const first = event.touches[0];
@@ -66,7 +88,15 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
           }}
           onTouchEnd={swiped}
         >
-          <img src={shot.url} alt={shot.alt} className="max-h-full max-w-full rounded-lg object-contain" />
+          {/* The box has its size from the window alone, and the picture fills it: a picture that loads late or is small opens as large as any other. */}
+          <div className="absolute inset-3 sm:inset-6">
+            <img
+              src={shot.url}
+              alt={shot.alt}
+              className="size-full object-contain"
+              onClick={(event) => (onPicture(event.currentTarget.getBoundingClientRect(), { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }, event.clientX, event.clientY) ? undefined : close())}
+            />
+          </div>
           <button type="button" aria-label="Close" onClick={close} className={`${ROUND} absolute top-3 right-3`}>
             <X className="size-5" aria-hidden />
           </button>
