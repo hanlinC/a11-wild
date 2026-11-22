@@ -693,7 +693,8 @@ export interface PackSummary {
   /** A carried pack has a product name and no product of this studio. */
   product: { id?: string; name: string };
   versions: (Omit<PackVersion, "ads"> & { ads: (PackAd & { viewUrl: string })[] })[];
-  uploads: (PackUpload & { downloadUrl: string })[];
+  /** The files the client sent. Only a picture the studio checked has an address to open; a checked CSV is read as a table. */
+  uploads: (Omit<PackUpload, "key"> & { openUrl?: string })[];
   results: AdResult[];
 }
 
@@ -702,7 +703,6 @@ export const UPLOAD_TYPES = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "text/csv": "csv",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
 } as const;
 export type UploadType = keyof typeof UPLOAD_TYPES;
 export const UPLOAD_MAX_BYTES = 10_000_000;
@@ -720,7 +720,24 @@ export interface PackUpload {
   /** The version the link showed when the file was sent. */
   packVersion: number;
   at: string;
+  /**
+   * What the studio found when it read the file: `checked` is the type it was sent as, `refused` was something else and is deleted,
+   * `missing` never arrived. Not set while the studio has not read it yet. Only a checked file can be opened.
+   */
+  state?: UploadState;
 }
+
+export type UploadState = "checked" | "refused" | "missing";
+
+/** A client's CSV as the dashboard shows it: text in rows, cut to a size a page can hold. It is never opened as a file. */
+export interface UploadTable {
+  rows: string[][];
+  /** True when the file held more rows, columns or characters than the table shows. */
+  cut: boolean;
+}
+export const TABLE_MAX_ROWS = 500;
+export const TABLE_MAX_COLUMNS = 60;
+export const TABLE_MAX_CELL = 300;
 
 /** The numbers of one ad over one period, as the client's report gave them. They are typed in by the owner or his agent. */
 export interface AdResult {

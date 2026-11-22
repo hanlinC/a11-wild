@@ -10,8 +10,8 @@ import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
 
 const STAGES = { tof: "Top of funnel", mof: "Middle of funnel", bof: "Bottom of funnel" } as const;
-const ACCEPT = ".jpg,.jpeg,.png,.csv,.xlsx";
-const BY_ENDING: Record<string, UploadType> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", csv: "text/csv", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+const ACCEPT = ".jpg,.jpeg,.png,.csv";
+const BY_ENDING: Record<string, UploadType> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", csv: "text/csv" };
 
 /** The type of a file by its ending: a browser names the type of a CSV in several ways, or not at all. */
 export const typeOf = (name: string): UploadType | undefined => BY_ENDING[name.split(".").at(-1)?.toLowerCase() ?? ""];
@@ -143,7 +143,7 @@ function Results({ token }: { token: string }) {
       const set = (entry: Sent) => setFiles((all) => [...all.filter((other) => other.name !== file.name), entry]);
       const type = typeOf(file.name);
       if (!type || !Object.hasOwn(UPLOAD_TYPES, type)) {
-        set({ name: file.name, state: "failed", message: "Send a JPEG or PNG screenshot, or a CSV or XLSX export." });
+        set({ name: file.name, state: "failed", message: "Send a JPEG or PNG screenshot, or a CSV export." });
         continue;
       }
       if (file.size > UPLOAD_MAX_BYTES) {
@@ -165,7 +165,7 @@ function Results({ token }: { token: string }) {
       <p className="text-body">
         After the ads have run, send a screenshot of Ads Manager or its export. Show the ad names, impressions, clicks and CTR, and the dates.
       </p>
-      <p className="mt-1 text-caption text-muted-foreground">JPEG, PNG, CSV or XLSX, up to 10 MB each.</p>
+      <p className="mt-1 text-caption text-muted-foreground">JPEG, PNG or CSV, up to 10 MB each. In Ads Manager, choose "Export table data" and "CSV".</p>
       <label className="mt-4 inline-block">
         <span className="sr-only">Choose results files</span>
         <input type="file" multiple accept={ACCEPT} onChange={(event) => { void send(event.target.files); event.target.value = ""; }} className="text-body file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-card file:px-4 file:text-body" />

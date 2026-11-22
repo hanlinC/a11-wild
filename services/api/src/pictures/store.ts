@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { GetObjectCommand, NoSuchKey, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, NoSuchKey, PutObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Refusal } from "../mcp/registry.js";
 import { type Net, publicFetch, readCapped } from "../urlsafety.js";
@@ -41,6 +41,8 @@ export interface Pictures {
   putUrl(key: string, type: string, bytes: number): Promise<string>;
   /** A link that downloads a file under `name` and never shows it in the page. */
   downloadUrl(key: string, name: string): Promise<string>;
+  /** Deletes a file. A file that is not there is no fault. */
+  remove(key: string): Promise<void>;
 }
 
 export class S3Pictures implements Pictures {
@@ -62,6 +64,10 @@ export class S3Pictures implements Pictures {
       if (error instanceof NoSuchKey) return undefined;
       throw error;
     }
+  }
+
+  async remove(key: string): Promise<void> {
+    await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   viewUrl(key: string, seconds = VIEW_SECONDS): Promise<string> {

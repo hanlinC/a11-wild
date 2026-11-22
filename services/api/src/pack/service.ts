@@ -30,6 +30,7 @@ import { adName } from "../meta/names.js";
 import type { MetaStore } from "../meta/store.js";
 import { MAX_PICTURE_BYTES, type Pictures, pictureType } from "../pictures/store.js";
 import type { ResultStore } from "../results/store.js";
+import type { UploadService } from "../results/uploads.js";
 import { type CommentStore, exampleComment } from "./comments.js";
 import { CARRIED, type PackStore } from "./store.js";
 
@@ -49,6 +50,7 @@ interface Deps {
   packs: PackStore;
   results: ResultStore;
   comments: CommentStore;
+  uploads: UploadService;
   pictures: Pictures;
   publicOrigin: string;
   now: () => Date;
@@ -378,7 +380,7 @@ export class PackService {
     const { results, pictures } = this.deps;
     // The link of an example is held by many strangers. It takes nothing, whatever the page that asks looks like.
     if (pack.example) throw new Refusal("This page is an example. It takes no file.");
-    if (!Object.hasOwn(UPLOAD_TYPES, file.type)) throw new Refusal("Send a JPEG or PNG screenshot, or a CSV or XLSX export.");
+    if (!Object.hasOwn(UPLOAD_TYPES, file.type)) throw new Refusal("Send a JPEG or PNG screenshot, or a CSV export.");
     if (!Number.isInteger(file.bytes) || file.bytes < 1 || file.bytes > UPLOAD_MAX_BYTES) throw new Refusal("A file can be up to 10 MB.");
     const type = file.type as UploadType;
     // The name is shown to the owner: letters, digits and a few marks only, so it cannot carry a path or a script.
@@ -390,16 +392,16 @@ export class PackService {
 
   /** Every pack as the dashboard lists it, newest first. No link: the studio does not keep it. */
   async summaries(): Promise<PackSummary[]> {
-    const { packs, pictures, results } = this.deps;
+    const { packs, pictures, results, uploads: files } = this.deps;
     const list = await Promise.all(
       (await packs.all()).map(async ({ tokenHash: _tokenHash, ...pack }): Promise<PackSummary> => {
-        const [{ brand, product }, versions, uploads, typed] = await Promise.all([this.names(pack), packs.versions(pack.id), results.uploads(pack.id), results.results(pack.id)]);
+        const [{ brand, product }, versions, uploads, typed] = await Promise.all([this.names(pack), packs.versions(pack.id), files.list(pack.id), results.results(pack.id)]);
         return {
           pack,
           brand,
           product,
           versions: await Promise.all(versions.map(async (version) => ({ ...version, ads: await Promise.all(version.ads.map(async (ad) => ({ ...ad, viewUrl: await pictures.viewUrl(ad.key) }))) }))),
-          uploads: await Promise.all(uploads.map(async (upload) => ({ ...upload, downloadUrl: await pictures.downloadUrl(upload.key, upload.name) }))),
+          uploads: await Promise.all(uploads.map(async ({ key, ...upload }) => ({ ...upload, ...(upload.state === "checked" && upload.type !== "text/csv" ? { openUrl: await pictures.viewUrl(key) } : {}) }))),
           results: typed,
         };
       }),

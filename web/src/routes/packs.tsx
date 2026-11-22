@@ -11,6 +11,12 @@ const percent = (share: number) => `${(share * 100).toFixed(2)}%`;
 const size = (bytes: number) => (bytes < 1_000_000 ? `${Math.max(1, Math.round(bytes / 1000))} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`);
 
 /** Every client pack: its versions, the files its client sent back, and the numbers typed in from them. */
+const UPLOAD_STATE = {
+  arriving: "still arriving",
+  refused: "deleted: it was not the type it was sent as",
+  missing: "never arrived",
+} as const;
+
 export function Packs() {
   const { value: packs, error } = useLoad(api.packs);
 
@@ -86,7 +92,8 @@ function PackCard({ pack }: { pack: PackSummary }) {
             <ul className="space-y-1 text-caption">
               {pack.uploads.map((upload) => (
                 <li key={upload.id}>
-                  <OutLink href={upload.downloadUrl}>{upload.name}</OutLink>
+                  {upload.openUrl ? <OutLink href={upload.openUrl}>{upload.name}</OutLink> : <span className={upload.state === "refused" || upload.state === "missing" ? "line-through" : undefined}>{upload.name}</span>}
+                  {upload.state !== "checked" && <span className="text-muted-foreground"> · {UPLOAD_STATE[upload.state ?? "arriving"]}</span>}
                   <span className="text-muted-foreground">
                     {" "}
                     · {size(upload.bytes)} · {when(upload.at)} · sent on version {upload.packVersion}
@@ -95,7 +102,7 @@ function PackCard({ pack }: { pack: PackSummary }) {
               ))}
             </ul>
           )}
-          <p className="mt-2 text-caption text-muted-foreground">A client's file is not checked by the studio. It downloads; it never opens in this page.</p>
+          <p className="mt-2 text-caption text-muted-foreground">The studio reads each file before you can open it, and deletes one that is not the picture or the CSV it was sent as. A CSV is shown as a table of text; it never opens in a spreadsheet program.</p>
         </div>
         <div>
           <h3 className="mb-2 text-body font-medium">Results</h3>

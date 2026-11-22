@@ -106,7 +106,8 @@ describe("A client's pack page", () => {
 describe("typeOf", () => {
   it("names the type by the ending, in any case", () => {
     expect(typeOf("Shot.JPG")).toBe("image/jpeg");
-    expect(typeOf("export.xlsx")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(typeOf("export.CSV")).toBe("text/csv");
+    expect(typeOf("export.xlsx")).toBeUndefined();
     expect(typeOf("page.html")).toBeUndefined();
     expect(typeOf("no-ending")).toBeUndefined();
   });

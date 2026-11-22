@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { BatchStore } from "../../batch/store.js";
 import type { PackStore } from "../../pack/store.js";
-import type { Pictures } from "../../pictures/store.js";
 import type { ResultStore } from "../../results/store.js";
+import type { UploadService } from "../../results/uploads.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
 
 const id = z.string().min(1).max(64);
@@ -16,7 +16,7 @@ const day = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, "A day is year-month-day, as 2026-11-23.")
   .refine(isDay, "That day does not exist. Read the report again.");
 
-export function resultTools({ batches, packs, results, pictures }: { batches: BatchStore; packs: PackStore; results: ResultStore; pictures: Pictures }): ToolDefinition[] {
+export function resultTools({ batches, packs, results, uploads }: { batches: BatchStore; packs: PackStore; results: ResultStore; uploads: UploadService }): ToolDefinition[] {
   return [
     defineTool({
       name: "results_get",
@@ -25,9 +25,10 @@ export function resultTools({ batches, packs, results, pictures }: { batches: Ba
       input: { batchId: id },
       handler: async ({ batchId }) => {
         await batches.get(batchId);
-        const uploads = await results.uploads(batchId);
+        // The studio reads each file before it gives an address: a file that is not what it was sent as is deleted and has none.
+        const files = await uploads.list(batchId);
         return {
-          uploads: await Promise.all(uploads.map(async ({ key, ...upload }) => ({ ...upload, downloadUrl: await pictures.downloadUrl(key, upload.name) }))),
+          uploads: await Promise.all(files.map(async ({ key: _key, ...upload }) => ({ ...upload, ...(upload.state === "checked" ? { downloadUrl: (await uploads.open(batchId, upload.id)).url } : {}) }))),
           results: await results.results(batchId),
         };
       },

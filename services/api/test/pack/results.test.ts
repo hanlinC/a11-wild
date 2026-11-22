@@ -1,5 +1,6 @@
 import type { BatchImage } from "@a11-wild/shared";
 import { beforeEach, describe, expect, it } from "vitest";
+import { PNG } from "../helpers/pictures.js";
 import { RULES_VERSION } from "../../src/houserules.js";
 import { approvedClient, callTool, createStudio, json, sessionCookie, type Studio } from "../helpers/deps.js";
 import { pickedBatch } from "../helpers/picked.js";
@@ -39,8 +40,13 @@ describe("a results file through the pack link", () => {
     const { upload, putUrl } = await json(taken);
     expect(upload.name).toBe("Ads Manager _week 1_.csv");
     expect(putUrl).toMatch(new RegExp(`^https://pictures\\.example/quarantine/packs/${batchId}/${upload.id}\\.csv\\?put=1&type=text%2Fcsv&bytes=48211$`));
+    // Until the studio has read the file, nobody gets an address for it.
+    const waiting = (await callTool(studio, "results_get", { batchId })).value.uploads;
+    expect(waiting).toMatchObject([{ id: upload.id, type: "text/csv", bytes: 48211, packVersion: 1 }]);
+    expect(waiting[0]).not.toHaveProperty("downloadUrl");
+    await studio.pictures.put(`quarantine/packs/${batchId}/${upload.id}.csv`, new TextEncoder().encode("Ad name,Impressions\na11,1000\n"), "text/csv");
     const kept = (await callTool(studio, "results_get", { batchId })).value.uploads;
-    expect(kept).toMatchObject([{ id: upload.id, type: "text/csv", bytes: 48211, packVersion: 1, downloadUrl: expect.stringContaining("?download=") }]);
+    expect(kept).toMatchObject([{ id: upload.id, state: "checked", downloadUrl: expect.stringContaining("?download=") }]);
     expect(JSON.stringify(kept)).not.toContain('"key"');
   });
 
@@ -56,7 +62,9 @@ describe("a results file through the pack link", () => {
       const refused = await send(file);
       expect(refused.status).toBe(400);
     }
-    expect((await send({ name: "export.xlsx", type: XLSX, bytes: 10_000_000 })).status).toBe(200);
+    // A spreadsheet file can carry a program. The studio takes the same numbers as a CSV, which is text.
+    expect((await send({ name: "export.xlsx", type: XLSX, bytes: 10_000 })).status).toBe(400);
+    expect((await send({ name: "export.csv", type: "text/csv", bytes: 10_000_000 })).status).toBe(200);
     expect((await callTool(studio, "results_get", { batchId })).value.uploads).toHaveLength(1);
   });
 
@@ -101,9 +109,10 @@ describe("results_save", () => {
   });
 
   it("shows the files and the numbers on the dashboard's list of packs", async () => {
-    await send({ name: "week-1.png", type: "image/png", bytes: 4000 });
+    const { upload } = await json(await send({ name: "week-1.png", type: "image/png", bytes: PNG.length }));
+    await studio.pictures.put(`quarantine/packs/${batchId}/${upload.id}.png`, PNG, "image/png");
     await callTool(studio, "results_save", numbers());
     const { packs } = await json(await studio.app.request("/api/packs", { headers: { cookie: await sessionCookie(studio) } }));
-    expect(packs[0]).toMatchObject({ uploads: [{ name: "week-1.png", downloadUrl: expect.any(String) }], results: [{ adName: AD, ctr: 0.015 }] });
+    expect(packs[0]).toMatchObject({ uploads: [{ name: "week-1.png", state: "checked", openUrl: expect.stringContaining("?signed=1") }], results: [{ adName: AD, ctr: 0.015 }] });
   });
 });

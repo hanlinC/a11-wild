@@ -27,7 +27,7 @@ export function packRoutes(routes: Hono<SessionEnv>, deps: Deps, session: Middle
   routes.post("/api/pack/:token/uploads", async (c) => {
     c.header("referrer-policy", "no-referrer");
     const body = FILE.safeParse(await c.req.json().catch(() => undefined));
-    if (!body.success) return c.json({ error: "bad_request", message: "Send a JPEG or PNG screenshot, or a CSV or XLSX export." }, 400);
+    if (!body.success) return c.json({ error: "bad_request", message: "Send a JPEG or PNG screenshot, or a CSV export." }, 400);
     try {
       const taken = await pack.upload(c.req.param("token"), body.data);
       if (!taken) return c.json({ error: "not_found" }, 404);

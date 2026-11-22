@@ -12,6 +12,10 @@ export class MemoryPictures implements Pictures {
     return body && body.length <= maxBytes ? body : undefined;
   }
 
+  async remove(key: string): Promise<void> {
+    this.files.delete(key);
+  }
+
   async viewUrl(key: string): Promise<string> {
     return `https://pictures.example/${key}?signed=1`;
   }

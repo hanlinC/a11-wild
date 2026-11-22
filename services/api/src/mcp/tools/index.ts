@@ -19,6 +19,7 @@ import { MetaStore } from "../../meta/store.js";
 import { Importer } from "../../import/ingest.js";
 import { ActivityNotices, type Notifier } from "../../notify.js";
 import { ClientService } from "../../pack/client.js";
+import { UploadService } from "../../results/uploads.js";
 import { CommentService, CommentStore } from "../../pack/comments.js";
 import { PackService } from "../../pack/service.js";
 import { PackStore } from "../../pack/store.js";
@@ -128,14 +129,16 @@ export function studioTools(parts: StudioParts) {
   const packs = new PackStore(table);
   const results = new ResultStore(table, now);
   const commentStore = new CommentStore(table, now);
-  const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, comments: commentStore, pictures, publicOrigin: config.publicOrigin, now });
-  const clients = new ClientService({ brands, packs, pack, publicOrigin: config.publicOrigin, now });
   const notices = new ActivityNotices(table, now, parts.notifier);
+  // A file's brand is asked for when a client sends one, long after the pack service below exists.
+  const uploads: UploadService = new UploadService({ results, pictures, brandOf: async (of) => brands.brand(await pack.brandOf(of)), notify: (activity) => notices.tell(activity), now });
+  const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, comments: commentStore, uploads, pictures, publicOrigin: config.publicOrigin, now });
+  const clients = new ClientService({ brands, packs, pack, publicOrigin: config.publicOrigin, now });
   const comments = new CommentService({ comments: commentStore, brandOf: async (of) => brands.brand(await pack.brandOf(of)), notify: (activity) => notices.tell(activity) });
   const outreachStore = new OutreachStore(table, now);
   const sequence = new OutreachSequence(outreachStore, now);
   const desk = new OutreachDesk({ store: outreachStore, batches, board, ledger });
-  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, results };
+  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, uploads, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
@@ -149,7 +152,7 @@ export function studioTools(parts: StudioParts) {
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),
-    ...resultTools({ batches, packs, results, pictures }),
+    ...resultTools({ batches, packs, results, uploads }),
     ...criticTools({ critic, calibration }),
     ...renderTools({ render }),
     ...pixelTools({ pixels }),
