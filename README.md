@@ -25,7 +25,7 @@ A private ad studio on AWS. An AI agent takes a brand and a product to three fin
 | Service | What it does here |
 |---|---|
 | CloudFront | The one public address: serves the dashboard, passes API paths on, adds security headers |
-| S3 | Two private buckets: the dashboard files and the pictures (shown through short-lived signed links) |
+| S3 | The studio's two private buckets: the dashboard files and the pictures (shown through short-lived signed links). CDK keeps a third for deploy files. |
 | API Gateway (HTTP API) | The door to the API and the MCP server |
 | Lambda | Runs the API and MCP server, the daily clean-up, and the pixel tools (a container) |
 | DynamoDB | The database: one table, on-demand, with point-in-time recovery |
