@@ -52,6 +52,8 @@ export function onPicture(box: Box, natural: { width: number; height: number }, 
 
 /** How many viewers took their own step back in the history: the step tells every viewer, and it is not a Back of the reader. */
 let ownSteps = 0;
+/** A viewer that went away gives its step back a moment later, so a viewer that comes at once takes the step over and no Back runs against a new step. */
+let leaving: number | undefined;
 
 /**
  * One picture large, over the page it came from, and the whole screen is the picture.
@@ -81,7 +83,9 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
 
   // One step in the history, so the browser's Back closes the picture and does not leave the page. The step keeps the page's own state.
   useEffect(() => {
-    window.history.pushState({ ...(window.history.state as object | null), viewer: true }, "");
+    if (leaving === undefined) window.history.pushState({ ...(window.history.state as object | null), viewer: true }, "");
+    else window.clearTimeout(leaving);
+    leaving = undefined;
     inHistory.current = true;
     const back = () => {
       if (ownSteps > 0) {
@@ -107,8 +111,11 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
       // The page took the viewer away itself (a pick, say): its step in the history goes with it.
       if (inHistory.current) {
         inHistory.current = false;
-        ownSteps += 1;
-        window.history.back();
+        leaving = window.setTimeout(() => {
+          leaving = undefined;
+          ownSteps += 1;
+          window.history.back();
+        });
       }
     };
   }, []);

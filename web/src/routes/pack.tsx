@@ -229,7 +229,8 @@ function Options({ items }: { items: string[] }) {
   const all = unique(items);
   return all.map((item, index) => (
     <p key={item} className="mb-1.5 whitespace-pre-wrap">
-      {all.length > 1 ? <b>{String.fromCharCode(65 + index)}.</b> : null} {item}
+      {all.length > 1 ? <b>{String.fromCharCode(65 + index)}. </b> : null}
+      {item}
     </p>
   ));
 }
