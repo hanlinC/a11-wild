@@ -140,7 +140,7 @@ export class PixelService {
     };
   }
 
-  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; box?: number[]; pack?: number }): Promise<PixelView> {
+  async packCheck(input: { batchId: string; imageId: string; at: [number, number]; bg: string; sideways: boolean; tilted?: boolean; box?: number[]; pack?: number }): Promise<PixelView> {
     const image = await this.rendered(input.batchId, input.imageId);
     const { batchId: _batchId, imageId: _imageId, box: around, ...rest } = input;
     // `box` in a job is the pack's box in the pack photo, so the box round the drawn pack goes as `around`.

@@ -53,7 +53,7 @@ export class DoneGate {
           ? "No draft is picked, so there is no final to judge."
           : open.length > 0
             ? `Still missing: ${open.join("; ")}.`
-            : `${picked.length} final(s): each is checked, has no D item and fewer than two F items, ${hasPack ? "passed pack_check against the pack photo, " : ""}and has its real-camera finish.`,
+            : `${picked.length} final(s): each is checked, has no D item and fewer than two F items, ${hasPack ? "passed pack_check against the pack photo where it shows the pack, " : ""}and has its real-camera finish.`,
     };
 
     const conditions = [picks, made];

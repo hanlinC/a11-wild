@@ -297,6 +297,8 @@ def check_pack(job):
     argv += ["--tolerance", repr(float(job.input.get("tolerance", 0.02)))]
     if job.input.get("sideways"):
         argv.append("--sideways")
+    if job.input.get("tilted"):
+        argv.append("--tilted")
     return measured(*run(pack_check.main, argv))
 
 

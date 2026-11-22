@@ -146,6 +146,34 @@ describe("a real-photo plan", () => {
   });
 });
 
+describe("a draft that shows the food alone", () => {
+  // The real failure (IRVINS concept ads, 22-11-2026): a row of real fish skin pieces with no pouch in it could never be checked,
+  // because the product has a pack photo and the board asked for the pack measure of a picture with no pack.
+  it("owes no pack measure, and a draft that shows the pack still does", async () => {
+    const ideas = await studio.services.batches.ideas(batchId);
+    await studio.services.batches.saveIdeas(batchId, ideas.map((idea) => (idea.id === "idea-4" ? { ...idea, shows: ["food-1"] } : idea)), "owner@example.com");
+    const made = async (ideaId: string, references: string[]) => {
+      const sent = await send(ideaId, 1, { references });
+      if (!sent.ok) throw new Error(sent.error);
+      return (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id as string;
+    };
+    const food = await made("idea-4", ["food-1"]);
+    const pack = await made("idea-2", ["pack-1"]);
+    await callTool(studio, "checks_save", { ...rules, batchId, imageId: food, items: [] });
+    const looked = await callTool(studio, "checks_save", { ...rules, batchId, imageId: pack, items: [] });
+    expect(looked.value.stillMissing).toContain(`pack_check for picture ${pack}`);
+    expect(looked.value.stillMissing).not.toContain(`pack_check for picture ${food}`);
+    expect(looked.value.stillMissing).not.toContain(`checks_save for picture ${food}`);
+  });
+
+  it("is measured turned upright when the pack lies at an angle", async () => {
+    const sent = await send("idea-2", 1);
+    const image = (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image;
+    await callTool(studio, "pack_check", { batchId, imageId: image.id, at: [500, 800], bg: "FFD21E", tilted: true });
+    expect(studio.pixels.events.at(-1)!.input).toMatchObject({ tilted: true, sideways: false });
+  });
+});
+
 describe("a draft that its checks reject", () => {
   /** Sends a draft and reads it until it is done. Returns its picture id. */
   async function made(ideaId: string, draft: number): Promise<string> {

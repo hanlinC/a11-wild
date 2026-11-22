@@ -108,6 +108,26 @@ def ratio(obj):
     return h / w, h, w
 
 
+def upright(obj):
+    """A tilted pack, turned back to upright: by the angle of the smallest rectangle round it, to the nearer upright.
+    Why (IRVINS concept ads, 22-11-2026): a pouch that lies on the stage at about 20 degrees measured 8.8% too short,
+    because the rows of a tilted pack are not its width. It turns in the plane only; a pack seen in steep perspective
+    stays wrong, and no turn mends it."""
+    points = cv2.findNonZero(obj.astype(np.uint8))
+    if points is None:
+        sys.exit("no pack found")
+    (cx, cy), _, angle = cv2.minAreaRect(points)
+    angle = (angle + 45) % 90 - 45  # the nearer upright: between -45 and 45 degrees
+    if abs(angle) < 0.5:
+        return obj
+    h, w = obj.shape
+    side = int(np.ceil(np.hypot(h, w))) + 2  # room for the turned pack
+    turn = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
+    turn[0, 2] += side / 2 - cx
+    turn[1, 2] += side / 2 - cy
+    return cv2.warpAffine(obj.astype(np.uint8) * 255, turn, (side, side), flags=cv2.INTER_LINEAR) > 127
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--render", required=True)
@@ -115,6 +135,7 @@ def main(argv=None):
     ap.add_argument("--bg", required=True, help="the stage colour as RRGGBB")
     ap.add_argument("--packshot", required=True, help="the brand's cut-out packshot, or its grey alpha mask")
     ap.add_argument("--sideways", action="store_true", help="the pack lies on its side (product_lock.py turn): turn the packshot too")
+    ap.add_argument("--tilted", action="store_true", help="the pack is turned in the plane (it lies on the stage at an angle): turn it upright before the measure")
     ap.add_argument("--tolerance", type=float, default=0.02)
     a = ap.parse_args(argv)
     try:
@@ -130,7 +151,7 @@ def main(argv=None):
         sys.exit("--packshot needs the cut-out packshot (transparent round the pack) or its grey alpha mask")
     mask = alpha > 128
     r, h, w = ratio(np.rot90(mask) if a.sideways else mask)
-    q, qh, qw = ratio(pack)
+    q, qh, qw = ratio(upright(pack) if a.tilted else pack)
     diff = q / r - 1
     ok = abs(diff) <= a.tolerance
     print(f"render H/W {q:.3f} ({qh} x {qw:.0f} px); packshot H/W {r:.3f}; difference {diff:+.1%}; {'PASS' if ok else 'FAIL'} at {a.tolerance:.0%}")

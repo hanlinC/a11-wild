@@ -13,6 +13,7 @@ import tempfile
 import types
 import unittest
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -810,6 +811,34 @@ class PackCheck(Tmp):
         self.assertEqual(self.check(*args)[0], 1)
         code, log = self.check(*args, "--sideways")
         self.assertEqual(code, 0, log)
+
+    def tilted_stage(self, degrees):
+        """A pack 214 high and 200 wide on the brand yellow, turned in the plane."""
+        img = np.zeros((500, 500, 3), np.uint8)
+        img[:] = (255, 212, 25)
+        corners = cv2.boxPoints(((250, 250), (200, 214), degrees)).astype(np.int32)
+        cv2.fillConvexPoly(img, corners, (120, 80, 50))
+        return self.save(f"tilt{degrees}.png", img)
+
+    def test_a_tilted_pack_passes_with_tilted(self):
+        # The real failure: a pouch lying at about 20 degrees measured 8.8% too short (IRVINS concept ads, 22-11-2026).
+        for degrees in (20, -20, 35):
+            args = ["--render", self.tilted_stage(degrees), "--at", "250,250", "--bg", "FFD419", "--packshot", self.packshot(214, 200)]
+            self.assertEqual(self.check(*args)[0], 1, degrees)
+            code, log = self.check(*args, "--tilted")
+            self.assertEqual(code, 0, f"{degrees}: {log}")
+
+    def test_a_tilted_pack_of_the_wrong_shape_still_fails_with_tilted(self):
+        img = np.zeros((500, 500, 3), np.uint8)
+        img[:] = (255, 212, 25)
+        cv2.fillConvexPoly(img, cv2.boxPoints(((250, 250), (200, 260), 20)).astype(np.int32), (120, 80, 50))  # 21% too tall
+        code, log = self.check("--render", self.save("tall.png", img), "--at", "250,250", "--bg", "FFD419", "--packshot", self.packshot(214, 200), "--tilted")
+        self.assertEqual(code, 1, log)
+
+    def test_an_upright_pack_measures_the_same_with_tilted(self):
+        args = ["--render", self.stage(214, 200), "--at", "150,250", "--bg", "FFD419", "--packshot", self.packshot(214, 200)]
+        plain, turned = self.check(*args), self.check(*args, "--tilted")
+        self.assertEqual((plain[0], turned[0]), (0, 0), turned[1])
 
     def test_a_point_on_the_stage_and_a_packshot_without_a_cut_out_stop_with_a_clear_message(self):
         r = self.stage(214, 200)
