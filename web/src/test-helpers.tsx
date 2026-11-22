@@ -44,3 +44,19 @@ export function stubApi(routes: Record<string, Handler>) {
   });
   return calls;
 }
+
+/** The window of a test: as wide as a desk screen, or as narrow as a phone. Each test starts wide. */
+export function windowIs(width: "wide" | "phone") {
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) =>
+      ({
+        matches: width === "wide" && query.includes("min-width"),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+      }) as unknown as MediaQueryList,
+  );
+}

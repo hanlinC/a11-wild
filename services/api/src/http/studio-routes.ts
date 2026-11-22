@@ -1,7 +1,8 @@
-import { type BatchSummary, type BrandKit, type BrandPage, type BrandSummary, CANON_SCOPES, type CanonScope, type ScopedCanon, type TastePage } from "@a11-wild/shared";
+import { type BrandKit, type BrandPage, type BrandSummary, CANON_SCOPES, type CanonScope, type ScopedCanon, type TastePage } from "@a11-wild/shared";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Deps } from "../app.js";
+import { AttentionService } from "../attention/service.js";
 import { log } from "../log.js";
 import { Refusal } from "../mcp/registry.js";
 import { scopeOf } from "../taste/canon.js";
@@ -167,15 +168,10 @@ export function studioRoutes(
     }
   });
 
-  routes.get("/api/batches", session, async (c) => {
-    const list = await Promise.all(
-      (await batches.list()).map(async (batch): Promise<BatchSummary> => {
-        const [brand, product] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId)]);
-        return { batch, brand: { id: brand.id, name: brand.name }, product: { id: product.id, name: product.name } };
-      }),
-    );
-    return c.json({ batches: list });
-  });
+  const attention = new AttentionService({ ...deps.studio, approvals: deps.approvals, now: deps.now });
+
+  /** What waits for the owner and what is in work. A member gets the batches only: the rest is the owner's. */
+  routes.get("/api/attention", session, async (c) => c.json(await attention.read(c.get("session").role)));
 
   routes.get("/api/batches/:batchId/board", session, async (c) => {
     try {

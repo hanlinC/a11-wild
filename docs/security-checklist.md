@@ -38,7 +38,7 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | `GET /api/health` | 200, `ok: true` |
 | `POST /mcp` with no token | 401, with `resource_metadata` in `WWW-Authenticate` |
 | `GET /.well-known/oauth-protected-resource/mcp` | 200, names this server and one authorization server |
-| `GET /api/me`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste`, `/api/calibration`, `/api/batches/<id>/board`, `/api/batches/<id>/done` with no session | 401 each |
+| `GET /api/me`, `/api/attention`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste`, `/api/calibration`, `/api/batches/<id>/board`, `/api/batches/<id>/done` with no session | 401 each |
 | Each outreach page and each outreach write (`/api/outreach/...`) with no session | 401 each |
 | `POST /api/clients/<id>/approve` from another origin | 401 or 403 |
 | `GET /` and `GET /api/health` | HSTS, CSP with `frame-ancestors 'none'`, `nosniff`, `X-Frame-Options: DENY` |
@@ -61,5 +61,6 @@ A change is not done when it is safe but broken.
 | Client | Use the private page | The client link opens every pack of the brand with no sign-in. An ad downloads. A comment and a change request show on the page after they are sent. A screenshot or a CSV is taken; another file is refused with a plain sentence. |
 | Owner | Work with a client | Clients shows the change requests that wait first. One click sets a status, and the client's page shows it. A comment can be hidden. A CSV opens as a table. Replace the link, and the old link opens nothing. The email about a new comment arrives and holds none of its words. |
 | Prospect | Look at the example | The example page shows the ads first, the "Example" tag and the line that the brand is not a client. It has no box to write in and no place to send a file. A download is marked as an example. |
-| Member | Stay out of Outreach | The shell shows no Outreach entry, and each outreach address answers "Only the owner can do that." |
+| Owner | See what waits for him | The Studio page opens with "Needs you" first. Each line there opens the page where he acts, and the number beside a section in the top bar is the number on that page. On a phone the menu holds every section and Sign out. |
+| Member | Stay out of Outreach | The shell shows no Outreach entry, and each outreach address answers "Only the owner can do that." The Studio page shows him the batches only, with no line and no number of the owner's. |
 | Owner | Remove an agent | Revoke removes it, and its next call is refused. |

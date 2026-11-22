@@ -1,4 +1,4 @@
-import type { OwnPictureType, ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { Attention, OwnPictureType, ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -78,6 +78,7 @@ export const api = {
   brands: async () => (await request<{ brands: BrandSummary[] }>("/api/brands")).brands,
   brand: (brandId: string) => request<BrandPage>(`/api/brands/${encodeURIComponent(brandId)}`),
   spend: () => request<SpendSummary>("/api/spend"),
+  attention: () => request<Attention>("/api/attention"),
   taste: () => request<TastePage>("/api/taste"),
   canonVersion: (version: number, scope?: CanonScope) =>
     request<CanonVersion>(`/api/taste/canon/${version}${scope ? `?${new URLSearchParams({ kind: scope.kind, ...(scope.brandId ? { brandId: scope.brandId } : {}) }).toString()}` : ""}`),
@@ -85,7 +86,6 @@ export const api = {
   restoreCanon: (version: number, reason: string, scope?: CanonScope) => send<CanonVersion>("/api/taste/canon/restore", { version, reason, ...(scope ? { scope } : {}) }),
   decideProposal: (id: string, approve: boolean, ownerSaid: string) => send<{ proposal: CanonProposal }>(`/api/taste/proposals/${encodeURIComponent(id)}`, { approve, ownerSaid }),
   brandNote: (brandId: string, note: string) => send<BrandNote>(`/api/brands/${encodeURIComponent(brandId)}/notes`, { note }),
-  batches: async () => (await request<{ batches: BatchSummary[] }>("/api/batches")).batches,
   board: (batchId: string) => request<Board>(`/api/batches/${encodeURIComponent(batchId)}/board`),
   pick: (batchId: string, pick: { ideaId: string; imageId: string | null; ownerSaid: string }) =>
     request<{ pick: Pick; note?: string }>(`/api/batches/${encodeURIComponent(batchId)}/picks`, {

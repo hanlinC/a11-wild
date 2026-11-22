@@ -37,7 +37,7 @@ const seen = (scope: object, observation: string) => ({
 
 describe("studio routes", () => {
   it("answers 401 without a session on every route", async () => {
-    for (const path of ["/api/brands", "/api/brands/x", "/api/batches", "/api/spend", "/api/taste", "/api/taste/canon/1", "/api/calibration", "/api/batches/x/done"]) {
+    for (const path of ["/api/brands", "/api/brands/x", "/api/attention", "/api/spend", "/api/taste", "/api/taste/canon/1", "/api/calibration", "/api/batches/x/done"]) {
       expect((await get(path, {})).status, path).toBe(401);
     }
     expect((await saveCanon({ text: "x", reason: "y" }, "")).status).toBe(401);
@@ -57,8 +57,8 @@ describe("studio routes", () => {
     expect(page.products[0].truthSheet.measures).toEqual([{ name: "pack height", value: 180, unit: "mm", status: "unverified" }]);
     expect(page.products[0].product.photos[0].viewUrl).toEqual(expect.stringContaining("products/p/food.jpg"));
     expect(page.batches).toEqual([expect.objectContaining({ id: batchId, state: "truth" })]);
-    expect((await json(await get("/api/batches"))).batches).toEqual([
-      { batch: expect.objectContaining({ id: batchId, state: "truth" }), brand: { id: brand.id, name: "WonGi" }, product: { id: product.id, name: "Seaweed crisps" } },
+    expect((await json(await get("/api/attention"))).batches).toEqual([
+      expect.objectContaining({ batch: expect.objectContaining({ id: batchId, state: "truth" }), brand: { id: brand.id, name: "WonGi" }, product: { id: product.id, name: "Seaweed crisps" }, who: "agent" }),
     ]);
     expect((await get("/api/brands/nope")).status).toBe(404);
   });

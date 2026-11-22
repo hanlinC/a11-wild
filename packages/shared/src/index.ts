@@ -831,13 +831,6 @@ export interface BrandPage {
   notes: BrandNote[];
 }
 
-/** One batch in the dashboard's list, with the names of its brand and product. */
-export interface BatchSummary {
-  batch: Batch;
-  brand: { id: string; name: string };
-  product: { id: string; name: string };
-}
-
 /** What the dashboard's taste page shows. */
 export interface TastePage {
   canon: CanonVersion;
@@ -1356,4 +1349,50 @@ export interface TemplatesPage {
   dailyMax: number;
   /** The one placeholder a message may hold. */
   placeholder: string;
+}
+
+/** Who a batch waits for: the owner, an agent, or nobody when it is at its end. */
+export type BatchWaitsFor = "owner" | "agent" | "nobody";
+
+/** A batch as the start page shows it: where it stands, in plain words, and who acts next. */
+export interface BatchLine {
+  batch: { id: string; label?: string; kind: BatchKind; state: BatchState; test?: true; purpose?: "outreach"; createdAt: string };
+  brand: { id: string; name: string };
+  product: { id: string; name: string };
+  who: BatchWaitsFor;
+  /** What is asked of the owner, or the step the agent is at. */
+  text: string;
+  /** The dashboard page of the batch. */
+  to: string;
+  /** The owner answers his agent in chat: the dashboard has no control for it. */
+  chat?: true;
+}
+
+export const ATTENTION_KINDS = ["replies", "ads", "follow_ups", "firsts", "change_requests", "taste", "connections"] as const;
+export type AttentionKind = (typeof ATTENTION_KINDS)[number];
+
+/** A group of things that wait for the owner outside the batches, with the page where he acts. */
+export interface AttentionLine {
+  kind: AttentionKind;
+  count: number;
+  /** A dashboard path. */
+  to: string;
+}
+
+/** What waits for the owner on each part of the dashboard. A member gets the studio's number only, and it is zero. */
+export interface AttentionCounts {
+  studio: number;
+  outreach?: number;
+  clients?: number;
+  taste?: number;
+  connections?: number;
+}
+
+/** What the start page and the top bar read: every batch with who acts next, and what else waits for the owner. */
+export interface Attention {
+  /** Newest first. */
+  batches: BatchLine[];
+  /** Only the groups with something in them. Empty for a member. */
+  lines: AttentionLine[];
+  counts: AttentionCounts;
 }

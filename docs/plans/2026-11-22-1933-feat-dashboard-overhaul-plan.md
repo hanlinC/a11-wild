@@ -156,7 +156,7 @@ The shape is a direction, not a specification. `to` is a dashboard path, never a
 - **Goal:** One answer that says what waits for the owner and what is in work.
 - **Requirements:** R1, R2, R3, R11, R13, R14.
 - **Dependencies:** None.
-- **Files:** `packages/shared/src/index.ts`, `services/api/src/batch/waits.ts`, `services/api/src/batch/waits.test.ts`, `services/api/src/attention/service.ts`, `services/api/src/attention/service.test.ts`, `services/api/src/outreach/today.ts`, `services/api/src/wire.ts`, `services/api/src/http/studio-routes.ts`, `services/api/src/http/studio-routes.test.ts`, `scripts/probe.mjs`.
+- **Files:** `packages/shared/src/index.ts`, `services/api/src/batch/waits.ts`, `services/api/test/batch/waits.test.ts`, `services/api/src/attention/service.ts`, `services/api/test/attention/service.test.ts`, `services/api/src/outreach/today.ts`, `services/api/src/wire.ts`, `services/api/src/http/studio-routes.ts`, `services/api/test/http/studio-routes.test.ts`, `scripts/probe.mjs`.
 - **Approach:** KTD1 to KTD4. The batch function returns who acts and the plain step. The attention service takes the stores it needs as arguments, runs them in parallel, and leaves out the owner's parts for a member. The outreach counts come from one function in `today.ts` that the day page also uses, so the two cannot drift.
 - **Patterns to follow:** `services/api/src/outreach/today.ts` for a joined read; `STEP` in `services/api/src/batch/state.ts` for the step words.
 - **Test scenarios:**

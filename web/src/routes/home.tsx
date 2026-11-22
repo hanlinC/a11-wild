@@ -1,127 +1,160 @@
-import { KIND_NAMES } from "@/lib/kinds";
-import { useEffect, useState } from "react";
+import type { AttentionKind, AttentionLine, BatchLine } from "@a11-wild/shared";
 import { Link } from "react-router";
 import { Loading } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Ask, Empty, Fold, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
-import { useLoad } from "@/lib/use-load";
+import { useAttention } from "@/lib/attention";
+import { KIND_NAMES } from "@/lib/kinds";
+import { useMe } from "@/lib/session";
 import { when } from "@/lib/when";
 
-/** The pipeline, in the order a batch moves through it. `ready` turns true as each part ships. */
-const STAGES = [
-  { name: "Brand and product", detail: "Pick a saved brand or give a new address, then one product page.", ready: true },
-  { name: "Facts and truth sheet", detail: "Every fact with its exact quote and source. Real size, shape and pack.", ready: true },
-  { name: "Three ideas", detail: "One device, one focal point, five elements or fewer. Checked against your taste.", ready: true },
-  { name: "Drafts", detail: "Three per idea, each from its own skeleton, measured against the packshot.", ready: true },
-  { name: "Your pick", detail: "Drafts beside the truth sheet, numbered and unranked. You choose one per idea.", ready: true },
-  { name: "Finals", detail: "High quality, re-measured, with a real-camera finish.", ready: true },
-] as const;
+const many = (count: number, one: string, more: string) => `${count} ${count === 1 ? one : more}`;
 
-/** A batch of concept ads opens on its concepts until its drafts are made. */
-const CONCEPT_STATES = ["truth", "briefed", "ideas", "reviewed", "judged", "worded", "directed"];
+/** What each group outside Outreach asks for, and the name of its one action. */
+const ASKS: Record<Exclude<AttentionKind, OutreachKind>, { ask: (count: number) => string; about: string; action: string }> = {
+  change_requests: { ask: (n) => many(n, "change request from a client", "change requests from clients"), about: "A client asked for a change on an ad. Set where it stands.", action: "Open Clients" },
+  taste: { ask: (n) => many(n, "change to your taste waits for your yes", "changes to your taste wait for your yes"), about: "The studio learned something from your picks and asks before it keeps it.", action: "Open Taste" },
+  connections: { ask: (n) => many(n, "program waits for your approval", "programs wait for your approval"), about: "A program signed in for the first time. It can do nothing until you approve it.", action: "Open Connections" },
+};
+const ORDER = Object.keys(ASKS) as (keyof typeof ASKS)[];
 
+/** The work of the Outreach page, in the order of that page. The start page gives it one line, as it has one place. */
+const OUTREACH = {
+  replies: (n: number) => many(n, "reply to answer", "replies to answer"),
+  follow_ups: (n: number) => many(n, "follow-up due", "follow-ups due"),
+  firsts: (n: number) => many(n, "first message to send", "first messages to send"),
+  ads: (n: number) => many(n, "ad to look at", "ads to look at"),
+} satisfies Partial<Record<AttentionKind, (count: number) => string>>;
+type OutreachKind = keyof typeof OUTREACH;
+const OUTREACH_ORDER = Object.keys(OUTREACH) as OutreachKind[];
+
+const nameOf = ({ batch, brand, product }: BatchLine) => `${batch.label ?? "Batch"} · ${brand.name}: ${product.name}`;
+
+/** The start page. What waits for the owner is first, what is in work is second, and the rest is folded away. */
 export function Home() {
-  const mcpAddress = `${window.location.origin}/mcp`;
-  const [buildId, setBuildId] = useState<string>();
-  const [copied, setCopied] = useState(false);
-  const { value: batches, error } = useLoad(api.batches);
+  const isOwner = useMe().role === "owner";
+  const { value, error } = useAttention();
 
-  useEffect(() => {
-    let current = true;
-    api.health().then(
-      (health) => current && setBuildId(health.buildId),
-      () => undefined,
+  if (value === undefined) {
+    return (
+      <>
+        <PageHeader title="Studio" lead="What waits for you, then what is in work." />
+        <Loading error={error} />
+      </>
     );
-    return () => {
-      current = false;
-    };
-  }, []);
-
-  async function copyAddress() {
-    await navigator.clipboard.writeText(mcpAddress);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
   }
+
+  const { batches, lines } = value;
+  const aside = (line: BatchLine) => line.batch.test === true || line.batch.purpose === "outreach";
+  const asked = isOwner ? batches.filter((line) => line.who === "owner") : [];
+  const inWork = batches.filter((line) => !aside(line) && line.who !== "nobody" && !asked.includes(line));
+  const outreach = batches.filter((line) => line.batch.purpose === "outreach");
+  const tests = batches.filter((line) => line.batch.test === true && line.batch.purpose !== "outreach");
+  const done = batches.filter((line) => !aside(line) && line.who === "nobody");
+  const found = <K extends AttentionKind>(kinds: readonly K[]) => kinds.flatMap((kind) => lines.filter((line): line is AttentionLine & { kind: K } => line.kind === kind));
+  const groups = found(ORDER);
+  const sends = found(OUTREACH_ORDER);
+  const toSend = sends.reduce((sum, line) => sum + line.count, 0);
+  const waiting = asked.length + toSend + groups.reduce((sum, line) => sum + line.count, 0);
 
   return (
     <>
-      <PageHeader
-        title="Studio"
-        lead="Three truthful, striking static ads from one brand and one product. Your AI agent runs the work through this studio; you pick."
-      />
+      <PageHeader title="Studio" lead={isOwner ? "What waits for you, then what is in work." : "What is in work. The owner picks and approves."} />
 
-      <Section title="Connect your agent">
-        <Card>
-          <p className="text-body text-muted-foreground">
-            Add this address as a remote MCP server in your agent. It is the only connection the agent needs. The agent
-            signs you in, then waits until you approve it on the{" "}
-            <Link to="/connections" className="text-foreground underline underline-offset-4">
-              Connections
-            </Link>{" "}
-            page.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <code className="min-w-0 flex-1 truncate rounded-lg bg-(--tint) px-3 py-2 font-mono text-caption">{mcpAddress}</code>
-            <Button variant="secondary" size="compact" onClick={copyAddress}>
-              {copied ? "Copied" : "Copy address"}
-            </Button>
-          </div>
-        </Card>
-      </Section>
-
-      <Section title="Batches" count={batches?.length}>
-        {batches === undefined ? (
+      {error ? (
+        <div className="mb-6">
           <Loading error={error} />
-        ) : batches.length === 0 ? (
-          <Empty>No batch yet. Your agent starts one when you give it a brand and a product.</Empty>
+        </div>
+      ) : null}
+
+      {isOwner ? (
+        <Section title="Needs you" count={waiting}>
+          {waiting === 0 ? (
+            <Empty>Nothing waits for you. A pick, a yes or a reply shows here the moment it is asked of you.</Empty>
+          ) : (
+            <ul className="grid gap-3">
+              {asked.map((line) =>
+                line.chat ? (
+                  <Ask key={line.batch.id} about={nameOf(line)} ask={line.text} to={line.to} where="Your agent asks you in chat." />
+                ) : (
+                  <Ask key={line.batch.id} about={nameOf(line)} ask={line.text} to={line.to} action={line.to.endsWith("/concepts") ? "Open the concepts" : "Open the board"} />
+                ),
+              )}
+              {toSend > 0 ? (
+                <Ask about={`${sends.map((line) => OUTREACH[line.kind](line.count)).join(", ")}. You send each message by hand.`} ask={many(toSend, "thing waits in Outreach", "things wait in Outreach")} to="/outreach" action="Open Outreach" />
+              ) : null}
+              {groups.map((line) => (
+                <Ask key={line.kind} about={ASKS[line.kind].about} ask={ASKS[line.kind].ask(line.count)} to={line.to} action={ASKS[line.kind].action} />
+              ))}
+            </ul>
+          )}
+        </Section>
+      ) : null}
+
+      <Section title="In work" count={inWork.length}>
+        {inWork.length === 0 ? (
+          <Empty>
+            No batch is in work. Your agent starts one when you give it a brand and a product.
+            {batches.length === 0 ? (
+              <>
+                {" "}
+                No agent yet?{" "}
+                <Link to="/connections" className="text-foreground underline underline-offset-4">
+                  Connect one
+                </Link>
+                .
+              </>
+            ) : null}
+          </Empty>
         ) : (
-          <ul className="grid gap-3">
-            {batches.map(({ batch, brand, product }) => (
-              <li key={batch.id}>
-                <Card className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <Link to={batch.kind === "v3" && CONCEPT_STATES.includes(batch.state) ? `/batches/${batch.id}/concepts` : `/batches/${batch.id}`} className="text-body font-medium underline underline-offset-2">
-                    {batch.label ?? "Batch"}
-                  </Link>
-                  <span className="text-body text-muted-foreground">
-                    {brand.name}: {product.name}
-                  </span>
-                  <Badge variant="dot" color={batch.state === "done" ? "green" : "amber"}>
-                    {batch.state.replace("_", " ")}
-                  </Badge>
-                  <Badge color="gray">{KIND_NAMES[batch.kind]}</Badge>
-                  {batch.test && <Badge color="amber">Test batch: not the owner's picks</Badge>}
-                  <span className="ml-auto text-caption text-muted-foreground">Started {when(batch.createdAt)}</span>
-                </Card>
-              </li>
-            ))}
-          </ul>
+          <Batches lines={inWork} />
         )}
       </Section>
 
-      <Section title="What the studio does">
-        <ol className="grid gap-3 sm:grid-cols-2">
-          {STAGES.map((stage, index) => (
-            <li key={stage.name}>
-              <Card className="h-full">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-subtitle font-medium">
-                    <span className="mr-2 text-muted-foreground tabular-nums">{index + 1}</span>
-                    {stage.name}
-                  </span>
-                  <Badge variant="dot" color={stage.ready ? "green" : "gray"}>
-                    {stage.ready ? "Live" : "Not built yet"}
-                  </Badge>
-                </div>
-                <p className="mt-2 text-body text-muted-foreground">{stage.detail}</p>
-              </Card>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      {buildId ? <p className="mt-10 text-micro text-muted-foreground">Build {buildId}</p> : null}
+      {outreach.length + tests.length + done.length > 0 ? (
+        <div className="mt-10">
+          {done.length > 0 ? (
+            <Fold title="Done" count={done.length}>
+              <Batches lines={done} />
+            </Fold>
+          ) : null}
+          {outreach.length > 0 ? (
+            <Fold title="Outreach batches" count={outreach.length}>
+              <p className="px-2 pb-3 text-caption text-muted-foreground">Made to show a brand what the studio can do. The agent chooses in them; your yes or no to each ad is asked above.</p>
+              <Batches lines={outreach} />
+            </Fold>
+          ) : null}
+          {tests.length > 0 ? (
+            <Fold title="Test batches" count={tests.length}>
+              <p className="px-2 pb-3 text-caption text-muted-foreground">Runs that try the studio. The picks in them are not yours and teach it nothing.</p>
+              <Batches lines={tests} />
+            </Fold>
+          ) : null}
+        </div>
+      ) : null}
     </>
+  );
+}
+
+/** Batches as plain rows: the name is the link, and the step says who acts next. */
+function Batches({ lines }: { lines: BatchLine[] }) {
+  return (
+    <ul className="divide-y divide-border rounded-xl border border-border bg-card">
+      {lines.map((line) => (
+        <li key={line.batch.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-3">
+          <div className="min-w-0 flex-1 basis-64">
+            <Link to={line.to} className="text-body font-medium underline underline-offset-2">
+              {line.batch.label ?? "Batch"}
+            </Link>
+            <span className="ml-2 text-body text-muted-foreground">
+              {line.brand.name}: {line.product.name}
+            </span>
+            <p className="mt-0.5 text-caption text-muted-foreground">{line.text}</p>
+          </div>
+          <Badge color="gray">{KIND_NAMES[line.batch.kind]}</Badge>
+          <span className="text-caption text-muted-foreground">Started {when(line.batch.createdAt)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

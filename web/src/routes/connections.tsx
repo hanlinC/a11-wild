@@ -17,6 +17,14 @@ export function Connections() {
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [confirming, setConfirming] = useState<string>();
+  const [copied, setCopied] = useState(false);
+  const mcpAddress = `${window.location.origin}/mcp`;
+
+  async function copyAddress() {
+    await navigator.clipboard.writeText(mcpAddress);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -159,6 +167,20 @@ export function Connections() {
           ) : null}
         </>
       )}
+
+      <Section title="Connect an agent">
+        <Card>
+          <p className="text-body text-muted-foreground">
+            Add this address as a remote MCP server in your agent. It is the only connection the agent needs. The agent signs you in, then waits above until the owner approves it.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-(--tint) px-3 py-2 font-mono text-caption">{mcpAddress}</code>
+            <Button variant="secondary" size="compact" onClick={copyAddress}>
+              {copied ? "Copied" : "Copy address"}
+            </Button>
+          </div>
+        </Card>
+      </Section>
     </>
   );
 }

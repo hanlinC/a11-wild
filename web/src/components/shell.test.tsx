@@ -1,25 +1,15 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { MEMBER, OWNER, renderSignedIn } from "@/test-helpers";
+import { describe, expect, it } from "vitest";
+import { MEMBER, OWNER, renderSignedIn, stubApi, windowIs } from "@/test-helpers";
 import { Shell } from "./shell";
 
+const counts = (counts: object) => stubApi({ "GET /api/attention": () => ({ body: { batches: [], lines: [], counts } }) });
+/** A name with a count in it. The count is its own element, so the white space around it is not fixed. */
+const waits = (name: string) => new RegExp(`^${name.replace(/, (\d)/g, "\\s*,\\s*$1").replace(/(\d) waiting/, "$1\\s*waiting")}$`);
+const phone = () => windowIs("phone");
+
 describe("Shell", () => {
-  const scrollIntoView = vi.fn();
-  afterEach(() => {
-    scrollIntoView.mockReset();
-    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
-  });
-
-  it("brings the open section into view in the bar, as a phone may hold it out of sight", () => {
-    Element.prototype.scrollIntoView = scrollIntoView;
-    renderSignedIn(<Shell />, OWNER, "/clients");
-    expect(screen.getByRole("link", { name: "Clients" })).toHaveAttribute("aria-current", "page");
-    expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("link", { name: "Clients" }));
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
-  });
-
   it("keeps the sections of every day in the bar and the others behind More", async () => {
     renderSignedIn(<Shell />, OWNER);
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(["Studio", "Brands", "Outreach", "Packs", "Clients"]);
@@ -67,9 +57,62 @@ describe("Shell", () => {
     expect(screen.getByRole("link", { name: "Packs" })).toBeInTheDocument();
   });
 
-  it("scrolls nothing on a page that is no section", () => {
-    Element.prototype.scrollIntoView = scrollIntoView;
-    renderSignedIn(<Shell />, undefined, "/batches/b1");
-    expect(scrollIntoView).not.toHaveBeenCalled();
+  it("shows beside each section how many wait there, and nothing at zero", async () => {
+    counts({ studio: 2, outreach: 5, clients: 0, taste: 1, connections: 3 });
+    renderSignedIn(<Shell />, OWNER);
+
+    expect(await screen.findByRole("link", { name: waits("Studio, 11 waiting for you") })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: waits("Outreach, 5 waiting for you") })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Clients" })).toBeInTheDocument();
+    // The button counts what waits behind it, and hands the numbers to the list when it opens.
+    const more = screen.getByRole("button", { name: waits("More, other sections, 4 waiting for you") });
+    await userEvent.click(more);
+    expect(more).toHaveAccessibleName("More, other sections");
+    expect(screen.getByRole("link", { name: waits("Taste, 1 waiting for you") })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: waits("Connections, 3 waiting for you") })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Spend" })).toBeInTheDocument();
+  });
+
+  it("reads what waits again when another page opens", async () => {
+    const calls = counts({ studio: 0 });
+    renderSignedIn(<Shell />, OWNER);
+    await userEvent.click(screen.getByRole("link", { name: "Brands" }));
+    await waitFor(() => expect(calls.filter((call) => call === "GET /api/attention")).toHaveLength(2));
+  });
+
+  it("keeps the bar whole when what waits cannot be read", async () => {
+    stubApi({ "GET /api/attention": () => ({ status: 500, body: {} }) });
+    renderSignedIn(<Shell />, OWNER);
+    await waitFor(() => expect(screen.getByRole("link", { name: "Studio" })).toBeInTheDocument());
+    expect(screen.queryByText(/waiting for you/)).not.toBeInTheDocument();
+  });
+
+  it("holds every section and Sign out in one menu on a phone, with nothing in the bar to scroll", async () => {
+    phone();
+    counts({ studio: 1, outreach: 2, clients: 0, taste: 0, connections: 0 });
+    renderSignedIn(<Shell />, OWNER, "/outreach");
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    const menu = await screen.findByRole("button", { name: waits("Outreach, more sections, 3 waiting for you") });
+    await userEvent.click(menu);
+    expect(within(screen.getByRole("list")).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(["/", "/brands", "/outreach", "/packs", "/clients", "/taste", "/calibration", "/spend", "/connections"]);
+    expect(screen.getByRole("link", { name: waits("Outreach, 2 waiting for you") })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: waits("Studio, 3 waiting for you") })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByText("owner@example.com · owner")).toBeInTheDocument();
+  });
+
+  it("calls the phone menu Menu on a page that is no section, and leaves the owner's sections out for a member", async () => {
+    phone();
+    counts({ studio: 0 });
+    renderSignedIn(<Shell />, MEMBER, "/batches/b1");
+    await userEvent.click(screen.getByRole("button", { name: "Menu, all sections" }));
+    expect(within(screen.getByRole("list")).getAllByRole("link").map((link) => link.textContent)).toEqual(["Studio", "Brands", "Packs", "Taste", "Calibration", "Spend", "Connections"]);
+  });
+
+  it("shows the build at the foot of every page", async () => {
+    stubApi({ "GET /api/health": () => ({ body: { ok: true, buildId: "abc123" } }) });
+    renderSignedIn(<Shell />, OWNER, "/spend");
+    expect(await screen.findByText("Build abc123")).toBeInTheDocument();
   });
 });

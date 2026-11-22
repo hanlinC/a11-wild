@@ -74,7 +74,7 @@ describe("Connections page", () => {
     renderSignedIn(<Connections />, MEMBER);
 
     expect(await screen.findAllByText("Devin")).toHaveLength(2);
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Copy address"]);
     expect(screen.getByText(/only the owner can approve or remove/i)).toBeInTheDocument();
   });
 
@@ -108,6 +108,14 @@ describe("Connections page", () => {
 
     expect(await screen.findByText("That is no longer there.")).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText("Devin")).not.toBeInTheDocument());
+  });
+
+  it("gives the address an agent connects to, also before the list has loaded", async () => {
+    stubApi({ "GET /api/clients": () => ({ body: { clients: [] } }) });
+    renderSignedIn(<Connections />);
+    expect(screen.getByRole("heading", { name: "Connect an agent" })).toBeInTheDocument();
+    expect(screen.getByText(`${window.location.origin}/mcp`)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy address" })).toBeInTheDocument();
   });
 
   it("tells the person when the session has ended", async () => {

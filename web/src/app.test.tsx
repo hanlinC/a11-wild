@@ -51,41 +51,17 @@ describe("dashboard", () => {
     stubApi({
       "GET /api/me": () => ({ body: OWNER }),
       "GET /api/health": () => ({ body: { ok: true, buildId: "abc123" } }),
-      "GET /api/batches": () => ({ body: { batches: [] } }),
+      "GET /api/attention": () => ({ body: { batches: [], lines: [], counts: { studio: 0, outreach: 0, clients: 0, taste: 0, connections: 0 } } }),
     });
     renderApp();
 
     expect(await screen.findByRole("heading", { name: "Studio" })).toBeInTheDocument();
-    expect(await screen.findByText(/no batch yet/i)).toBeInTheDocument();
-    expect(screen.getByText(`${window.location.origin}/mcp`)).toBeInTheDocument();
-    expect(screen.getAllByText("Live")).toHaveLength(6);
-    expect(screen.queryByText("Not built yet")).not.toBeInTheDocument();
+    expect(await screen.findByText(/nothing waits for you/i)).toBeInTheDocument();
+    expect(screen.getByText(/no batch is in work/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Connect one" })).toHaveAttribute("href", "/connections");
+    expect(screen.queryByText(/mcp/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("What the studio does")).not.toBeInTheDocument();
     expect(screen.getByText(/owner@example\.com/)).toBeInTheDocument();
     expect(await screen.findByText("Build abc123")).toBeInTheDocument();
-  });
-
-  it("lists the batches on the studio page, each with a link to its board", async () => {
-    const at = "2026-11-22T03:00:00.000Z";
-    stubApi({
-      "GET /api/me": () => ({ body: OWNER }),
-      "GET /api/health": () => ({ body: { ok: true, buildId: "abc123" } }),
-      "GET /api/batches": () => ({
-        body: {
-          batches: [
-            {
-              batch: { id: "b1", kind: "v1", brandId: "br1", productId: "p1", format: "static_4x5", label: "First run", state: "waiting_pick", createdAt: at, updatedAt: at, createdBy: "owner@example.com" },
-              brand: { id: "br1", name: "WonGi" },
-              product: { id: "p1", name: "Seaweed crisps" },
-            },
-          ],
-        },
-      }),
-    });
-    renderApp();
-
-    expect(await screen.findByRole("link", { name: "First run" })).toHaveAttribute("href", "/batches/b1");
-    expect(screen.getByText("WonGi: Seaweed crisps")).toBeInTheDocument();
-    expect(screen.getByText("waiting pick")).toBeInTheDocument();
-    expect(screen.queryByText(/no batch yet/i)).not.toBeInTheDocument();
   });
 });
