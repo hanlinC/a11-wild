@@ -416,6 +416,15 @@ describe("the owner's own picture", () => {
     expect(studio.pictures.files.has(kept)).toBe(false);
   });
 
+  it("keeps the picture of a real prospect when its removal is refused", async () => {
+    const [id] = await loadProspects(studio);
+    const { started } = await upload(id!, PNG);
+    const refused = await on(id!, "remove");
+    expect(refused.status).toBe(400);
+    expect((await json(refused)).message).toMatch(/Only a test prospect/);
+    expect(studio.pictures.files.has(`outreach/owner/${id}/${started.uploadId}.png`)).toBe(true);
+  });
+
   it("keeps the test prospect when its picture could not be removed, so the removal can be run again", async () => {
     const made = await json(await post("/api/outreach/test-prospect", {}));
     const { started } = await upload(made.id, PNG);

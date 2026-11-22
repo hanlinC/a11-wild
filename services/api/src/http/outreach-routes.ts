@@ -153,9 +153,10 @@ export function outreachRoutes(
   write("kind", (id, body) => sequence.setKind(id, body.kind, "owner"));
   write("choose", (id) => sequence.choose(id));
   write("remove", async (id) => {
-    const own = (await store.all()).find((file) => file.profile.id === id)?.ads.filter((ad) => ad.from === "owner") ?? [];
-    // A picture the owner uploaded to try the page goes with the test prospect. The pictures go first: if one cannot be removed, the prospect still names it and the removal can be run again.
-    for (const ad of own) await deps.pictures.remove(ad.key);
+    const file = (await store.all()).find((entry) => entry.profile.id === id);
+    // A picture the owner uploaded to try the page goes with the test prospect, and only with a test prospect: a real one is refused below with its pictures untouched.
+    // The pictures go first: if one cannot be removed, the prospect still names it and the removal can be run again.
+    if (file?.profile.test) for (const ad of file.ads) if (ad.from === "owner") await deps.pictures.remove(ad.key);
     await store.removeTest(id);
   });
 
