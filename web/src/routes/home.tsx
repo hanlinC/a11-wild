@@ -38,8 +38,8 @@ function MadeLine() {
   const { value } = useLoad(api.made);
   if (!value) return null;
   const figures: [keyof Made, string][] = [
-    ["images", value.images === 1 ? "image made" : "images made"],
-    ["chosen", value.chosen === 1 ? "ad you hold up as your bar" : "ads you hold up as your bar"],
+    ["images", value.images === 1 ? "image generated so far" : "images generated so far"],
+    ["chosen", value.chosen === 1 ? "of them is among your best ads" : "of them are among your best ads"],
   ];
   return (
     <section aria-label="Made and kept" className="mt-10 border-t border-border pt-6">
@@ -51,7 +51,11 @@ function MadeLine() {
           </div>
         ))}
       </dl>
-      {value.chosen > 0 ? <p className="mt-3 text-caption text-muted-foreground">About {number(Math.round(value.images / value.chosen))} images made for each ad you hold up.</p> : null}
+      {value.chosen > 0 ? (
+        <p className="mt-3 text-caption text-muted-foreground">
+          That is 1 best ad for about every {number(Math.round(value.images / value.chosen))} images. Your best ads are the reference ads you gave the studio.
+        </p>
+      ) : null}
     </section>
   );
 }
