@@ -99,6 +99,6 @@ export function draftsPacket(common: Common, ideas: ReturnType<typeof rankable>)
     readFirst: READ_FIRST,
     ...about(common),
     ideas,
-    task: "Open each viewUrl and look at the picture. For each idea, put its drafts in order, best first, with a reason for each place: which one would the owner pick, and why. Send every idea in one critic_rank call with the ticket. The ticket works once. Your rank is kept from the owner and from the main agent until the owner has picked.",
+    task: "Open each viewUrl and look at the picture. For each idea, put its drafts in order, best first, with a reason for each place: which one would the owner pick, and why. Send every idea in one critic_rank call with the ticket. The ticket works once. measured holds only what a pixel tool found wrong in the picture (a pack drawn too tall): an empty list means no measure failed. When no draft of an idea meets the bar, rank them all the same and say so in the reason of the first place. Your rank is kept from the owner and from the main agent until the owner has picked.",
   };
 }
