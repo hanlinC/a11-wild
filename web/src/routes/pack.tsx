@@ -1,10 +1,10 @@
-import { CHANGE_KINDS, COMMENT_MAX_CHARS, type ChangeKind, type ChangeRequest, type MetaVariant, type PackFormat, type PackView, type ShownComment, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
+import { CHANGE_KINDS, COMMENT_MAX_CHARS, type ChangeKind, type ChangeRequest, type PackFormat, type PackView, type ShownComment, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
 import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { useParams } from "react-router";
 import { FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { Card, Section } from "@/components/page";
-import { Viewer, ZOOM } from "@/components/viewer";
+import { NOTE, PILL, Viewer, ZOOM, ZoomMark } from "@/components/viewer";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
@@ -26,17 +26,21 @@ export const changeStatus = (change: ChangeRequest): string =>
 /** The address of the API for one pack behind a pack link. */
 export const packDoor = (token: string): string => `/api/pack/${encodeURIComponent(token)}`;
 
-/** The frame of a page a link opens: no sign-in, no menu, nothing of the studio but its name. */
+/** The frame of a page a link opens: no sign-in, no menu, no bar. The first thing on it is the first ad. */
 export function LinkPage({ children }: { children: ReactNode }) {
   return (
     <div className="reading min-h-dvh">
-      <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-4xl items-center px-5">
-          <span className="text-title font-semibold tracking-tight">a11 studio</span>
-        </div>
-      </header>
-      <main className="mx-auto max-w-4xl px-5 py-10">{children}</main>
+      <main className="mx-auto max-w-[1000px] px-4 pt-5 pb-16">{children}</main>
     </div>
+  );
+}
+
+/** The small line a link page starts with: whose it is, then what it is. */
+export function TopLine({ brand, children }: { brand: string; children: ReactNode }) {
+  return (
+    <h1 className="mb-1 text-caption font-normal">
+      <b className="font-semibold">{brand}</b> <span className="text-muted-foreground">{children}</span>
+    </h1>
   );
 }
 
@@ -52,13 +56,7 @@ export function Pack() {
         <Loading error={error && "This link does not open a pack. Ask your contact at the studio for the current link."} />
       ) : (
         <>
-          <header className="mb-8 max-w-2xl">
-            <h1 className="flex flex-wrap items-baseline gap-x-3 text-display font-semibold tracking-tight">
-              {pack.brand}
-              {pack.example ? <span className="text-caption font-normal tracking-normal text-muted-foreground">Example</span> : null}
-            </h1>
-            <PackLead pack={pack} />
-          </header>
+          <TopLine brand={pack.brand}>{[pack.product, `Version ${pack.version}`, pack.example ? "Example" : undefined].filter(Boolean).join(" · ")}</TopLine>
           <PackBody pack={pack} door={packDoor(token)} />
         </>
       )}
@@ -68,74 +66,101 @@ export function Pack() {
 
 export function PackLead({ pack }: { pack: PackView }) {
   return (
-    <p className="mt-2 text-body text-muted-foreground">
-      {pack.ads.length} {pack.ads.length === 1 ? "ad" : "ads"} for {pack.product}. Version {pack.version}, {when(pack.at)}.
+    <p className="mt-1 text-caption text-muted-foreground">
+      {pack.ads.length} {pack.ads.length === 1 ? "ad" : "ads"}. Version {pack.version}, {when(pack.at)}.
     </p>
   );
 }
 
 type Shown = ShownComment & { at?: string };
 
+type Ad = PackView["ads"][number];
+const FORMAT: Record<PackFormat, string> = { jpg: "JPEG", png: "PNG" };
+/** The line an ad is known by: the words on its picture, or the headline of its text for Meta. A bar in the words is a line break, not a word. */
+export const titleOf = (ad: Ad): string => (ad.words?.headline ?? ad.meta.variants[0].headline).replace(/\s*\|\s*/g, " ");
+const unique = (items: string[]): string[] => [...new Set(items)];
+
 /**
- * One pack as a link shows it. The ads come first. An example shows example comments and takes nothing:
- * it has no box to write in and no place to send a file, and the server refuses both whatever a page sends.
+ * One pack as a link shows it: an ad is one card, its picture beside everything the client pastes into Meta, with nothing to press to read it.
+ * An example shows example comments and takes nothing: it has no box to write in and no place to send a file, and the server refuses both whatever a page sends.
+ * `lead` is the short welcome under the ads; a page of several packs says it once.
  */
-export function PackBody({ pack, door }: { pack: PackView; door: string }) {
+export function PackBody({ pack, door, lead = true }: { pack: PackView; door: string; lead?: boolean }) {
   const [added, setAdded] = useState<Shown[]>([]);
   const [large, setLarge] = useState<number>();
+  const { download, failed } = useDownload(door);
   const example = pack.example;
   const comments: Shown[] = example ? example.comments : [...(pack.comments ?? []), ...added];
   const add = (comment: Shown) => setAdded((all) => [...all, comment]);
   // A request stays with its ad when the ad changes. One whose ad left the pack is still shown, below the ads, so its status is never lost.
   const earlier = comments.filter((comment) => comment.change && !pack.ads.some((ad) => ad.adName === comment.adName));
+  // One fact check for the pack: a claim two ads make is proved once.
+  const facts = pack.ads.flatMap((ad) => ad.claims).filter((fact, index, all) => all.findIndex((other) => other.claim === fact.claim && other.quote === fact.quote && other.url === fact.url) === index);
+  const shown = large === undefined ? undefined : pack.ads[large];
+  const format = shown?.formats.includes("jpg") ? "jpg" : shown?.formats[0];
 
   return (
     <>
       {pack.ads.map((ad, index) => (
-        <Section key={ad.adName} title={ad.stage ? STAGES[ad.stage] : "Ad"}>
-          <Card className="grid gap-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-            <figure>
-              <button type="button" onClick={() => setLarge(index)} title="Look at it large" className={ZOOM}>
-                <img src={ad.viewUrl} alt={`The ad ${ad.adName}`} referrerPolicy="no-referrer" className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
-              </button>
-              <Downloads door={door} ad={index} adName={ad.adName} formats={ad.formats} />
-            </figure>
-            <div className="min-w-0 space-y-5">
-              <Copyable label="Ad name" text={ad.adName} mono />
-              <p className="text-body">{ad.why}</p>
-              {ad.meta.variants.map((variant, variantIndex) => (
-                <MetaText key={variantIndex === 0 ? "a" : "b"} name={variantIndex === 0 ? "Text A" : "Text B"} variant={variant} />
-              ))}
-              {ad.claims.length > 0 ? (
-                <div>
-                  <h3 className="mb-1 text-caption font-medium text-muted-foreground">Fact check</h3>
-                  <ul className="space-y-2 text-caption">
-                    {ad.claims.map((claim) => (
-                      <li key={claim.claim}>
-                        {claim.claim}
-                        <span className="text-muted-foreground"> · "{claim.quote}" · </span>
-                        <span className="whitespace-nowrap">
-                          <OutLink href={claim.url}>source</OutLink>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              <Changes requests={comments.filter((comment) => comment.adName === ad.adName && comment.change)} example={example !== undefined} />
-              {example ? null : <AskForChange door={door} adName={ad.adName} onSent={add} />}
-            </div>
-          </Card>
-        </Section>
+        <section key={ad.adName} aria-label={titleOf(ad)} className="my-4 grid gap-4 rounded-xl bg-card p-3 md:grid-cols-[minmax(0,380px)_minmax(0,1fr)] md:gap-7 md:p-4">
+          <div>
+            <button type="button" onClick={() => setLarge(index)} title="Look at it large" className={`${ZOOM} overflow-hidden`}>
+              <img src={ad.viewUrl} alt={`The ad ${ad.adName}`} referrerPolicy="no-referrer" loading={index === 0 ? undefined : "lazy"} className="aspect-[4/5] w-full bg-muted object-cover" />
+              <ZoomMark />
+            </button>
+            <Downloads download={(chosen) => download(index, chosen)} failed={failed === index} adName={ad.adName} formats={ad.formats} />
+          </div>
+          <div className="min-w-0 text-body">
+            <h2 className="text-title font-semibold">{titleOf(ad)}</h2>
+            {ad.stage ? (
+              <p className="mt-1">
+                <span className="inline-block rounded-full bg-muted px-2.5 py-0.5 text-[13px] leading-5">{STAGES[ad.stage]}</span>
+              </p>
+            ) : null}
+            <Label hint="Paste it into Ads Manager exactly. It lets us match your results to this ad.">Ad name</Label>
+            <p>
+              <code className="rounded bg-muted px-1.5 py-px font-sans font-semibold break-all">{ad.adName}</code>
+            </p>
+            <Label hint={'Pick one. The first 125 characters show before "See more".'}>Text above the picture</Label>
+            <Options items={ad.meta.variants.map((variant) => variant.primary)} />
+            <Label hint="Pick one.">Headline</Label>
+            <Options items={ad.meta.variants.map((variant) => variant.headline)} />
+            <Label>Description and button</Label>
+            <Options items={ad.meta.variants.map((variant) => variant.description)} />
+            <p>Button: {unique(ad.meta.variants.map((variant) => variant.cta)).join(" or ")}</p>
+            <Label>Why we made this ad</Label>
+            <p>{ad.why}</p>
+            {example ? null : (
+              <div className="mt-5 space-y-3">
+                <Changes requests={comments.filter((comment) => comment.adName === ad.adName && comment.change)} />
+                <AskForChange door={door} adName={ad.adName} onSent={add} />
+              </div>
+            )}
+          </div>
+        </section>
       ))}
-      {large === undefined ? null : (
+      {large === undefined || !shown ? null : (
         <Viewer shots={pack.ads.map((ad) => ({ url: ad.viewUrl, alt: `The ad ${ad.adName}` }))} at={large} onAt={setLarge} onClose={() => setLarge(undefined)}>
-          {/* The name of the ad and its place in the funnel, so the client knows which one is large. */}
-          <p className="text-body font-medium">{pack.ads[large]?.stage ? STAGES[pack.ads[large].stage] : "Ad"}</p>
-          <p className="break-all font-mono text-caption text-muted-foreground">{pack.ads[large]?.adName}</p>
+          {failed === large ? <p className={NOTE}>The download did not start. Try again in a moment.</p> : null}
+          {format ? (
+            <button type="button" className={PILL} onClick={() => void download(large, format)} aria-label={`Download ${shown.adName} as ${FORMAT[format]}, from the large view`}>
+              Download {FORMAT[format]}
+            </button>
+          ) : null}
         </Viewer>
       )}
       {example ? <p className="mt-4 text-caption text-muted-foreground">{example.note}</p> : null}
+      {lead && !example ? (
+        <>
+          <p className="mt-12 max-w-[60ch] text-title">Your ads are ready. Each one has the picture, the words to paste into Meta, and the reason we made it. Tap any picture to see it full size.</p>
+          <ol className="my-2 list-decimal space-y-1 pl-6 text-body">
+            <li>Download the picture.</li>
+            <li>Paste the text into Meta Ads Manager.</li>
+            <li>Copy the ad name exactly.</li>
+            <li>Follow the launch plan below.</li>
+          </ol>
+        </>
+      ) : null}
       <Section title="Launch plan">
         <Card>
           <ol className="list-decimal space-y-1 pl-5 text-body">
@@ -145,10 +170,26 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
           </ol>
         </Card>
       </Section>
+      {facts.length > 0 ? (
+        <Section title="Fact check">
+          <p className="-mt-1 mb-3 text-body text-muted-foreground">Every claim in the ads, with the sentence and the page that prove it. Nothing here is guessed.</p>
+          <ul className="grid gap-2.5">
+            {facts.map((fact) => (
+              <li key={`${fact.claim}|${fact.quote}|${fact.url}`} className="rounded-[10px] border border-border bg-card px-3.5 py-3 [overflow-wrap:anywhere]">
+                <p className="text-body font-semibold">{fact.claim}</p>
+                <p className="mt-1 text-caption text-muted-foreground">"{fact.quote}"</p>
+                <p className="mt-1.5 text-caption">
+                  <OutLink href={fact.url}>{hostOf(fact.url)}</OutLink>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
       {earlier.length > 0 ? (
         <Section title="Earlier change requests">
           <Card>
-            <Changes requests={earlier} example={false} earlier />
+            <Changes requests={earlier} earlier />
           </Card>
         </Section>
       ) : null}
@@ -164,35 +205,75 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
   );
 }
 
-/** One button for each format the ad comes in. The address is asked for at the click, so a page left open for a day still downloads. */
-function Downloads({ door, ad, adName, formats }: { door: string; ad: number; adName: string; formats: PackFormat[] }) {
-  const [failed, setFailed] = useState(false);
-  async function download(format: PackFormat) {
-    setFailed(false);
+/** The name of the site a fact comes from: the whole address is behind the link. */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "source";
+  }
+}
+
+/** The name of one thing the client pastes, with a line on how to use it. */
+function Label({ children, hint }: { children: ReactNode; hint?: string }) {
+  return (
+    <p className="mt-[18px] mb-1 font-bold">
+      {children}
+      {hint ? <small className="font-normal text-muted-foreground"> {hint}</small> : null}
+    </p>
+  );
+}
+
+/** The wordings to pick from, lettered. Two that are the same are one, and one alone has no letter. */
+function Options({ items }: { items: string[] }) {
+  const all = unique(items);
+  return all.map((item, index) => (
+    <p key={item} className="mb-1.5 whitespace-pre-wrap">
+      {all.length > 1 ? <b>{String.fromCharCode(65 + index)}.</b> : null} {item}
+    </p>
+  ));
+}
+
+/** Starts a download. The address is asked for at the click, so a page left open for a day still downloads. `failed` is the ad whose download did not start. */
+function useDownload(door: string) {
+  const [failed, setFailed] = useState<number>();
+  async function download(ad: number, format: PackFormat) {
+    setFailed(undefined);
     try {
       window.location.assign(await api.packDownload(door, ad, format));
     } catch {
-      setFailed(true);
+      setFailed(ad);
     }
   }
+  return { download, failed };
+}
+
+/** One button for each format the ad comes in. */
+function Downloads({ download, failed, adName, formats }: { download: (format: PackFormat) => Promise<void>; failed: boolean; adName: string; formats: PackFormat[] }) {
   return (
-    <figcaption className="mt-3 flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-x-2">
       {formats.map((format) => (
-        <Button key={format} variant="secondary" size="compact" onClick={() => void download(format)} aria-label={`Download ${adName} as ${format.toUpperCase()}`}>
-          Download {format.toUpperCase()}
-        </Button>
+        <button
+          key={format}
+          type="button"
+          onClick={() => void download(format)}
+          aria-label={`Download ${adName} as ${FORMAT[format]}`}
+          className="mt-2.5 rounded-lg bg-primary px-4 py-[9px] text-[14px] leading-[22px] font-semibold text-primary-foreground outline-none hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          Download {FORMAT[format]}
+        </button>
       ))}
-      {failed ? <span className="text-caption text-muted-foreground">The download did not start. Try again in a moment.</span> : null}
-    </figcaption>
+      {failed ? <span className="mt-2.5 text-caption text-muted-foreground">The download did not start. Try again in a moment.</span> : null}
+    </div>
   );
 }
 
 /** The change requests on one ad, each with where it stands. */
-function Changes({ requests, example, earlier = false }: { requests: Shown[]; example: boolean; earlier?: boolean }) {
+function Changes({ requests, earlier = false }: { requests: Shown[]; earlier?: boolean }) {
   if (requests.length === 0) return null;
   return (
     <div>
-      <h3 className="mb-1 text-caption font-medium text-muted-foreground">{earlier ? "On ads this pack no longer holds" : example ? "Example change request" : "Change requests"}</h3>
+      <h3 className="mb-1 text-caption font-medium text-muted-foreground">{earlier ? "On ads this pack no longer holds" : "Change requests"}</h3>
       <ul className="space-y-2">
         {requests.map((request, index) => (
           <li key={`${request.at ?? "example"}-${index}`} className="rounded-lg border border-border p-3 text-caption">
@@ -313,46 +394,6 @@ function Comments({ comments, door, onSent }: { comments: Shown[]; door?: string
         </form>
       ) : null}
     </Card>
-  );
-}
-
-function MetaText({ name, variant }: { name: string; variant: MetaVariant }) {
-  return (
-    <div className="rounded-lg border border-border p-4">
-      <h3 className="mb-3 text-caption font-medium text-muted-foreground">{name}</h3>
-      <div className="space-y-3">
-        <Copyable label="Primary text" text={variant.primary} />
-        <Copyable label="Headline" text={variant.headline} />
-        <Copyable label="Description" text={variant.description} />
-        <p className="text-caption text-muted-foreground">Button: {variant.cta}</p>
-      </div>
-    </div>
-  );
-}
-
-/** A line of text the client pastes into Ads Manager, with a button that copies it exactly. */
-function Copyable({ label, text, mono = false }: { label: string; text: string; mono?: boolean }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  }
-  return (
-    <div>
-      {/* The button sits beside the label, so the text below keeps the full width on a phone. */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-caption text-muted-foreground">{label}</div>
-        <Button variant="secondary" size="compact" onClick={copy} aria-label={`Copy the ${label.toLowerCase()}`}>
-          {copied ? "Copied" : "Copy"}
-        </Button>
-      </div>
-      <div className={mono ? "mt-1 break-all font-mono text-caption" : "mt-1 whitespace-pre-wrap text-body"}>{text}</div>
-    </div>
   );
 }
 
