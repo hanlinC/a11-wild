@@ -66,6 +66,22 @@ describe("a rough of a concept", () => {
     expect((await rough("idea-1")).ok).toBe(false);
   });
 
+  it("keeps the place of a rough that failed and was charged, and counts its place once in the estimate", async () => {
+    let copies = false;
+    await start((call) => (!copies && call.method === "GET" && call.url.includes("fal.media") ? { status: 404, json: {} } : undefined));
+    expect((await rough("idea-1")).value).toMatchObject({ status: "failed", billed: true });
+    copies = true;
+    const done = await rough("idea-1");
+    expect(done.value.status).toBe("done");
+    // Eight places: one charged and lost, this one, and six more at its price.
+    const each = (await studio.spend.ledger.summary(batchId)).lines[0]!.usd;
+    expect((await studio.spend.gate.peek(batchId, "roughs"))?.estimateUsd).toBeCloseTo(each * 8);
+    expect((await rough("idea-2")).value.status).toBe("done");
+    expect((await studio.spend.gate.peek(batchId, "roughs"))?.estimateUsd).toBeCloseTo(each * 8);
+    // The concept's two places are used: one by the rough that was charged.
+    expect((await rough("idea-1")).ok).toBe(false);
+  });
+
   it("gives its place back when the call is refused before fal takes it", async () => {
     await start((call) => (call.method === "POST" ? { status: 422, json: { detail: "bad input" } } : undefined));
     for (let tries = 0; tries < 3; tries++) expect((await send("idea-1")).ok).toBe(false);

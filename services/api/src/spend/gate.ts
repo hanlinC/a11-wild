@@ -52,11 +52,14 @@ export class SpendGate {
     };
   }
 
-  /** Saves the estimate for a stage from the real price of its first item. `billedMicro` is what failed items before it were charged. */
-  async price(batchId: string, stage: GateStage, first: { firstUsd: number; count: number; billedMicro?: number }): Promise<GateState> {
+  /**
+   * Saves the estimate for a stage from the real price of its first item. `billed` is what failed items
+   * before it were charged, and how many of the stage's places they hold: a place held is not sent again.
+   */
+  async price(batchId: string, stage: GateStage, first: { firstUsd: number; count: number; billed?: { micro: number; places: number } }): Promise<GateState> {
     const [pk, sk] = key(batchId, stage);
     const earlier = await this.table.get<GateItem>(pk, sk);
-    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * first.count) + (first.billedMicro ?? 0), eachMicro: toMicro(first.firstUsd) };
+    const item: GateItem = { ...earlier, pk, sk, count: first.count, estimateMicro: toMicro(first.firstUsd * (first.count - (first.billed?.places ?? 0))) + (first.billed?.micro ?? 0), eachMicro: toMicro(first.firstUsd) };
     await this.table.put(item);
     return this.view(item);
   }

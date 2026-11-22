@@ -75,8 +75,11 @@ interface Deps {
 
 const STAGE: Record<RenderKind, GateStage> = { rough: "roughs", draft: "drafts", final: "finals" };
 const live = (render: Render) => render.status !== "failed";
-/** What the failed renders of one kind were charged all the same. */
-const billedMicro = (all: StoredRender[], kind: RenderKind) => all.filter((render) => render.kind === kind && render.billed).reduce((sum, render) => sum + render.reservation.micro, 0);
+/** What the failed renders of one kind were charged all the same, and the places of the stage they hold. A charged rough keeps its place among the roughs of the batch; a draft or a final is sent again. */
+function billedOf(all: StoredRender[], kind: RenderKind): { micro: number; places: number } {
+  const charged = all.filter((render) => render.kind === kind && render.billed);
+  return { micro: charged.reduce((sum, render) => sum + render.reservation.micro, 0), places: kind === "rough" ? charged.length : 0 };
+}
 
 /** Turns an idea and a skeleton into drafts and finals, each at a price the owner's gate has passed. */
 export class RenderService {
@@ -100,7 +103,7 @@ export class RenderService {
    * The owner's rule R26 for one stage. The first render of a stage goes alone and gives the price;
    * the rest wait for that price, and for the owner's yes when the stage comes to US$1 or more.
    */
-  private async passGate(batch: Batch, kind: RenderKind, sent: StoredRender[], next: { usedMicro: number; micro: number; billedMicro: number }): Promise<Batch> {
+  private async passGate(batch: Batch, kind: RenderKind, sent: StoredRender[], next: { usedMicro: number; micro: number; billed: { micro: number; places: number } }): Promise<Batch> {
     const { gate, batches } = this.deps;
     const stage = STAGE[kind];
     if (!(await gate.peek(batch.id, stage))) {
@@ -110,11 +113,11 @@ export class RenderService {
         throw new GateError(`The first of the ${stage} is out to read the price. Read it with render_status until it is done, then send the rest.`);
       }
       // The price was not saved when the first render ended. Save it now from that render.
-      await gate.price(batch.id, stage, { firstUsd: first.usd, count: first.stageCount, billedMicro: next.billedMicro });
+      await gate.price(batch.id, stage, { firstUsd: first.usd, count: first.stageCount, billed: next.billed });
     }
     if (kind === "draft" && batch.state === draftsFrom(batch)) batch = await batches.move(batch, "priced", "render_submit");
     try {
-      await gate.check(batch.id, stage, { sent: sent.length, usedMicro: next.usedMicro, micro: next.micro });
+      await gate.check(batch.id, stage, { sent: sent.length + next.billed.places, usedMicro: next.usedMicro, micro: next.micro });
     } catch (error) {
       if (error instanceof GateError && batch.state === "priced") await batches.move(batch, "waiting_spend", "render_submit");
       throw error;
@@ -249,9 +252,9 @@ export class RenderService {
     let job;
     try {
       // What the stage came to so far: every render that stands, and every failed one that fal charged for.
-      const billed = billedMicro(all, input.kind);
-      const usedMicro = billed + sent.reduce((sum, render) => sum + render.reservation.micro, 0);
-      batch = await this.passGate(batch, input.kind, sent, { usedMicro, micro: toMicro(usd), billedMicro: billed });
+      const billed = billedOf(all, input.kind);
+      const usedMicro = billed.micro + sent.reduce((sum, render) => sum + render.reservation.micro, 0);
+      batch = await this.passGate(batch, input.kind, sent, { usedMicro, micro: toMicro(usd), billed });
       reservation = await ledger.reserve({ service: "fal", kind: input.kind, ref: `${idea.id}: ${idea.title}`, batchId: batch.id, usd });
     } catch (error) {
       if (input.kind === "rough") await renders.releaseRough(batch.id, idea.id);
@@ -317,7 +320,7 @@ export class RenderService {
       const stage = STAGE[render.kind];
       if (!(await gate.peek(batchId, stage))) {
         const batch = await batches.get(batchId);
-        const state = await gate.price(batchId, stage, { firstUsd: toUsd(render.reservation.micro), count: render.stageCount, billedMicro: billedMicro(await renders.list(batchId), render.kind) });
+        const state = await gate.price(batchId, stage, { firstUsd: toUsd(render.reservation.micro), count: render.stageCount, billed: billedOf(await renders.list(batchId), render.kind) });
         if (render.kind === "draft" && batch.state === draftsFrom(batch)) await batches.move(batch, "priced", "render_status");
         const done = await renders.get(batchId, renderId);
         return this.view(
