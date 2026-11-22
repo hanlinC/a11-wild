@@ -58,6 +58,7 @@ The owner's first outreach message shows an example pack on the address of the o
 - R40. A pack can be marked as an example. The example is a page of its own, made only for cold outreach: it shows a prospect what a paying client gets. It belongs to no client's page.
 - R40a. The example shows the ads, the Meta text, the reasons, the fact check, the launch plan and the downloads (R36). It has no results upload.
 - R40b. Nobody can send anything on the example. In the place of the comment box it shows a few example comments, written by the owner and labelled "Example comments". The server refuses a comment and an upload for an example, whatever the page shows.
+- R40c. The example says, quietly and in plain words, that the brand it shows is not a client: one line under the title, an "Example" tag at the brand name, and each downloaded picture carries a strip under the ad that says it is an example and was not made for or approved by the brand. The file name of a download starts with "example". The pictures on the page stay clean, and a client's own downloads carry no mark.
 - R41. The example pack holds the three Cat & the Fiddle ads of the old example with their ad names, Meta text, reasons, fact check and launch plan unchanged.
 - R42. The link in the owner's first message changes only after he has seen the new example and said yes.
 
@@ -135,7 +136,8 @@ These are the agent's bets. The owner left the rest of the design open and did n
 - KTD15. Comments are items under the pack, written through a link, with the count taken in one step so two senders cannot pass the cap together. Rationale: the results upload does the same (`services/api/src/results/store.ts`).
 - KTD16. "Example" is a field of the pack, and the example comments are a field of it too: a short list of author ("client" or "studio"), text and, if it is on one ad, the ad. The service refuses a comment and an upload for an example, the comment store is never read for one, and the page shows the example comments under their label. The client link of a brand does not list an example pack. Rationale: the owner does not want to watch a box that many strangers can write in; with no write path there is nothing to watch, and the refusal lives on the server, so a hidden box is not the only guard.
 - KTD16a. A download is a route behind the link: it checks the token, then sends the browser to a signed address of that one picture that works for a few minutes and names the file by the ad name. Rationale: the pictures stay private, a page left open does not hold a dead link, and the route gives out nothing the page does not already show.
-- KTD17. The pictures of a carried pack are copied into the studio's private store from https addresses with the existing copy step (`copyPicture`, used by `reference_add`). Rationale: no new upload route, and the address safety checks are already there.
+- KTD17. The pictures of a carried pack come in through signed upload addresses. The carry is two steps for the owner's agent: the first names each picture's type and size and gets one address for each, good for a few minutes and for exactly that type and size; the second saves the pack after the studio has read each file's first bytes and found a PNG or a JPEG. Rationale: the pictures of the old example are files, not public addresses, and this way the old private link is never given to the server. The results upload already uses the same signed address (`Pictures.putUrl`).
+- KTD17a. The marked download copies of an example (R40c) are made once, outside the studio, and carried in as the ad's download pictures. The pack keeps them apart from the picture the page shows. Rationale: the pixel function works on the pictures of a batch, and one example does not earn a new pixel tool. Evidence that would change this: a second example.
 - KTD18. Only the owner can carry a pack, mark an example, and manage a client link. The dashboard routes for it sit behind the owner guard that the outreach routes use.
 - KTD19. The link in the owner's first message is his own text. The agent changes it with the owner's yes through the same save the Messages page uses, and through no other path (R42).
 
@@ -206,7 +208,8 @@ flowchart LR
 - A pack saved in the old shape is read with source `batch` and opens through its old link.
 - A carried pack with three ads is saved as version 1 and its view shows the ad names as given.
 - A carried pack with no ad, with an ad that has no reason, or with Meta text that has one variant is refused.
-- A carried pack with a picture address that is not https on a public host is refused, and nothing is saved.
+- A carried pack whose uploaded file is missing, is over the size limit or is no PNG or JPEG by its first bytes is refused, and nothing is saved.
+- An example without its note (R40c) is refused, and so are a note and example comments on a pack that is not an example.
 - A carried pack is absent from the taste log, the calibration and the learning records.
 - The update and restore of a batch pack work as before.
 
