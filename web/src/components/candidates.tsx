@@ -5,7 +5,7 @@ import { CheckNote, Failure, TAP, useWrite } from "@/components/outreach";
 import { Card } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Viewer, ZOOM } from "@/components/viewer";
+import { NOTE, PILL, PILL_MAIN, Viewer, ZOOM, ZoomMark } from "@/components/viewer";
 
 /** What the section says first: what is asked of the owner now, or who acts next. */
 /** What the owner can do with the drafts now. Who acts next is said once, in the step at the top of the page. */
@@ -65,8 +65,8 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
     setSaid("");
     setWords(draft.imageId);
   };
-  /** What the owner can do with one draft: the same under the small picture and beside the large one. */
-  const actions = (draft: OutreachCandidate, large?: () => void) =>
+  /** What the owner can do with one draft under its small picture: one action. Other words are asked for at the foot of the large one. */
+  const actions = (draft: OutreachCandidate) =>
     draft.blocked ? (
       <p className="text-caption text-muted-foreground">Not ready to pick: {draft.blocked}</p>
     ) : open ? (
@@ -77,18 +77,12 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
             className={TAP}
             loading={busy === "pick"}
             onClick={async () => {
-              if (await write({ action: "pick", body: { imageId: draft.imageId } })) large?.();
+              await write({ action: "pick", body: { imageId: draft.imageId } });
             }}
           >
             Pick this one
           </Button>
         )}
-        {/* The row of drafts keeps to one action each; other words are asked for beside the large picture. */}
-        {candidates.words && large ? (
-          <Button type="button" variant="ghost" className={TAP} onClick={() => otherWords(draft)}>
-            Other words
-          </Button>
-        ) : null}
       </div>
     ) : null;
 
@@ -96,6 +90,7 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
     <li key={draft.imageId} className="grid content-start gap-2">
       <button type="button" onClick={() => setLarge(candidates.drafts.indexOf(draft))} title="Look at it large" className={ZOOM}>
         <img src={draft.viewUrl} alt={altOf(draft)} className={`aspect-[4/5] w-full rounded-lg border bg-muted object-cover ${isMine(draft) ? "border-foreground ring-2 ring-foreground" : "border-border"}`} />
+        <ZoomMark />
       </button>
       <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
         Draft {draft.number}
@@ -161,17 +156,34 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
       <Failure error={error} />
       {shown && large !== undefined ? (
         <Viewer shots={candidates.drafts.map((draft) => ({ url: draft.viewUrl, alt: altOf(draft) }))} at={large} onAt={setLarge} onClose={() => setLarge(undefined)}>
-          <div>
-            <p className="text-body font-medium">{shown.headline ?? shown.title}</p>
-            {shown.subline ? <p className="text-body text-muted-foreground">{shown.subline}</p> : null}
+          {/* The whole screen is the picture: what the checks found is one line above the one button, and it is in full on the page. */}
+          {shown.warning ? (
+            <p className={NOTE} title={shown.warning}>
+              The checks found: {shown.warning}
+            </p>
+          ) : null}
+          {shown.blocked ? <p className={NOTE}>Not ready to pick: {shown.blocked}</p> : null}
+          {error ? <p className={NOTE}>{error}</p> : null}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {isMine(shown) ? <span className={NOTE}>Your pick</span> : null}
+            {open && !shown.blocked && !(isMine(shown) && candidates.agentOwes) ? (
+              <button
+                type="button"
+                className={PILL_MAIN}
+                disabled={busy === "pick"}
+                onClick={async () => {
+                  if (await write({ action: "pick", body: { imageId: shown.imageId } })) setLarge(undefined);
+                }}
+              >
+                Pick this one
+              </button>
+            ) : null}
+            {open && !shown.blocked && candidates.words ? (
+              <button type="button" className={PILL} onClick={() => otherWords(shown)}>
+                Other words
+              </button>
+            ) : null}
           </div>
-          <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
-            Draft {shown.number}
-            {isMine(shown) ? <Badge color="green">Your pick</Badge> : null}
-          </p>
-          <CheckNote warning={shown.warning} />
-          {actions(shown, () => setLarge(undefined))}
-          <Failure error={error} />
         </Viewer>
       ) : null}
     </div>

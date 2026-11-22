@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gesture, onPicture } from "./viewer";
+import { letsGo, onPicture, pulls } from "./viewer";
 
 describe("onPicture", () => {
   // A 4:5 picture in a wide box: it is drawn 800 by 1000 in the middle, with 500 empty on each side.
@@ -30,21 +30,19 @@ describe("onPicture", () => {
   });
 });
 
-describe("gesture", () => {
-  it("closes on a pull down, and not on a pull up or a short one", () => {
-    expect(gesture(10, 120)).toBe("close");
-    expect(gesture(10, -120)).toBeUndefined();
-    expect(gesture(0, 60)).toBeUndefined();
+describe("a finger on the large picture", () => {
+  it("takes a move that goes down more than sideways as a pull, and leaves any other move to the browser", () => {
+    expect(pulls(0, 40)).toBe(true);
+    expect(pulls(20, 40)).toBe(true);
+    expect(pulls(40, 40)).toBe(false);
+    expect(pulls(-60, 10)).toBe(false);
+    expect(pulls(0, -40)).toBe(false);
   });
 
-  it("steps on a sideways swipe: to the left is the next picture", () => {
-    expect(gesture(-80, 10)).toBe("next");
-    expect(gesture(80, -10)).toBe("previous");
-    expect(gesture(30, 0)).toBeUndefined();
-  });
-
-  it("takes the longer direction of a slanted move", () => {
-    expect(gesture(-150, 100)).toBe("next");
-    expect(gesture(100, 150)).toBe("close");
+  it("closes on a long pull or a short quick one, and on nothing less", () => {
+    expect(letsGo(91, 0)).toBe(true);
+    expect(letsGo(40, 0.6)).toBe(true);
+    expect(letsGo(40, 0.2)).toBe(false);
+    expect(letsGo(20, 2)).toBe(false);
   });
 });

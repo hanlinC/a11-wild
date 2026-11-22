@@ -105,6 +105,25 @@
   --accent: oklch(0.95 0 0); /* neutral fill; the gray solid Badge reads it */ --hover: rgb(0 0 0 / 0.04); --active: rgb(0 0 0 / 0.07); --selected: #D4D4D4; --destructive-light: #FEF2F2; --overlay: 0 0 0; --fluid-accent: #6B97FF; --focus-ring: var(--fluid-accent); --tint: rgb(0 0 0 / 0.08); --tint-hover: rgb(0 0 0 / 0.065); --z-sticky: 30; --z-overlay: 40; --z-modal: 50; --z-popover: 60; --z-tooltip: 70; --fs-display: 28px; --lh-display: 34px; --fs-display-compact: 24px; --lh-display-compact: 30px; --fs-title: 16px; --lh-title: 22px; --fs-title-compact: 15px; --lh-title-compact: 20px; --fs-subtitle: 14px; --lh-subtitle: 20px; --fs-subtitle-compact: 13px; --lh-subtitle-compact: 18px; --fs-body: 13px; --lh-body: 20px; --fs-body-compact: 12px; --lh-body-compact: 18px; --fs-caption: 12px; --lh-caption: 16px; --fs-caption-compact: 11px; --lh-caption-compact: 14px; --fs-micro: 11px; --lh-micro: 14px; --fs-micro-compact: 10px; --lh-micro-compact: 12px; --info: #3B82F6; --success: #22C55E; --warning: #F59E0B;
 }
 
+/* A picture opened large: it comes in softly, and what a page says at its foot is read on the dark. */
+@keyframes viewer-in { from { opacity: 0; } to { opacity: 1; } }
+.viewer-foot .text-muted-foreground { color: rgb(255 255 255 / 0.75); }
+
+/* A page a link opens has the warm paper and the dark brown of the studio's first link page. The dashboard keeps its own colours. */
+:root:has(.reading) {
+  --background: #faf7f2;
+  --foreground: #2b1d14;
+  --muted: #efe6da;
+  --muted-foreground: #6b5a4d;
+  --border: #e6dccd;
+  --input: #e6dccd;
+  --ring: #2b1d14;
+  --card: #ffffff;
+  --card-foreground: #2b1d14;
+  --primary: #2b1d14;
+  --primary-foreground: #ffffff;
+}
+
 /* A page a link opens is read by a client, often on a phone. Its text is the size of a web page (16px), not of the dashboard (13px). */
 .reading {
   --fs-display: 32px; --lh-display: 38px;
