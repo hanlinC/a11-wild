@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adWaits, approvedAd, candidatesWait, channelOf, owedAnswer, owedByAgent, owedNow, refusedDrafts, stageOf, wantsAd } from "../../src/outreach/stage.js";
+import { adWaits, approvedAd, candidatesWait, channelOf, owedAnswer, owedByAgent, owedNow, refusedDrafts, stageOf, standingAd, wantsAd } from "../../src/outreach/stage.js";
 import { ad, event, file, profile, send } from "./helpers.js";
 
 const none = new Set<string>();
@@ -128,6 +128,28 @@ describe("the owner's pick among the drafts", () => {
     expect(candidatesWait(waiting)).toMatchObject({ batchId: "batch-1" });
     expect(owedByAgent(waiting)).toBeUndefined();
     expect(wantsAd(waiting, none)).toBeUndefined();
+  });
+
+  it("lets a newer picture of his standing pick take the ad's place, until he says no, picks again, or a message has gone", () => {
+    const events = [shown(), pick()];
+    const first = final(1);
+    expect(standingAd(file({ events }), "batch-1", "draft-1")).toBeUndefined();
+    expect(standingAd(file({ events, ads: [first] }), "batch-1", "draft-1")).toMatchObject({ n: 1 });
+    // The newer picture is then the ad of his pick: his no to it sends him back to the drafts.
+    const second = final(2);
+    const both = file({ events, ads: [first, second] });
+    expect(standingAd(both, "batch-1", "draft-1")).toMatchObject({ n: 2 });
+    expect(stageOf(both, none)).toBe("ready");
+    const refused = file({ events: [...events, event({ type: "ad_no", ad: 2, ownerSaid: "Not this after all." })], ads: [first, second] });
+    expect(standingAd(refused, "batch-1", "draft-1")).toBeUndefined();
+    expect(stageOf(refused, none)).toBe("pick_waits");
+    expect(refusedDrafts(refused, "batch-1")).toEqual(new Set(["draft-1"]));
+    // Another draft, another batch, a newer ad of another kind, a message that has gone: none of them is his standing pick.
+    expect(standingAd(file({ events, ads: [first] }), "batch-1", "draft-2")).toBeUndefined();
+    expect(standingAd(file({ events, ads: [first] }), "batch-2", "draft-1")).toBeUndefined();
+    expect(standingAd(file({ events: [...events, pick("draft-2")], ads: [first] }), "batch-1", "draft-1")).toBeUndefined();
+    expect(standingAd(file({ events, ads: [first, ad(2)] }), "batch-1", "draft-1")).toBeUndefined();
+    expect(standingAd(file({ events, ads: [first], sends: [send(0)] }), "batch-1", "draft-1")).toBeUndefined();
   });
 
   it("waits for the agent after his pick, and is ready when the final of that pick is attached: his pick is his yes", () => {

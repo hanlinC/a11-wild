@@ -5,7 +5,7 @@ import { Refusal } from "../mcp/registry.js";
 import { noteText } from "./candidates.js";
 import type { SpendLedger } from "../spend/ledger.js";
 import { chosen, sameContact } from "./sequence.js";
-import { adWaits, candidatesWait, kindOf, optedOut, owedNow, stageOf, TAKES_NO_AD, wantsAd } from "./stage.js";
+import { adWaits, candidatesWait, kindOf, optedOut, owedNow, stageOf, standingAd, TAKES_NO_AD, wantsAd } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The owner's campaign: the first 50 product brands of his two top tiers, in list order. */
@@ -144,6 +144,7 @@ export class OutreachDesk {
   /**
    * Puts the final of the draft the owner picked on the prospect's page. His pick is his yes, so the message is ready; a no of his takes it back.
    * A batch can give more than one ad: he may pick another draft later, and each pick is attached once.
+   * When the words of the final of his standing pick are set again, the newer picture is attached in the older one's place.
    */
   async attach(batchId: string, why: string): Promise<{ ad: Omit<OutreachAd, "key">; already: boolean }> {
     const { store, batches, board } = this.deps;
@@ -174,7 +175,9 @@ export class OutreachDesk {
     if (optedOut(file, optOuts)) throw new Refusal("This brand opted out. It takes no ad.");
     const stage = stageOf(file, optOuts);
     if (TAKES_NO_AD.includes(stage)) throw new Refusal(`This brand is at "${stage}" now. It takes no ad: make nothing more for it.`);
-    if (!owes) {
+    // The same pick with its words set again: the newer picture takes the older one's place on his page. His pick stands, so it asks no second pick.
+    const setAgain = !owes && final.pick?.imageId ? standingAd(file, batch.id, final.pick.imageId) : undefined;
+    if (!owes && !setAgain) {
       throw new Refusal("The owner has not picked this draft on the prospect's page. Only the final of his own pick is attached: outreach_show puts the drafts before him, and outreach_next names the pick he made.");
     }
     const warning = noteText(final.warns ?? []);

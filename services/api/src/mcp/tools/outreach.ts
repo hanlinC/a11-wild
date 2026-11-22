@@ -100,7 +100,7 @@ export function outreachTools({ store, sequence, desk, picks, now }: OutreachToo
       name: "outreach_attach",
       ownerOnly: true,
       description:
-        "Puts the final of the draft the owner picked on its prospect's page. Free. Only for a done outreach batch whose one picked final is of the draft he chose there (outreach_next names it under owed). His pick is his yes, so the first message is ready; he sees the final before he sends, only he sends, and he can still say no to it. why is one line for him: what the ad shows and why it fits the brand. A second call for the same final changes nothing.",
+        "Puts the final of the draft the owner picked on its prospect's page. Free. Only for a done outreach batch whose one picked final is of the draft he chose there (outreach_next names it under owed). His pick is his yes, so the first message is ready; he sees the final before he sends, only he sends, and he can still say no to it. why is one line for him: what the ad shows and why it fits the brand. A second call for the same final changes nothing. After the words of that final are set again (type_set), a new call puts the newer picture on his page in place of the older one: his pick stands while no message has gone and he has not said no.",
       input: { batchId: id, why: z.string().trim().min(1).max(300) },
       writes: true,
       handler: ({ batchId, why }) => desk.attach(batchId, why),

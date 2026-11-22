@@ -27,10 +27,24 @@ type Choice = EventOf<"pick"> | EventOf<"none"> | EventOf<"words">;
 const choices = (file: ProspectFile, batchId?: string): Choice[] =>
   byTime(file.events).filter((event): event is Choice => (event.type === "pick" || event.type === "none" || event.type === "words") && (batchId === undefined || event.batchId === batchId));
 
-/** The ad made of a pick: the ad of the pick's batch that was attached after it and before his next pick in that batch. */
+/**
+ * The ad made of a pick: the ad of the pick's batch that was attached after it and before his next pick in that batch.
+ * The newest one, when the words of its final were set again and the newer picture took the older one's place.
+ */
 function adOfPick(file: ProspectFile, pick: EventOf<"pick">): OutreachAd | undefined {
   const next = choices(file, pick.batchId).find((event) => event.type === "pick" && event.at > pick.at);
-  return [...file.ads].sort((a, b) => a.n - b.n).find((ad) => ad.batchId === pick.batchId && ad.at >= pick.at && (!next || ad.at < next.at));
+  return [...file.ads].sort((a, b) => b.n - a.n).find((ad) => ad.batchId === pick.batchId && ad.at >= pick.at && (!next || ad.at < next.at));
+}
+
+/**
+ * The ad of a draft that still stands as the owner's pick: his newest choice is that draft, its ad is the newest on the page,
+ * his yes on it stands, and no message has gone. Such an ad can take a newer picture of the same final with no second pick.
+ */
+export function standingAd(file: ProspectFile, batchId: string, draftId: string): OutreachAd | undefined {
+  const choice = choices(file).at(-1);
+  if (choice?.type !== "pick" || choice.batchId !== batchId || choice.imageId !== draftId || file.sends.length > 0) return undefined;
+  const ad = adOfPick(file, choice);
+  return ad?.picked && ad.n === newestAd(file)?.n && verdictOf(file, ad)?.type === "ad_yes" ? ad : undefined;
 }
 
 /** The drafts of a batch whose full-size ad the owner refused: he does not pick those again. */

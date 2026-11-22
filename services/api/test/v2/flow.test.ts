@@ -340,6 +340,21 @@ describe("a v2 outreach batch: the burst", () => {
     expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
     const attached = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value;
     expect(attached.ad).toMatchObject({ picked: true, warning: "The agent saw: The shadow under the pack is hard. The agent saw: The headline runs over the pack." });
+
+    // Found live (23-11-2026): the words of a final were set again as on his pick, and the page kept the older picture. His pick
+    // stands, so the newer picture takes its place with no second pick; a second call changes nothing.
+    const again = await typeSet(final);
+    expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
+    const newer = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock, the words as on his pick." })).value;
+    expect(newer).toMatchObject({ already: false, ad: { n: attached.ad.n + 1, imageId: again.value.image.id, picked: true } });
+    expect((await callTool(studio, "outreach_attach", { batchId, why: "Once more." })).value).toMatchObject({ already: true, ad: { n: newer.ad.n } });
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { ready: 1 }, ads: { waitForTheOwner: 0, owedByTheAgent: 0 } });
+    // His no to the newer picture takes his pick back: he is before the drafts again, and nothing more is attached for that pick.
+    await studio.services.outreach.sequence.verdict("00001", { ad: newer.ad.n, yes: false });
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { pick_waits: 1 } });
+    await typeSet(final);
+    await callTool(studio, "batch_done", { batchId });
+    expect(await callTool(studio, "outreach_attach", { batchId, why: "A third." })).toMatchObject({ ok: false, error: expect.stringMatching(/has not picked this draft/) });
   });
 
   it("is judged twice at most when the critic refuses every stage", async () => {
