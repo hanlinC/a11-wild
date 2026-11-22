@@ -177,7 +177,7 @@ describe("outreach_next", () => {
     expect((await next()).owed.map((entry: { id: string }) => entry.id)).toEqual([id]);
   });
 
-  it("owes other words with what the owner said, until the drafts are shown again", async () => {
+  it("owes other words with what the owner said, and shows no drafts again without them", async () => {
     const [id] = await loadProspects(studio);
     const batchId = await outreachBatch(studio, id!, { upTo: "shown" });
     const { picks } = outreach();
@@ -189,9 +189,9 @@ describe("outreach_next", () => {
     studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
     expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ id, batchId, owes: "words", ownerSaid: "say the price" }]);
     await expect(picks.pick(id!, view.drafts[0]!.imageId, "owner@studio.example")).rejects.toThrow(/setting the other words/);
-    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ already: false });
-    expect((await callTool(studio, "outreach_next", {})).value.owed).toEqual([]);
-    expect((await callTool(studio, "outreach_state", {})).value.stages).toMatchObject({ pick_waits: 1 });
+    // The drafts go back to him only with the other words on them (the v2 flow test sets them).
+    expect(await callTool(studio, "outreach_show", { batchId })).toMatchObject({ ok: false, error: expect.stringMatching(/asked for other words/) });
+    expect((await callTool(studio, "outreach_state", {})).value.stages).toMatchObject({ pick_made: 1 });
   });
 
   it("gives the brand again with the owner's words after his none, and never resumes the refused batch", async () => {
@@ -345,6 +345,30 @@ describe("an outreach batch and outreach_attach", () => {
     expect((await callTool(studio, "outreach_attach", { batchId, why: "Two." })).value).toMatchObject({ already: false, ad: { n: 2, picked: true } });
     expect(await stages()).toMatchObject({ ready: 1 });
     expect((await callTool(studio, "outreach_next", {})).value).toMatchObject({ owed: [], brands: [] });
+  });
+
+  it("attaches the same final again when the owner comes back to its draft after a pick of another", async () => {
+    const [id] = await loadProspects(studio);
+    const { picks, store } = outreach();
+    const batchId = await outreachBatch(studio, id!);
+    await callTool(studio, "outreach_attach", { batchId, why: "One." });
+    const tick = () => {
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    };
+    tick();
+    const [first, second] = (await picks.view((await store.all())[0]!, new Set()))!.drafts;
+    await picks.pick(id!, second!.imageId, "owner@studio.example");
+    tick();
+    await picks.pick(id!, first!.imageId, "owner@studio.example");
+    tick();
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ batchId, owes: "final", imageId: first!.imageId }]);
+    // Its final is made already: the batch is done again with it, it is attached as the ad of his newest pick, and nothing stays owed.
+    expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
+    tick();
+    expect((await callTool(studio, "outreach_attach", { batchId, why: "One, again." })).value).toMatchObject({ already: false, ad: { n: 2, picked: true } });
+    expect((await callTool(studio, "outreach_attach", { batchId, why: "One, again." })).value).toMatchObject({ already: true, ad: { n: 2 } });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toEqual([]);
+    expect((await callTool(studio, "outreach_state", {})).value.stages).toMatchObject({ ready: 1 });
   });
 
   it("makes a second batch only after the owner's none, and none after two", async () => {

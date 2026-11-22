@@ -66,7 +66,7 @@ export function copyTools({ batches, brands, facts, copy }: { batches: BatchStor
           state: moved.state,
           approved: words,
           ...(notes.length > 0 ? { notes } : {}),
-          nextStep: batch.state === "judged" ? "Make the drafts: the model paints no words. Then set these words on each draft with type_set." : "Set the new words on this idea's pictures again with type_set and look at each one (checks_save). The rank of the old pictures no longer counts: a fresh critic ranks them again before the owner picks.",
+          nextStep: batch.state === "judged" ? "Make the drafts: the model paints no words. Then set these words on each draft with type_set." : batch.purpose === "outreach" ? "Set the new words on this idea's drafts again with type_set and look at each one (checks_save). Then show the drafts to the owner again with outreach_show: no critic ranks them." : "Set the new words on this idea's pictures again with type_set and look at each one (checks_save). The rank of the old pictures no longer counts: a fresh critic ranks them again before the owner picks.",
         };
       },
     }),

@@ -165,11 +165,13 @@ export class OutreachDesk {
     }
     const imageId = final.delivered.id;
     const same = (ad: OutreachAd) => ad.batchId === batch.id && ad.imageId === imageId;
-    const before = file.ads.find(same);
-    if (before) return { ad: shown(before), already: true };
-    if (optedOut(file, optOuts)) throw new Refusal("This brand opted out. It takes no ad.");
     const owed = owedByAgent(file);
-    if (owed?.type !== "pick" || owed.batchId !== batch.id || owed.imageId !== final.pick?.imageId) {
+    const owes = owed?.type === "pick" && owed.batchId === batch.id && owed.imageId === final.pick?.imageId;
+    // Attached already, and he has not picked its draft again since: he may come back to a draft after a look at another.
+    const before = file.ads.filter(same).at(-1);
+    if (before && !owes) return { ad: shown(before), already: true };
+    if (optedOut(file, optOuts)) throw new Refusal("This brand opted out. It takes no ad.");
+    if (!owes) {
       throw new Refusal("The owner has not picked this draft on the prospect's page. Only the final of his own pick is attached: outreach_show puts the drafts before him, and outreach_next names the pick he made.");
     }
     const saved = await store.putAd(file.profile.id, file.ads.length + 1, {
@@ -181,7 +183,7 @@ export class OutreachDesk {
       why,
     });
     if (saved) return { ad: shown(saved), already: false };
-    const again = (await store.all()).find((entry) => entry.profile.id === file.profile.id)?.ads.find(same);
+    const again = (await store.all()).find((entry) => entry.profile.id === file.profile.id)?.ads.filter(same).at(-1);
     if (again) return { ad: shown(again), already: true };
     throw new Refusal("Another ad was attached to this brand at the same moment. Call outreach_attach again.");
   }

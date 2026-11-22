@@ -100,15 +100,26 @@ export class OutreachPicks {
     const { file, optOuts } = await this.file(batch.prospectId);
     const view = await this.view(file, optOuts);
     if (!view || view.batchId !== batch.id) throw new Refusal("A newer outreach batch of this brand has drafts. Only the newest is shown.");
+    const board = await this.deps.board.board(batch.id);
     if (view.choosing === "closed") throw new Refusal(`This brand is at "${stageOf(file, optOuts)}": it takes no ad now.`);
+    const asked = owedByAgent(file);
+    if (asked?.type === "words" && asked.batchId === batch.id) {
+      // He asked for other words: the drafts go back to him only when that draft carries words he has not seen.
+      const copy = board.ideas.find(({ idea }) => idea.id === asked.ideaId)?.copy;
+      const draft = view.drafts.find((entry) => entry.imageId === asked.imageId);
+      if (!copy || copy.at <= asked.at || !draft || draft.blocked) {
+        throw new Refusal(
+          `The owner asked for other words on draft ${asked.imageId} of ${asked.ideaId}: "${asked.ownerSaid}". Save the new words of that idea with copy_approve, set them on its drafts with type_set, look at each one (checks_save), and then show the drafts again.`,
+        );
+      }
+    }
     const canBePicked = view.drafts.filter((draft) => !draft.blocked).length;
     if (canBePicked === 0) throw new Refusal("No draft of this batch can be sent: each has a D item, two F items or no words. Repair them with one more round of pictures at most, or park the brand with outreach_mark.");
     const counts = { drafts: view.drafts.length, canBePicked };
     const note = "The drafts wait for the owner's pick on the prospect's page. Stop work on this brand: pick nothing and make no final. outreach_next names it again when he has chosen.";
     const waiting = candidatesWait(file);
-    const owed = owedByAgent(file);
     // Shown already and nothing has changed since: a second call adds no second line to the owner's list.
-    if (waiting?.batchId === batch.id || (owed?.type === "pick" && owed.batchId === batch.id)) return { ...counts, already: true, note };
+    if (waiting?.batchId === batch.id || (asked?.type === "pick" && asked.batchId === batch.id)) return { ...counts, already: true, note };
     await this.deps.store.addEvent(file.profile.id, { type: "candidates", batchId: batch.id, drafts: canBePicked }, "agent");
     return { ...counts, already: false, note };
   }

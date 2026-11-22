@@ -194,6 +194,68 @@ describe("a v2 outreach batch: the burst", () => {
     expect((await studio.services.batches.ideas(batchId)).map((entry) => entry.stage)).toEqual(["mof"]);
   });
 
+  it("sets other words on a draft when the owner asks, and shows the drafts again only with them", async () => {
+    await outreachBurst();
+    await choose();
+    const ideas = await selected();
+    await approve(ideas);
+    await callTool(studio, "font_save", { brandId, family: "Archivo", weight: 800 });
+    const drafts: Record<string, string[]> = {};
+    for (const entry of ideas) {
+      drafts[entry.id] = [];
+      for (let n = 0; n < 3; n++) {
+        const imageId = await render(entry.id, "draft", await skeleton(entry.id));
+        await checked(imageId);
+        await typeSet(imageId);
+        drafts[entry.id]!.push(imageId);
+      }
+    }
+    const picks = studio.services.outreach.picks;
+    const view = async () => {
+      const [files, optOuts] = await Promise.all([studio.services.outreach.store.all(), studio.services.outreach.store.optOuts()]);
+      return picks.view(files.find((file) => file.profile.id === "00001")!, optOuts);
+    };
+    // No critic ranks the drafts of an outreach batch: the owner sees all nine.
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ drafts: 9, canBePicked: 9, already: false });
+    expect(await view()).toMatchObject({ words: true, waits: true, choosing: "open" });
+    expect((await view())!.drafts[0]).toMatchObject({ headline: "ONCE YOU START.", subline: "You cannot stop." });
+
+    const [first, second] = [ideas[0]!.id, ideas[1]!.id];
+    const asked = drafts[first]![1]!;
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await picks.words("00001", asked, "Say that it is baked, not fried.");
+    expect(await view()).toMatchObject({ waits: false, agentOwes: true, choosing: "agent", wordsAsked: { imageId: asked, ownerSaid: "Say that it is baked, not fried." } });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ id: "00001", batchId, owes: "words", ideaId: first, imageId: asked, ownerSaid: "Say that it is baked, not fried." }]);
+
+    // The drafts do not go back to him with the words he turned down, nor with new words that are not on the picture.
+    const same = await callTool(studio, "outreach_show", { batchId });
+    expect(same).toMatchObject({ ok: false, error: expect.stringMatching(/asked for other words on draft .*"Say that it is baked, not fried\."/) });
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    expect((await approve([ideas[0]!], { headline: "BAKED, NOT FRIED." })).value.nextStep).toMatch(/outreach_show: no critic ranks them/);
+    expect(await callTool(studio, "outreach_show", { batchId })).toMatchObject({ ok: false, error: expect.stringMatching(/type_set/) });
+    const bare = (await view())!.drafts.filter((draft) => draft.ideaId === first);
+    expect(bare.map((draft) => draft.blocked)).toEqual(Array(3).fill("Its words are not set yet."));
+
+    for (const imageId of drafts[first]!) await typeSet(imageId);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    expect((await callTool(studio, "outreach_show", { batchId })).value).toMatchObject({ drafts: 9, canBePicked: 9, already: false });
+    const shown = (await view())!;
+    expect(shown).toMatchObject({ waits: true, agentOwes: false, choosing: "open" });
+    expect(shown.wordsAsked).toBeUndefined();
+    expect(shown.drafts.find((draft) => draft.imageId === asked)).toMatchObject({ headline: "BAKED, NOT FRIED." });
+    expect(shown.drafts.find((draft) => draft.ideaId === second)).toMatchObject({ headline: "ONCE YOU START." });
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toEqual([]);
+
+    // He picks it, and the final carries the same words.
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await picks.pick("00001", asked, "owner@studio.example");
+    expect((await callTool(studio, "outreach_next", {})).value.owed).toMatchObject([{ owes: "final", ideaId: first, imageId: asked }]);
+    // Once a final is asked for, the words stay: none can be asked.
+    const final = await render(first, "final", asked);
+    expect(final).toBeTruthy();
+    expect(await view()).toMatchObject({ words: false });
+  });
+
   it("is judged twice at most when the critic refuses every stage", async () => {
     await outreachBurst();
     expect((await choose([...STAGES])).reply.value).toMatchObject({ state: "ideas", nextStep: expect.stringMatching(/round 1 of 2/) });
