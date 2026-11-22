@@ -24,12 +24,12 @@ A private ad studio on AWS. An AI agent takes a brand and a product to three fin
 
 | Service | What it does here |
 |---|---|
-| CloudFront | The one public address: serves the dashboard, passes API paths on, adds security headers |
+| CloudFront | The studio's address: serves the dashboard, passes API paths on, adds security headers |
 | S3 | The studio's two private buckets: the dashboard files and the pictures (shown through short-lived signed links). CDK keeps a third for deploy files. |
 | API Gateway (HTTP API) | The door to the API and the MCP server |
 | Lambda | Runs the API and MCP server, the daily clean-up, and the pixel tools (a container) |
 | DynamoDB | The database: one table, on-demand, with point-in-time recovery |
-| Cognito | Sign-in for people and MCP clients, with optional authenticator codes |
+| Cognito | Sign-in for people and MCP clients on its own hosted page, with optional authenticator codes |
 | Systems Manager Parameter Store | The secret store: the Parallel and fal keys as encrypted parameters |
 | SNS | Emails the owner when something waits on him, such as a new MCP client |
 | Budgets | Emails the owner when the month's AWS cost passes the alert amount |
