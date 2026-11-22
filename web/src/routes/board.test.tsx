@@ -3,6 +3,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
+import { AttentionProvider } from "@/lib/attention";
 import { MEMBER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Board } from "./board";
 
@@ -41,7 +42,7 @@ const board = (overrides: Partial<BoardData> = {}): BoardData => ({
   ...overrides,
 });
 
-function show(page: BoardData, me?: typeof MEMBER) {
+function show(page: BoardData, me?: typeof MEMBER, asks?: { text: string; chat?: true }) {
   const sent: unknown[] = [];
   stubApi({
     "GET /api/batches/b1/board": () => ({ body: page }),
@@ -50,10 +51,13 @@ function show(page: BoardData, me?: typeof MEMBER) {
       return { body: { pick: { ideaId: "idea-1", imageId: "idea-1-d3", ownerSaid: "calm", at, by: "owner@example.com" } } };
     },
   });
+  const line = { batch: { id: "b1", kind: page.batch.kind, state: page.batch.state, createdAt: at }, brand: page.brand, product: page.product, who: "owner" as const, to: "/batches/b1", ...asks };
   renderSignedIn(
-    <Routes>
-      <Route path="batches/:batchId" element={<Board />} />
-    </Routes>,
+    <AttentionProvider value={{ value: asks ? { batches: [{ ...line, text: asks.text }], lines: [], counts: { studio: 1 } } : undefined, error: undefined }}>
+      <Routes>
+        <Route path="batches/:batchId" element={<Board />} />
+      </Routes>
+    </AttentionProvider>,
     me,
     "/batches/b1",
   );
@@ -250,12 +254,41 @@ describe("Pick board", () => {
 
   it("says who acts next when every pick is made", async () => {
     const page = board();
-    const pick = (ideaId: string) => ({ ideaId, imageId: null, ownerSaid: "none fits", at, by: "owner@example.com" });
-    show({ ...page, ideas: page.ideas.map((entry) => ({ ...entry, pick: pick(entry.idea.id) })) });
+    const pick = (ideaId: string, imageId: string | null) => ({ ideaId, imageId, ownerSaid: "in my words", at, by: "owner@example.com" });
+    show({ ...page, ideas: page.ideas.map((entry, index) => ({ ...entry, pick: pick(entry.idea.id, index === 0 ? "idea-1-d3" : null) })) });
     const step = await screen.findByRole("status");
     expect(step).toHaveTextContent("In work");
     expect(step).toHaveTextContent("Every pick is made. The agent makes the finals next.");
-    expect(screen.getAllByText("Passed")).toHaveLength(2);
+    expect(screen.getAllByText("Passed")).toHaveLength(1);
+  });
+
+  it("leads with a yes the agent asks for in chat: the cost before the drafts, the Meta text after the picks", async () => {
+    const page = board({ picking: "not_yet" });
+    show({ ...page, batch: { ...page.batch, state: "waiting_spend" } }, undefined, { text: "Say yes or no to the cost of the drafts.", chat: true });
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("Asked of you");
+    expect(step).toHaveTextContent("Say yes or no to the cost of the drafts. You answer your agent in chat.");
+    expect(step).not.toHaveTextContent("still making");
+  });
+
+  it("asks a member for no yes", async () => {
+    show(board(), MEMBER, { text: "Say yes or no to the Meta text.", chat: true });
+    expect(await screen.findByRole("status")).toHaveTextContent("Waits for the owner's pick.");
+  });
+
+  it("promises no final when the owner passed on every idea", async () => {
+    const page = board();
+    show({ ...page, ideas: page.ideas.map((entry) => ({ ...entry, pick: { ideaId: entry.idea.id, imageId: null, ownerSaid: "none fits", at, by: "owner@example.com" } })) });
+    const step = await screen.findByRole("status");
+    expect(step).toHaveTextContent("You passed on every idea, so no final is made.");
+    expect(step).not.toHaveTextContent("finals next");
+  });
+
+  it("marks no idea as waiting in a test batch, where the tester picks", async () => {
+    const page = board();
+    show({ ...page, batch: { ...page.batch, test: true } });
+    expect(await screen.findByRole("status")).toHaveTextContent("the tester chooses in your place");
+    expect(screen.queryByText("Waits for your pick")).not.toBeInTheDocument();
   });
 
   it("sends the owner to the brand's page for an outreach batch, and asks nothing here", async () => {
@@ -263,6 +296,8 @@ describe("Pick board", () => {
     show({ ...page, batch: { ...page.batch, purpose: "outreach", prospectId: "00007" } });
     const step = await screen.findByRole("status");
     expect(step).toHaveTextContent("Nothing is asked of you");
+    expect(screen.queryByText("Waits for your pick")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Pick draft|Pass on all/ })).not.toBeInTheDocument();
     expect(within(step).getByRole("link", { name: "Open the brand's page" })).toHaveAttribute("href", "/outreach/prospects/00007");
   });
 });

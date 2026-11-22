@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
+import { useAttention } from "@/lib/attention";
 import { KIND_NAMES } from "@/lib/kinds";
 import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
@@ -75,7 +76,7 @@ export function Board() {
 
       {ideas.length === 0 ? <Empty>No idea is saved for this batch yet.</Empty> : null}
       {ideas.map((entry, index) => (
-        <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} canPick={picking === "open"} onSaved={reload} />
+        <IdeaSection key={entry.idea.id} batchId={batch.id} entry={entry} number={index + 1} canPick={picking === "open" && batch.purpose !== "outreach"} asked={!batch.test} onSaved={reload} />
       ))}
       {["finals", "finished", "done"].includes(batch.state) ? <DoneGate board={board} /> : null}
     </>
@@ -85,6 +86,9 @@ export function Board() {
 /** What the board asks of its reader now, or who acts next. An outreach batch and a test batch ask nothing here. */
 function BoardStep({ board: { batch, picking, ideas } }: { board: BoardData }) {
   const owner = useMe().role === "owner";
+  // A yes the agent asks for in chat (a cost, the words, the Meta text) is not in the board's own state: the read of what waits has it.
+  const line = useAttention().value?.batches.find((entry) => entry.batch.id === batch.id);
+  if (owner && line?.who === "owner" && line.chat) return <Step who="you">{line.text} You answer your agent in chat.</Step>;
   if (picking === "closed") return <Step who="nobody">This batch is finished. Its picks are closed.</Step>;
   if (picking === "not_yet") return <Step who="agent">Not ready for your pick yet. Your agent is still making or checking the drafts.</Step>;
   if (batch.test) return <Step who="agent">A test batch: the tester chooses in your place.</Step>;
@@ -102,6 +106,7 @@ function BoardStep({ board: { batch, picking, ideas } }: { board: BoardData }) {
   }
   const asked = ideas.filter((entry) => entry.drafts.length > 0);
   const left = asked.filter((entry) => !entry.pick).length;
+  if (left === 0 && !asked.some((entry) => entry.pick?.imageId)) return <Step who="agent">You passed on every idea, so no final is made. The agent reads why you passed.</Step>;
   if (left === 0) return <Step who="agent">Every pick is made. The agent makes the finals next.</Step>;
   if (!owner) return <Step who="nobody">Waits for the owner's pick.</Step>;
   return (
@@ -111,7 +116,8 @@ function BoardStep({ board: { batch, picking, ideas } }: { board: BoardData }) {
   );
 }
 
-function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: string; entry: Entry; number: number; canPick: boolean; onSaved: () => Promise<void> }) {
+/** `canPick` is false where the board takes no pick (an outreach batch is picked on the brand's page); `asked` is false in a test batch, where the tester picks. */
+function IdeaSection({ batchId, entry, number, canPick, asked, onSaved }: { batchId: string; entry: Entry; number: number; canPick: boolean; asked: boolean; onSaved: () => Promise<void> }) {
   const picks = useMe().role === "owner" && canPick;
   const { idea, copy, drafts, pick, rank, finals } = entry;
   const [chosen, setChosen] = useState<string | null | undefined>();
@@ -139,7 +145,7 @@ function IdeaSection({ batchId, entry, number, canPick, onSaved }: { batchId: st
   return (
     <Section
       title={`Idea ${number}: ${idea.title}`}
-      mark={pick ? <Badge color={pick.imageId ? "green" : "gray"}>{pick.imageId ? "Picked" : "Passed"}</Badge> : picks && drafts.length > 0 ? <Badge variant="dot" color="amber">Waits for your pick</Badge> : null}
+      mark={pick ? <Badge color={pick.imageId ? "green" : "gray"}>{pick.imageId ? "Picked" : "Passed"}</Badge> : picks && asked && drafts.length > 0 ? <Badge variant="dot" color="amber">Waits for your pick</Badge> : null}
     >
       <Card>
         <p className="text-body">{idea.visual}</p>
