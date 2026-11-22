@@ -1377,8 +1377,10 @@ export interface OutreachCandidate {
 /** Every draft the studio made for a prospect's newest outreach batch, and what the owner chose. */
 export interface OutreachCandidates {
   batchId: string;
-  /** True when the pictures carry words, so "other words" can be asked. */
+  /** True when the pictures carry words and no full-size ad is made of them yet, so "other words" can be asked. */
   words: boolean;
+  /** True when these drafts wait for his pick now, so "none of these" can be said. */
+  waits: boolean;
   /** `open`: the owner can choose. `agent`: his choice is saved and the agent's work is owed. `closed`: the first message is sent, or the brand takes no ad. */
   choosing: "open" | "agent" | "closed";
   /** The draft he picked. */

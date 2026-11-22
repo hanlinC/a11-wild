@@ -18,6 +18,7 @@ const adKey = (id: string, n: number) => `P#${id}#AD#${String(n).padStart(2, "0"
 const eventKey = (id: string, at: string, eventId: string) => `P#${id}#E#${at}#${eventId}`;
 const sendKey = (id: string, step: OutreachStep) => `P#${id}#S#${step}`;
 const uploadKey = (id: string, uploadId: string) => `P#${id}#U#${uploadId}`;
+const onceKey = (id: string, mark: string) => `P#${id}#O#${mark}`;
 /** Longer than any one call can run. */
 const UPLOAD_HOLD_MS = 60_000;
 
@@ -105,6 +106,11 @@ export class OutreachStore {
   /** Gives an upload back when the call that took it could not attach it, so it can be confirmed again. */
   async releaseUpload(id: string, uploadId: string): Promise<void> {
     await this.table.delete(PK, uploadKey(id, uploadId));
+  }
+
+  /** Takes a one-time mark for a prospect. False when it is taken, so an answer that arrives twice at one moment is saved once. */
+  async once(id: string, mark: string): Promise<boolean> {
+    return this.table.put({ pk: PK, sk: onceKey(id, mark), at: this.now().toISOString() }, { ifNotExists: true });
   }
 
   /** Saves an ad under one exact number. False when that number is taken: another attach came first. */

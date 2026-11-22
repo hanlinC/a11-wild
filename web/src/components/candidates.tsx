@@ -124,11 +124,11 @@ export function Candidates({ id, brand, candidates, waitsForAgent, done }: { id:
           </Card>
         );
       })}
-      {open ? (
+      {open && candidates.waits ? (
         none ? (
           ask(
             "none",
-            "What is missing, in one line? The agent tries once more from your words.",
+            "What is missing, in one line? The agent reads it for one more try. After a second no the brand is parked.",
             (event) => save(event, { action: "none", body: { ownerSaid: said.trim() } }),
             () => setNone(false),
           )

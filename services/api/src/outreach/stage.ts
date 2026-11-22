@@ -27,9 +27,21 @@ type Choice = EventOf<"pick"> | EventOf<"none"> | EventOf<"words">;
 const choices = (file: ProspectFile, batchId?: string): Choice[] =>
   byTime(file.events).filter((event): event is Choice => (event.type === "pick" || event.type === "none" || event.type === "words") && (batchId === undefined || event.batchId === batchId));
 
-/** The ad made of a pick: the newest ad of the pick's batch that was attached after it. */
-const adOfPick = (file: ProspectFile, pick: EventOf<"pick">): OutreachAd | undefined =>
-  [...file.ads].sort((a, b) => a.n - b.n).filter((ad) => ad.batchId === pick.batchId && ad.at >= pick.at).at(-1);
+/** The ad made of a pick: the ad of the pick's batch that was attached after it and before his next pick in that batch. */
+function adOfPick(file: ProspectFile, pick: EventOf<"pick">): OutreachAd | undefined {
+  const next = choices(file, pick.batchId).find((event) => event.type === "pick" && event.at > pick.at);
+  return [...file.ads].sort((a, b) => a.n - b.n).find((ad) => ad.batchId === pick.batchId && ad.at >= pick.at && (!next || ad.at < next.at));
+}
+
+/** The drafts of a batch whose full-size ad the owner refused: he does not pick those again. */
+export const refusedDrafts = (file: ProspectFile, batchId: string): Set<string> =>
+  new Set(
+    choices(file, batchId).flatMap((event) => {
+      if (event.type !== "pick") return [];
+      const ad = adOfPick(file, event);
+      return ad && verdictOf(file, ad)?.type === "ad_no" ? [event.imageId] : [];
+    }),
+  );
 
 /**
  * The drafts that wait for the owner's pick: the newest ones shown, with no answer of his after them.

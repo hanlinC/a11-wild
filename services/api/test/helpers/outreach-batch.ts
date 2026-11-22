@@ -6,10 +6,10 @@ const rules = { rulesVersion: RULES_VERSION };
 const SCENE = "The pouch stands on a wet black rock at dusk, low camera, a wave about to break behind it.";
 
 /**
- * An outreach batch for a prospect with one checked, finished final of idea-1, the other two ideas passed on.
- * `done: false` leaves it before batch_done. `items` are the check items of the final.
+ * An outreach batch for a prospect: nine checked drafts shown to the owner, his pick of the first draft of idea-1, and its checked, finished final.
+ * `upTo` stops it earlier: at the checked drafts, shown to the owner, or picked by him. `done: false` leaves it before batch_done. `items` are the check items of the final.
  */
-export async function outreachBatch(studio: Studio, prospectId: string, options: { done?: boolean; items?: object[] } = {}): Promise<string> {
+export async function outreachBatch(studio: Studio, prospectId: string, options: { done?: boolean; items?: object[]; upTo?: "checked" | "shown" | "picked" } = {}): Promise<string> {
   const { batchId } = await batchAtTruth(studio, { prospectId });
   const tick = () => {
     studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
@@ -30,13 +30,14 @@ export async function outreachBatch(studio: Studio, prospectId: string, options:
       if (ideaId === "idea-1") first ??= imageId;
     }
   }
-  await rankDrafts(studio, batchId);
-  await callTool(studio, "board_show", { batchId });
+  if (options.upTo === "checked") return batchId;
+  await callTool(studio, "outreach_show", { batchId });
   tick();
-  const pick = (ideaId: string, imageId: string | null) => callTool(studio, "pick_save", { batchId, ideaId, imageId, ownerSaid: "the agent's choice for an outreach ad" });
-  await pick("idea-1", first as string);
-  await pick("idea-2", null);
-  await pick("idea-3", null);
+  if (options.upTo === "shown") return batchId;
+  // The owner's own pick on the prospect's page: no agent tool can make it.
+  await studio.services.outreach.picks.pick(prospectId, first as string, "owner@studio.example");
+  tick();
+  if (options.upTo === "picked") return batchId;
   const final = await render("idea-1", "final", first);
   await check(final, options.items);
   const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });

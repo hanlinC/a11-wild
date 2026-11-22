@@ -3,11 +3,13 @@ import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import { defectOf, rejected } from "../checks/store.js";
 import { Refusal } from "../mcp/registry.js";
-import { candidatesWait, owedByAgent, stageOf } from "./stage.js";
+import { candidatesWait, owedByAgent, refusedDrafts, stageOf } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The states of a batch whose drafts are all made and checked. */
 const SHOWN: Batch["state"][] = ["checked", "waiting_pick", "finals", "finished", "done"];
+/** The states in which the words of an idea can still change: before any final is made. */
+const WORDS_OPEN: Batch["state"][] = ["checked", "waiting_pick"];
 /** The stages at which a brand takes no ad, so nothing is chosen for it. */
 const CLOSED: OutreachStage[] = ["opted_out", "lost", "parked", "no_route", "needs_service_ad"];
 
@@ -52,9 +54,14 @@ export class OutreachPicks {
     const batch = await this.batchOf(file.profile.id);
     if (!batch) return undefined;
     const board = await this.deps.board.board(batch.id);
+    const refused = refusedDrafts(file, batch.id);
     const drafts: OutreachCandidate[] = board.ideas.flatMap(({ idea, copy, drafts: made }) =>
       made.map((draft) => {
-        const blocked = blockedBy(draft) ?? (hasWords(batch.kind) && !draft.words ? "Its words are not set yet." : undefined);
+        const blocked =
+          blockedBy(draft) ??
+          (hasWords(batch.kind) && !draft.words ? "Its words are not set yet." : undefined) ??
+          (draft.words && !draft.words.checks?.looked ? "Its words are not checked yet." : undefined) ??
+          (refused.has(draft.image.id) ? "You said no to its full-size version." : undefined);
         return {
           ideaId: idea.id,
           title: idea.title,
@@ -72,7 +79,8 @@ export class OutreachPicks {
     const picked = file.events.filter((event) => event.type === "pick" && event.batchId === batch.id).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
     return {
       batchId: batch.id,
-      words: hasWords(batch.kind),
+      words: hasWords(batch.kind) && WORDS_OPEN.includes(batch.state),
+      waits: candidatesWait(file)?.batchId === batch.id,
       choosing: CLOSED.includes(stageOf(file, optOuts)) ? "closed" : mine?.type === "words" ? "agent" : "open",
       ...(picked?.type === "pick" ? { picked: { ideaId: picked.ideaId, imageId: picked.imageId } } : {}),
       ...(mine?.type === "words" ? { wordsAsked: { imageId: mine.imageId, ownerSaid: mine.ownerSaid } } : {}),
@@ -134,6 +142,10 @@ export class OutreachPicks {
   async none(prospectId: string, ownerSaid: string): Promise<void> {
     const { file, view } = await this.open(prospectId);
     if (!ownerSaid.trim()) throw new Refusal("Say in one line why none of them is right. The agent reads it for the next try.");
+    const shown = candidatesWait(file);
+    if (shown?.batchId !== view.batchId) throw new Refusal("These drafts do not wait for your pick now. To drop an ad that is made, say \"Not this after all\" on it first.");
+    // One no for one showing of the drafts: two clicks at one moment do not use up both tries.
+    if (!(await this.deps.store.once(file.profile.id, `none-${shown.id}`))) return;
     await this.deps.store.addEvent(file.profile.id, { type: "none", batchId: view.batchId, ownerSaid: ownerSaid.trim() }, "owner");
   }
 
@@ -141,7 +153,7 @@ export class OutreachPicks {
   async words(prospectId: string, imageId: string, ownerSaid: string): Promise<void> {
     const { file, view, draft } = await this.open(prospectId, imageId);
     if (!draft) throw new Refusal("Name the draft whose words change.");
-    if (!view.words) throw new Refusal("This ad has no words to change.");
+    if (!view.words) throw new Refusal("The words of these drafts cannot change now: the ad has none, or its full-size version is made. Say \"None of these\" with what the words should say.");
     if (!ownerSaid.trim()) throw new Refusal("Say in one line what the words should say.");
     await this.deps.store.addEvent(file.profile.id, { type: "words", batchId: view.batchId, ideaId: draft.ideaId, imageId, ownerSaid: ownerSaid.trim() }, "owner");
   }
