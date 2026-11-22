@@ -2,6 +2,7 @@ import { OUTREACH_STAGES, type Batch, type OutreachAd, type OutreachStage, type 
 import type { BatchStore } from "../batch/store.js";
 import type { IdeaFinal } from "../board/service.js";
 import { Refusal } from "../mcp/registry.js";
+import { packWarning } from "./candidates.js";
 import type { SpendLedger } from "../spend/ledger.js";
 import { chosen, sameContact } from "./sequence.js";
 import { adWaits, candidatesWait, kindOf, optedOut, owedNow, stageOf, TAKES_NO_AD, wantsAd } from "./stage.js";
@@ -176,6 +177,7 @@ export class OutreachDesk {
     if (!owes) {
       throw new Refusal("The owner has not picked this draft on the prospect's page. Only the final of his own pick is attached: outreach_show puts the drafts before him, and outreach_next names the pick he made.");
     }
+    const warning = packWarning(final.warns ?? []);
     const saved = await store.putAd(file.profile.id, file.ads.length + 1, {
       batchId: batch.id,
       imageId,
@@ -183,6 +185,7 @@ export class OutreachDesk {
       picked: true,
       key: final.delivered.key,
       why,
+      ...(warning ? { warning } : {}),
     });
     if (saved) return { ad: shown(saved), already: false };
     const again = (await store.all()).find((entry) => entry.profile.id === file.profile.id)?.ads.filter(same).at(-1);

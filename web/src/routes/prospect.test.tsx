@@ -172,6 +172,24 @@ describe("the owner's pick on the prospect page", () => {
     expect(screen.queryByRole("button", { name: "Mark as sent" })).not.toBeInTheDocument();
   });
 
+  it("warns of a failed pack measure on a draft he may pick, and on the full-size ad of that pick", async () => {
+    const page = waiting();
+    const [first, ...rest] = page.candidates!.drafts;
+    const warning = "The pack is drawn 5% wider than in its photo. The limit is 2%.";
+    stubApi({ [GET]: () => ({ body: { ...page, candidates: { ...page.candidates!, drafts: [{ ...first!, warning }, ...rest] } } }) });
+    const { unmount } = open();
+    expect(await screen.findByText(`${warning} You judge it by eye.`)).toBeInTheDocument();
+    expect(screen.getAllByText("Look at the pack")).toHaveLength(1);
+    // The warning takes no button away: the count of drafts he may pick is as before.
+    expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    unmount();
+    stubApi({ [GET]: () => ({ body: prospectPage({ ads: [{ ...adView({ verdict: "yes", picked: true }), warning }], message: { step: 0, messages: messages() } }) }) });
+    open();
+    // Beside "Mark as sent", where he decides, and again in the list of ads.
+    expect(await screen.findByText(`${warning} You judge it by eye before you send.`)).toBeInTheDocument();
+    expect(screen.getByText(`${warning} You judge it by eye.`)).toBeInTheDocument();
+  });
+
   it("saves the pick of one draft, and then says that the agent makes it full size", async () => {
     const sent: unknown[] = [];
     stubApi({

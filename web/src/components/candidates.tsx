@@ -1,7 +1,7 @@
 import type { OutreachCandidate, OutreachCandidates, ProspectPage } from "@a11-wild/shared";
 import { type FormEvent, useState } from "react";
 import { FIELD } from "@/components/canon-card";
-import { Failure, TAP, useWrite } from "@/components/outreach";
+import { Failure, PackWarning, TAP, useWrite } from "@/components/outreach";
 import { Card } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,7 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
           Draft {draft.number}
           {mine ? <Badge color="green">Your pick</Badge> : null}
         </p>
+        <PackWarning warning={draft.warning} />
         {draft.blocked ? (
           <p className="text-caption text-muted-foreground">Cannot be sent: {draft.blocked}</p>
         ) : open ? (

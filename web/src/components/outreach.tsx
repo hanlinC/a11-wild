@@ -81,6 +81,21 @@ export function AdPicture({ ad, brand }: { ad: OutreachAdView; brand: string }) 
   );
 }
 
+/** What the pack measure found in a picture the owner may still send: he looks at the pack himself. */
+export function PackWarning({ warning, before }: { warning: string | undefined; before?: string }) {
+  if (!warning) return null;
+  return (
+    <p className="text-caption">
+      <Badge variant="dot" color="amber">
+        Look at the pack
+      </Badge>
+      <span className="mt-1 block text-muted-foreground">
+        {warning} You judge it by eye{before ? ` ${before}` : ""}.
+      </span>
+    </p>
+  );
+}
+
 /** Runs one write and says in words why it failed. */
 export function useWrite(id: string, done: (page: ProspectPage) => void) {
   const [busy, setBusy] = useState<string>();
@@ -210,6 +225,7 @@ export function MessageCard({
           ))}
         </fieldset>
         <p className="rounded-lg border border-border bg-background px-3 py-2 text-body break-words whitespace-pre-wrap">{message.text}</p>
+        <PackWarning warning={ad?.warning} before="before you send" />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" className={TAP} onClick={copy}>
             {copied ? "Copied" : "Copy the text"}

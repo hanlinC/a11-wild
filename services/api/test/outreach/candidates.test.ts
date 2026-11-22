@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockedBy, plainReason } from "../../src/outreach/candidates.js";
+import { blockedBy, plainReason, warningOf } from "../../src/outreach/candidates.js";
 
 describe("why a draft cannot be sent, as the owner reads it", () => {
   // The lines are the pixel tools' own, as the live studio saved them on 22-11-2026.
@@ -33,8 +33,23 @@ describe("why a draft cannot be sent, as the owner reads it", () => {
     expect(plainReason({ tool: "pack_check", note: "The pack was not found at that point." })).toBe("The pack was not found at that point.");
   });
 
-  it("is the reason a draft with a measured defect is blocked", () => {
-    const checks = { imageId: "a", looked: true, savedAt: "", items: [{ code: "D11" as const, tool: "pack_check", note: "render H/W 0.955 (486 x 509 px); packshot H/W 1.000; difference -4.5%; FAIL at 2%" }] };
-    expect(blockedBy({ checks })).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%.");
+  const measured = { code: "D11" as const, tool: "pack_check", note: "render H/W 0.955 (486 x 509 px); packshot H/W 1.000; difference -4.5%; FAIL at 2%" };
+  const of = (items: { code: "D11" | "D4" | "F1"; note: string; tool?: string }[]) => ({ checks: { imageId: "a", looked: true, savedAt: "", items } });
+
+  it("warns of a failed pack measure and does not block the draft: the owner judges the pack by eye", () => {
+    expect(blockedBy(of([measured]))).toBeUndefined();
+    expect(warningOf(of([measured]))).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%.");
+    expect(warningOf(of([measured, { ...measured, note: "Pack 2: render H/W 1.100; packshot H/W 1.000; difference +10.0%; FAIL at 2%" }]))).toBe(
+      "The pack is drawn 5% wider than in its photo. The limit is 2%. Pack 2: The pack is drawn 10% taller than in its photo. The limit is 2%.",
+    );
+    expect(warningOf(of([]))).toBeUndefined();
+  });
+
+  it("still blocks a draft for what the agent saw, for another tool's measure, and for two faults beside the pack measure", () => {
+    expect(blockedBy(of([measured, { code: "D4", note: "Invented leaves at the left edge." }]))).toBe("Invented leaves at the left edge.");
+    expect(blockedBy(of([{ code: "D11", note: "The pouch is another shape than the real one." }]))).toBe("The pouch is another shape than the real one.");
+    expect(blockedBy(of([{ code: "D11", tool: "cap_check", note: "cap centre 14.0 px left of the body centre (4.1% of the body width); FAIL at 1%" }]))).toBe("The cap sits 4% to the left of the middle of the pack. The limit is 1%.");
+    expect(blockedBy(of([measured, { code: "F1", note: "Soft edge." }, { code: "F1", note: "Flat light." }]))).toBe("It has two or more faults.");
+    expect(blockedBy(of([measured, { code: "F1", note: "Soft edge." }]))).toBeUndefined();
   });
 });

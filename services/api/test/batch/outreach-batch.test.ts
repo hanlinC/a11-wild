@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RULES_VERSION } from "../../src/houserules.js";
+import { PACK_CHECK } from "../../src/checks/store.js";
 import { batchAtTruth, idea, judgeIdeas, rankDrafts } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import { loadProspects } from "../outreach/helpers.js";
@@ -99,6 +100,64 @@ describe("an outreach batch", () => {
     expect(report).toMatchObject({ done: true, batch: { state: "done", purpose: "outreach" }, nextStep: expect.stringMatching(/outreach_attach/) });
     const pack = await callTool(studio, "pack_publish", { ...rules, batchId, launchPlan: ["One ad set."] });
     expect(pack).toMatchObject({ ok: false, error: expect.stringMatching(/outreach batch.*no client pack/) });
+  });
+
+  describe("the pack measure", () => {
+    const WIDER = { code: "D11" as const, note: "render H/W 0.955 (486 x 509 px); packshot H/W 1.000; difference -4.5%; FAIL at 2%" };
+    const measure = (imageId: string) => studio.services.checks.measure(batchId, imageId, PACK_CHECK, WIDER);
+    const view = async () => (await studio.services.outreach.picks.view((await studio.services.outreach.store.all()).find((file) => file.profile.id === PROSPECT)!, new Set()))!;
+
+    it("warns the owner and blocks nothing: he picks the draft, its final is made, and the ad carries the warning", async () => {
+      await batchAtBoard({ prospectId: PROSPECT });
+      const picked = drafts["idea-1"]!;
+      await measure(picked);
+      await callTool(studio, "outreach_show", { batchId });
+      const draft = (await view()).drafts.find((entry) => entry.imageId === picked)!;
+      expect(draft.blocked).toBeUndefined();
+      expect(draft.warning).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%.");
+      expect((await view()).drafts.filter((entry) => entry.warning)).toHaveLength(1);
+
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      await studio.services.outreach.picks.pick(PROSPECT, picked, "owner@studio.example");
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      const final = await render("idea-1", "final", picked);
+      await measure(final);
+      expect((await check(final)).value.note).toMatch(/warns the owner and does not reject/);
+      const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });
+      await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+      const report = (await callTool(studio, "batch_done", { batchId })).value;
+      expect(report).toMatchObject({ done: true });
+      expect(JSON.stringify(report)).toMatch(/pack_check failed: the owner is warned/);
+      const attached = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value;
+      expect(attached.ad).toMatchObject({ picked: true, warning: "The pack is drawn 5% wider than in its photo. The limit is 2%." });
+    });
+
+    it("carries no warning on a final whose pack passed", async () => {
+      await batchAtBoard({ prospectId: PROSPECT });
+      await oneFinal();
+      await callTool(studio, "batch_done", { batchId });
+      expect((await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value.ad.warning).toBeUndefined();
+    });
+
+    it("still blocks a draft the agent marked, with the pack measure beside it or without", async () => {
+      await batchAtBoard({ prospectId: PROSPECT });
+      const picked = drafts["idea-1"]!;
+      await measure(picked);
+      await check(picked, [{ code: "D4", note: "Invented leaves at the left edge." }]);
+      const draft = (await view()).drafts.find((entry) => entry.imageId === picked)!;
+      expect(draft).toMatchObject({ blocked: "Invented leaves at the left edge." });
+      expect(draft.warning).toBeUndefined();
+      await expect(studio.services.outreach.picks.pick(PROSPECT, picked, "owner@studio.example")).rejects.toThrow(/cannot be sent/);
+    });
+
+    it("still rejects in a batch made for a client: no final from that draft, and the owner's pick is told so", async () => {
+      await batchAtBoard({});
+      const picked = drafts["idea-1"]!;
+      await measure(picked);
+      const saved = await callTool(studio, "pick_save", { batchId, ideaId: "idea-1", imageId: picked, ownerSaid: "this one" });
+      expect(saved.value.note).toMatch(/no final can be made from it/);
+      expect(await callTool(studio, "render_submit", { ...rules, batchId, ideaId: "idea-1", kind: "final", prompt: SCENE, fromId: picked })).toMatchObject({ ok: false, error: expect.stringMatching(/R35/) });
+    });
   });
 
   it("is not done when its final has a D item", async () => {

@@ -51,16 +51,18 @@ export class DoneGate {
     const picked = finals.filter((entry) => entry.pick?.imageId);
     const open = picked.flatMap((entry) => entry.missing);
     const hasPack = product.photos.some((photo) => photo.kind === "pack");
+    // In an outreach batch the pack measure warns the owner and rejects nothing: he judges the pack's shape by eye.
+    const warned = picked.some((entry) => entry.warns);
     const made: DoneCondition = {
       name: "finals",
-      asks: "Each pick became a final with no D item, and its shape matches the real product.",
+      asks: outreach ? "The pick became a final with no D item. The owner judges the pack's shape by eye, with the pack measure before him." : "Each pick became a final with no D item, and its shape matches the real product.",
       passed: picked.length > 0 && open.length === 0,
       evidence:
         picked.length === 0
           ? "No draft is picked, so there is no final to judge."
           : open.length > 0
             ? `Still missing: ${open.join("; ")}.`
-            : `${picked.length} final(s): each is checked, has no D item and fewer than two F items, ${hasPack ? "passed pack_check against the pack photo where it shows the pack, " : ""}and has its real-camera finish.`,
+            : `${picked.length} final(s): each is checked, has no D item and fewer than two F items, ${warned ? "was measured against the pack photo (pack_check failed: the owner is warned of it on the brand's page), " : hasPack ? "passed pack_check against the pack photo where it shows the pack, " : ""}and has its real-camera finish.`,
     };
 
     const conditions = [picks, made];

@@ -1166,6 +1166,8 @@ export interface OutreachAd {
   key: string;
   /** One line from the agent: what the ad shows and why it fits the brand. */
   why: string;
+  /** What the pack measure found in this final: the owner looks at the pack before he sends it. */
+  warning?: string;
   at: string;
 }
 
@@ -1372,6 +1374,8 @@ export interface OutreachCandidate {
   viewUrl: string;
   /** Why this draft cannot be picked: a check it failed. */
   blocked?: string;
+  /** What the pack measure found in a draft that can be picked: the owner looks at the pack before he picks. */
+  warning?: string;
 }
 
 /** Every draft the studio made for a prospect's newest outreach batch, and what the owner chose. */

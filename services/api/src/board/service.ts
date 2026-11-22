@@ -3,7 +3,7 @@ import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { failedPoints, type PointStore } from "../checks/points.js";
-import { type CheckStore, defectOf, rejected } from "../checks/store.js";
+import { type CheckStore, defectOf, judgedIn, PACK_CHECK, packWarnings, rejected } from "../checks/store.js";
 import type { CopyStore } from "../copy/store.js";
 import type { CriticStore } from "../critic/store.js";
 import type { DirectionStore } from "../direction/store.js";
@@ -16,8 +16,7 @@ import type { RenderStore } from "../render/store.js";
 import type { TasteLog } from "../taste/log.js";
 import type { TruthStore } from "../truth/store.js";
 
-/** The tool that measures a pack's shape. A product with a pack photo needs it on every draft and every final. */
-export const PACK_CHECK = "pack_check";
+export { PACK_CHECK };
 
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log and not in the calibration.";
 
@@ -69,6 +68,8 @@ export interface IdeaFinal {
   missing: string[];
   /** The picture that is delivered, once the final lacks nothing: the finished final, and in an ad with words that picture with its words. */
   delivered?: BatchImage;
+  /** What the pack measure found in the final of an outreach batch. It rejects nothing there: the owner is warned of it. */
+  warns?: CheckItem[];
 }
 
 /** The drafts of a batch as the owner sees them, the checks that every picture needs, and the owner's picks. */
@@ -225,9 +226,12 @@ export class BoardService implements FinalRule {
       // A repair of a final stands for it, and is checked again as a new picture.
       const final = countedOf(newest, all);
       missing.push(...(await this.needs(batch, final, hasPack, found)));
-      const defect = defectOf(found.get(final.id));
+      const judged = judgedIn(batch, found.get(final.id));
+      const warns = packWarnings(batch, found.get(final.id));
+      if (warns.length > 0) entry.warns = warns;
+      const defect = defectOf(judged);
       if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
-      else if (rejected(found.get(final.id))) missing.push(`a final of ${idea.id} with fewer than two F items`);
+      else if (rejected(judged)) missing.push(`a final of ${idea.id} with fewer than two F items`);
       else if (!finishOf(final, all)) missing.push(`photo_finish for picture ${final.id}`);
       else {
         const finish = finishOf(final, all) as BatchImage;
@@ -264,7 +268,7 @@ export class BoardService implements FinalRule {
           const counted = countedOf(image, all);
           missing.push(...(await this.needs(batch, counted, hasPack, found)));
           // The owner judges an ad, not a bare photo: each draft carries the approved words and the real logo before he sees it.
-          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft", defectOf(found.get(counted.id)) !== undefined || rejected(found.get(counted.id))));
+          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft", rejected(judgedIn(batch, found.get(counted.id)))));
         }
         // A rank counts while it is of the pictures the owner sees now: a repair made after it, or words set after it, needs a new rank.
         const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
@@ -297,11 +301,16 @@ export class BoardService implements FinalRule {
     }
     const saved = await checks.save(batchId, imageId, items);
     const { batch: after, missing } = await this.progress(batch);
-    const defect = defectOf(saved);
+    const defect = defectOf(judgedIn(batch, saved));
+    const warned = packWarnings(batch, saved).length > 0;
     return {
       checks: saved,
       state: after.state,
-      ...(defect ? { note: `This picture has ${defect.code}, so it cannot become a final. It stays on the board, named with its item.` } : {}),
+      ...(defect
+        ? { note: `This picture has ${defect.code}, so it cannot become a final. It stays on the board, named with its item.` }
+        : warned
+          ? { note: "The pack measure failed. In an outreach batch that warns the owner and does not reject the picture: he judges the pack's shape by eye." }
+          : {}),
       ...(missing.length > 0 ? { stillMissing: missing } : {}),
     };
   }
@@ -427,7 +436,10 @@ export class BoardService implements FinalRule {
     return false;
   }
 
-  /** Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not. */
+  /**
+   * Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not.
+   * It answers whether a draft may be made again, so a failed pack measure counts here in an outreach batch too: a pass is still the aim.
+   */
   async rejection(batchId: string, imageId: string): Promise<string | undefined> {
     const { batches, images, checks, copy } = this.deps;
     const all = await images.list(batchId);
@@ -461,7 +473,8 @@ export class BoardService implements FinalRule {
     const hasPack = (await this.deps.brands.product(batch.productId)).photos.some((photo) => photo.kind === "pack");
     const unchecked = await this.needs(batch, source, hasPack, await this.deps.checks.all(batch.id));
     if (unchecked.length > 0) throw new Refusal(`R35: the repair of this draft is not checked yet, so it cannot become a final. Still missing: ${unchecked.join("; ")}.`);
-    const defect = defectOf(await this.deps.checks.get(batch.id, source.id));
+    // In an outreach batch the owner picked this draft with the pack measure's warning before him.
+    const defect = defectOf(judgedIn(batch, await this.deps.checks.get(batch.id, source.id)));
     if (defect) throw new Refusal(`R35: this draft has ${defect.code} (${defect.note}), so it cannot become a final. Repair it with product_swap or product_reprint and check the repair, or tell the owner.`);
     return { finals: made.filter((entry) => entry.imageId).length, source };
   }

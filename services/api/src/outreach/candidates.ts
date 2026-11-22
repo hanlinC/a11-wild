@@ -1,7 +1,7 @@
 import type { Batch, Board, BoardDraft, CheckItem, OutreachCandidate, OutreachCandidates, ProspectFile } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
-import { defectOf, rejected } from "../checks/store.js";
+import { defectOf, judgedIn, packWarnings, rejected } from "../checks/store.js";
 import { Refusal } from "../mcp/registry.js";
 import { candidatesWait, owedByAgent, owedNow, refusedDrafts, stageOf, TAKES_NO_AD } from "./stage.js";
 import type { OutreachStore } from "./store.js";
@@ -41,15 +41,27 @@ export function plainReason({ note, tool }: Pick<CheckItem, "note" | "tool">): s
   return note;
 }
 
-/** Why a draft cannot go to a person: a D item, or two F items, in the picture or in the picture with its words. */
+const OUTREACH = { purpose: "outreach" } as const;
+
+/**
+ * Why a draft cannot go to a person: a D item, or two F items, in the picture or in the picture with its words.
+ * The pack measure is not among them: the owner judges the pack's shape by eye, and `warningOf` says what was measured.
+ */
 export function blockedBy(draft: Pick<BoardDraft, "checks" | "words">): string | undefined {
   for (const checks of [draft.checks ?? undefined, draft.words?.checks ?? undefined]) {
-    const defect = defectOf(checks);
+    const judged = judgedIn(OUTREACH, checks);
+    const defect = defectOf(judged);
     if (defect) return plainReason(defect);
-    if (rejected(checks)) return "It has two or more faults.";
+    if (rejected(judged)) return "It has two or more faults.";
   }
   return undefined;
 }
+
+/** What the pack measure found, in the owner's words: he may pick the draft, and he looks at its pack first. */
+export const packWarning = (items: CheckItem[]): string | undefined => (items.length > 0 ? items.map(plainReason).join(" ") : undefined);
+
+/** The pack measure's warning on a draft, or nothing. */
+export const warningOf = (draft: Pick<BoardDraft, "checks">): string | undefined => packWarning(packWarnings(OUTREACH, draft.checks ?? undefined));
 
 /** The owner's own choice of the ad for a prospect: he sees every draft the studio made and picks one. */
 export class OutreachPicks {
@@ -81,6 +93,7 @@ export class OutreachPicks {
           (hasWords(batch.kind) && !draft.words ? "Its words are not set yet." : undefined) ??
           (draft.words && !draft.words.checks?.looked ? "Its words are not checked yet." : undefined) ??
           (refused.has(draft.image.id) ? "You said no to its full-size version." : undefined);
+        const warning = blocked ? undefined : warningOf(draft);
         return {
           ideaId: idea.id,
           title: idea.title,
@@ -89,6 +102,7 @@ export class OutreachPicks {
           imageId: draft.image.id,
           viewUrl: draft.words?.viewUrl ?? draft.viewUrl,
           ...(blocked ? { blocked } : {}),
+          ...(warning ? { warning } : {}),
         };
       }),
     );
