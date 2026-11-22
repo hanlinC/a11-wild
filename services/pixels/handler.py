@@ -156,7 +156,7 @@ class Job:
             run(product_lock.cutout, types.SimpleNamespace(
                 packshot=path, out=mask_path,
                 dark_max=int(options.get("darkMax", 48)), light_sat=float(options.get("lightSat", 0.17)), light_min=int(options.get("lightMin", 150)),
-                open=int(options.get("open", 3)), smooth=float(options.get("smooth", 0)), erode=int(options.get("erode", 1)),
+                open=int(options.get("open", 3)), smooth=float(options.get("smooth", 0)), erode=int(options.get("erode", 1)), outline=float(options.get("outline", 12)),
                 edges=str(options.get("edges", "top,bottom,left,right")),
             ))
         if box is not None:

@@ -166,6 +166,49 @@ class ProductLock(Tmp):
             product_lock.skeleton(a)
 
 
+class Cutout(Tmp):
+    """cutout finds a pack on a plain backdrop. Nano Singapore, 22-11-2026: a white label at the bottle's edge went with the white backdrop."""
+
+    def photo(self, shadow=False):
+        # A dark bottle, 200 wide and 400 high, on white. A white label panel fills its right edge; only a pale outline (228 of 255)
+        # parts the panel from the backdrop, and the outline has a gap of 5 rows.
+        rgb = np.full((600, 500, 3), 255, np.uint8)
+        rgb[100:500, 150:350] = (70, 45, 30)
+        rgb[200:400, 300:350] = 255
+        rgb[200:400, 347:350] = 228
+        rgb[298:303, 347:350] = 255
+        if shadow:  # a soft shadow on the backdrop, left of the bottle: no line, a slow ramp from 215 to white
+            for x in range(60, 150):
+                rgb[420:500, x] = 255 - int(40 * (x - 60) / 90)
+        return self.save("bottle.png", rgb)
+
+    def cut(self, path, **over):
+        out = os.path.join(self.dir.name, "mask.png")
+        a = dict(packshot=path, out=out, dark_max=48, light_sat=0.17, light_min=150, open=3, smooth=0, erode=1, outline=12, edges="top,bottom,left,right")
+        with contextlib.redirect_stdout(io.StringIO()):
+            product_lock.cutout(types.SimpleNamespace(**{**a, **over}))
+        return np.asarray(Image.open(out)) > 128
+
+    def test_a_white_label_at_the_packs_edge_stays_with_the_pack(self):
+        mask = self.cut(self.photo())
+        self.assertGreater(mask[210:390, 305:345].mean(), 0.99)
+        self.assertAlmostEqual(pack_check.ratio(mask)[0], 2.0, delta=0.04)
+        self.assertEqual(mask[:95].sum() + mask[:, :145].sum() + mask[:, 355:].sum(), 0)
+
+    def test_without_the_outline_rule_the_label_goes_with_the_backdrop(self):
+        # The fault as it was: the pack measures a quarter too narrow.
+        mask = self.cut(self.photo(), outline=0)
+        self.assertLess(mask[210:390, 305:345].mean(), 0.01)
+        self.assertGreater(pack_check.ratio(mask)[0], 2.5)
+
+    def test_a_soft_shadow_on_the_backdrop_is_still_backdrop(self):
+        mask = self.cut(self.photo(shadow=True))
+        self.assertEqual(mask[425:495, 60:140].sum(), 0)
+
+    def test_a_bad_outline_is_refused(self):
+        self.assertIn("--outline", exit_message(lambda: self.cut(self.photo(), outline=-1)))
+
+
 class LayoutReprint(Tmp):
     """layout places products from a plan; reprint fits the packshot face back onto a render made from it."""
 

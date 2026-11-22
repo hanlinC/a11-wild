@@ -24,6 +24,7 @@ const cutout = z
     open: z.number().int().min(1).max(15).optional(),
     smooth: z.number().min(0).max(20).optional(),
     erode: z.number().int().min(0).max(10).optional(),
+    outline: z.number().min(0).max(100).optional().describe("The step in brightness, in one pixel, that a light backdrop does not cross (12 by default; 0 turns it off). It keeps a white label at the pack's edge on a white backdrop. Raise it when a hard shadow stays with the pack."),
     edges: z.string().regex(/^(top|bottom|left|right)(,(top|bottom|left|right)){0,3}$/).optional(),
   })
   .strict();

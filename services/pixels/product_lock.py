@@ -77,10 +77,34 @@ def alpha_from_png(path, box, size, packshot_size=None):
     return m.crop(box).resize(size, Image.LANCZOS)
 
 
+def inside_outline(light, lum, outline):
+    """The light backdrop that the picture's border reaches without a step over an outline.
+
+    A white label at the edge of a pack is as light as a white backdrop, and only the pack's thin outline parts them. A fill from
+    the border runs through that line where it is pale, and takes the label with the backdrop (Nano Singapore, 22-11-2026: the pack
+    then measured 2.15 high for 1 wide, not 1.96). So the fill does not step over a pixel where the brightness changes by `outline`
+    or more in one pixel, and it does not go through a gap in that line narrower than about 1% of the picture."""
+    import cv2
+    H, W = light.shape
+    lum = lum.astype(np.float32)
+    step = np.hypot(cv2.Sobel(lum, cv2.CV_32F, 1, 0, ksize=3), cv2.Sobel(lum, cv2.CV_32F, 0, 1, ksize=3)) / 4
+    calm = (light & (step < outline)).astype(np.uint8)
+    r = max(2, round(min(H, W) * 0.004))
+    _, parts = cv2.connectedComponents(cv2.erode(calm, np.ones((2 * r + 1, 2 * r + 1), np.uint8)), connectivity=4)
+    at_border = np.unique(np.concatenate([parts[0], parts[-1], parts[:, 0], parts[:, -1]]))
+    reached = np.isin(parts, at_border[at_border > 0]).astype(np.uint8)
+    near = np.ones((3, 3), np.uint8)
+    for _ in range(2 * r):  # back to the full width of the calm backdrop, round each corner
+        reached = cv2.dilate(reached, near) & calm
+    # One pixel more: the pale half of the pack's own edge is backdrop, as it was before.
+    return cv2.dilate(reached, near).astype(bool) & light
+
+
 def cutout(a):
     """Cut a product out of a packshot with a plain backdrop (dark and/or white), for products that are not a rounded box
     (a cake on its box). A dark pixel (max channel below --dark-max) or a light unsaturated pixel (saturation below --light-sat and
     brightness above --light-min) that is joined to the picture's border is backdrop; everything else is the product.
+    A light region behind an outline (--outline) stays with the product: a white label at the pack's edge on a white backdrop.
     The mask is opened (--open px) and eroded by 1 px (no specks, thin lines or fringe), reduced to its largest piece, and softened a little."""
     from PIL import ImageFilter
     if a.open < 1 or a.open % 2 == 0:
@@ -89,6 +113,8 @@ def cutout(a):
         sys.exit("--smooth must be finite and zero or greater")
     if a.erode < 0:
         sys.exit("--erode must be zero or greater")
+    if not np.isfinite(a.outline) or a.outline < 0:
+        sys.exit("--outline must be finite and zero or greater")
     edges = {e.strip() for e in a.edges.split(",")}
     if not edges <= {"top", "bottom", "left", "right"}:
         sys.exit("--edges takes top, bottom, left, right, separated by commas")
@@ -122,7 +148,8 @@ def cutout(a):
                 out |= np.asarray(t) == 128
         return out
 
-    bg = backdrop((mx < a.dark_max) & (smooth if smooth is not None else True)) | backdrop((sat < a.light_sat) & (mx > a.light_min))
+    light = (sat < a.light_sat) & (mx > a.light_min)
+    bg = backdrop((mx < a.dark_max) & (smooth if smooth is not None else True)) | (backdrop(light) if a.outline <= 0 else inside_outline(light, lum, a.outline))
     if not bg.any():
         sys.exit("no backdrop found on the chosen --edges. Check --dark-max, --light-sat and --edges (an edge the product fills is not backdrop).")
     m = Image.fromarray(((~bg) * 255).astype("uint8"), "L").filter(ImageFilter.MinFilter(a.open)).filter(ImageFilter.MaxFilter(a.open))
@@ -744,6 +771,7 @@ def main():
     c.add_argument("--light-min", type=int, default=150, help="the lowest brightness of a light backdrop pixel")
     c.add_argument("--open", type=int, default=3, help="odd size of the opening filter: thin lines narrower than this are removed (3 keeps fine edges, 7 removes a horizon line)")
     c.add_argument("--smooth", type=float, default=0, help="0 = off. Above 0, a dark pixel counts as backdrop only where the picture is smooth (local brightness std below this, 2.0 works): keeps a dark textured product, such as a brownie, on a black backdrop")
+    c.add_argument("--outline", type=float, default=12, help="0 = off. A light pixel is backdrop only when the border reaches it with no step in brightness of this much in one pixel: keeps a white label at the pack's edge on a white backdrop")
     c.add_argument("--erode", type=int, default=1, help="how many 1 px erosions to apply at the end (more removes a dark fringe of backdrop)")
     c.add_argument("--edges", default="top,bottom,left,right", help="which picture edges the backdrop may touch (comma list). Drop an edge where a dark or pale part of the product touches it, so it is not read as backdrop")
     c.set_defaults(fn=cutout)
