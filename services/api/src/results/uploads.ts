@@ -113,8 +113,9 @@ export class UploadService {
     }
     const key = `results/packs/${packId}/${upload.id}.${UPLOAD_TYPES[upload.type]}`;
     await pictures.put(key, body, upload.type);
-    await pictures.remove(upload.key);
+    // The record points to the kept copy before the sent file is removed: a save that fails leaves the sent file to be read again.
     const kept = await results.settle(packId, { ...upload, key }, "checked");
+    await pictures.remove(upload.key);
     // Whoever reads the file first, the client's page or the owner's list, the owner hears of it once.
     await this.deps
       .brandOf(packId)

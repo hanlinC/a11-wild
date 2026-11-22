@@ -1,5 +1,5 @@
 import type { MetaVariant } from "@a11-wild/shared";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { csvTable, csvText, isSentType } from "../../src/results/uploads.js";
 import { createStudio, type Studio } from "../helpers/deps.js";
 import { JPEG, PNG } from "../helpers/pictures.js";
@@ -138,6 +138,17 @@ describe("a file a client sent", () => {
     const [again] = await studio.services.uploads.list(pack.id);
     expect(again?.key).toBe(kept?.key);
     expect(studio.pictures.files.get(kept!.key)?.body).toEqual(PNG);
+  });
+
+  it("reads the file again when the save of its record failed, and does not lose it", async () => {
+    const upload = await sent("week-1.png", "image/png", PNG);
+    const settle = vi.spyOn(studio.services.results, "settle").mockRejectedValueOnce(new Error("the table is away"));
+    await expect(studio.services.uploads.done(pack, upload.id)).rejects.toThrow("the table is away");
+    expect(studio.pictures.files.has(upload.key)).toBe(true);
+    settle.mockRestore();
+    studio.clock.now = new Date(studio.clock.now.getTime() + 11 * 60 * 1000);
+    expect(await studio.services.uploads.list(pack.id)).toMatchObject([{ id: upload.id, state: "checked" }]);
+    expect(studio.pictures.files.has(upload.key)).toBe(false);
   });
 
   it("tells the owner of a file also when the owner's list read it before the client's page said it was sent", async () => {
