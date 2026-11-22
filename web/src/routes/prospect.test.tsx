@@ -284,6 +284,24 @@ describe("the owner's pick on the prospect page", () => {
     expect(screen.getAllByRole("img", { name: /^Draft \d of/ })).toHaveLength(4);
   });
 
+  it("closes at the first Close also after the page took an earlier large picture away", async () => {
+    stubApi({ [GET]: () => ({ body: waiting() }) });
+    open();
+    const drafts = await screen.findAllByRole("button", { name: /^Draft \d of/ });
+    await userEvent.click(drafts[2]!);
+    // "Other words" takes the large picture away itself, with no Close and no Back of the reader.
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Other words" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Its step in the history is given back, so a later Back does not open nothing.
+    await waitFor(() => expect((window.history.state as { viewer?: boolean } | null)?.viewer).toBeUndefined());
+    await userEvent.click(drafts[0]!);
+    // The second large picture has a step of its own, so the browser's Back closes it too.
+    expect((window.history.state as { viewer?: boolean } | null)?.viewer).toBe(true);
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getAllByRole("img", { name: /^Draft \d of/ })).toHaveLength(4);
+  });
+
   it("takes the pick from the large picture and closes it", async () => {
     const sent: unknown[] = [];
     stubApi({
