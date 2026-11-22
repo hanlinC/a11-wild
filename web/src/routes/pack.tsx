@@ -28,7 +28,7 @@ export const packDoor = (token: string): string => `/api/pack/${encodeURICompone
 /** The frame of a page a link opens: no sign-in, no menu, nothing of the studio but its name. */
 export function LinkPage({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-dvh">
+    <div className="reading min-h-dvh">
       <header className="border-b border-border">
         <div className="mx-auto flex h-14 max-w-4xl items-center px-5">
           <span className="text-title font-semibold tracking-tight">a11 studio</span>
@@ -112,7 +112,9 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
                       <li key={claim.claim}>
                         {claim.claim}
                         <span className="text-muted-foreground"> · "{claim.quote}" · </span>
-                        <OutLink href={claim.url}>source</OutLink>
+                        <span className="whitespace-nowrap">
+                          <OutLink href={claim.url}>source</OutLink>
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -332,14 +334,15 @@ function Copyable({ label, text, mono = false }: { label: string; text: string; 
     }
   }
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
+    <div>
+      {/* The button sits beside the label, so the text below keeps the full width on a phone. */}
+      <div className="flex items-center justify-between gap-3">
         <div className="text-caption text-muted-foreground">{label}</div>
-        <div className={mono ? "break-all font-mono text-caption" : "whitespace-pre-wrap text-body"}>{text}</div>
+        <Button variant="secondary" size="compact" onClick={copy} aria-label={`Copy the ${label.toLowerCase()}`}>
+          {copied ? "Copied" : "Copy"}
+        </Button>
       </div>
-      <Button variant="secondary" size="compact" onClick={copy} aria-label={`Copy the ${label.toLowerCase()}`}>
-        {copied ? "Copied" : "Copy"}
-      </Button>
+      <div className={mono ? "mt-1 break-all font-mono text-caption" : "mt-1 whitespace-pre-wrap text-body"}>{text}</div>
     </div>
   );
 }

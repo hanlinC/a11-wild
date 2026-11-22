@@ -55,6 +55,12 @@ describe("A client's pack page", () => {
     expect(calls).toEqual([`GET /api/pack/${TOKEN}`]);
   });
 
+  it("is set in the reading size of a web page, not the smaller size of the dashboard", async () => {
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
+    open();
+    expect((await screen.findByRole("heading", { name: "Wongi" })).closest(".reading")).not.toBeNull();
+  });
+
   it("says plainly that a wrong link opens nothing, and shows no sign-in", async () => {
     stubApi({});
     open();
