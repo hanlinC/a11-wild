@@ -327,7 +327,9 @@ describe("a v2 outreach batch: the burst", () => {
     expect(bare.ok ? "" : bare.error).toBe("");
     expect(bare.value.next).toMatch(/as on the draft the owner picked/);
     await callTool(studio, "pixel_status", { batchId, jobId: bare.value.id });
-    const worded = await typeSet(final, { area: [0.05, 0.8, 0.66, 0.96], colour: "282828", logoWidth: 0.25, logo: false, weight: 700 }, false);
+    // A font the studio does not hold is no stop either: the final asks for none.
+    const worded = await typeSet(final, { area: [0.05, 0.8, 0.66, 0.96], colour: "282828", logoWidth: 0.25, logo: false, weight: 700, family: "Nowhere Sans", subFamily: "Nowhere Serif" }, false);
+    expect(worded.ok ? "" : worded.error).toBe("");
     const [onDraft, onBare, onFinal] = studio.pixels.events.filter((event) => event.tool === "headline").slice(-3).map((event) => event.input);
     const how = ({ renderKey: _renderKey, ...rest }: Record<string, unknown>) => rest;
     expect(onDraft).toMatchObject({ area: [0.05, 0.19, 0.55, 0.75], colour: "EEEEEE", logoWidth: 0.12, logoX: 0.05, weight: 900 });

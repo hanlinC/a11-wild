@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { BatchImage, ImageKind, PixelJob, PixelTool } from "@a11-wild/shared";
+import type { Batch, BatchImage, ImageKind, Lockup, PixelJob, PixelTool } from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
 import { hasWords } from "../batch/state.js";
 import { type BoardService, countedOf, finishOf, REPAIR_KINDS } from "../board/service.js";
@@ -270,7 +270,7 @@ export class PixelService {
    * approval and never from the caller, so a picture cannot carry words he did not approve.
    */
   async typeSet(input: { batchId: string; imageId: string; family?: string; weight: number; subFamily?: string; subWeight?: number; logo: boolean; layout: Record<string, unknown> }): Promise<PixelView> {
-    const { batches, brands, images, copy } = this.deps;
+    const { batches, images, copy } = this.deps;
     const batch = await batches.get(input.batchId);
     if (!hasWords(batch.kind)) throw new Refusal("R16: a v1 picture carries the brand logo and no words. Only a batch with words (v2) has its words set.");
     const given = await this.rendered(input.batchId, input.imageId);
@@ -282,7 +282,32 @@ export class PixelService {
     if (!on) throw new Refusal(`The words go on a final after its real-camera finish. Run photo_finish on picture ${counted.id} first.`);
     const words = root.ideaId ? await copy.get(input.batchId, root.ideaId) : undefined;
     if (!words) throw new Refusal("The owner has not approved the words of this idea yet. Show him the headline and the subline as text, and save his yes with copy_approve.");
-    const brand = await brands.brand(batch.brandId);
+    // The words of a concept ad stand where its direction says: the place follows the picture, not a habit.
+    const plan = batch.kind === "v3" ? (await this.deps.directions.get(input.batchId))?.concepts.find((concept) => concept.ideaId === root.ideaId) : undefined;
+    if (batch.kind === "v3" && !plan) throw new Refusal(`Concept ${root.ideaId} has no direction, so the studio does not know where its words stand. Save it first (direction_save).`);
+    // A final carries its words as the draft the owner picked carries them: the place, the size, the colour, the font and the logo are that draft's, not a second choice.
+    const picked = root.kind === "final" && root.fromId ? await this.setAs(input.batchId, root.fromId, all) : undefined;
+    const how = picked ?? (await this.asGiven(batch, input, plan && root.ideaId ? { lockup: plan.lockup, ideaId: root.ideaId } : undefined));
+    const view = await this.start(
+      "headline",
+      input.batchId,
+      {
+        ...how,
+        headline: words.headline,
+        subline: words.subline,
+        ...(words.footnote ? { footnote: words.footnote } : {}),
+        renderKey: on.key,
+      },
+      // The picture keeps the version of the words it was sent with: the owner can change them while the job runs.
+      { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, wordsVersion: words.version, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
+    );
+    return picked ? { ...view, next: `The words and the logo are set as on the draft the owner picked; the place, the colour and the logo you gave were not used. ${view.next}` } : view;
+  }
+
+  /** How the caller asks for the words: its place, in the brand's own font, with the brand's saved logo. */
+  private async asGiven(batch: Batch, input: Parameters<PixelService["typeSet"]>[0], concept: { lockup: Lockup; ideaId: string } | undefined): Promise<Record<string, unknown>> {
+    if (!input.layout.area) throw new Refusal("Give area: the place of the words on this picture, as x0,y0,x1,y1.");
+    const brand = await this.deps.brands.brand(batch.brandId);
     const family = input.family ?? brand.fonts[0];
     const font = fontOf(brand.fontFiles, family, input.weight);
     if (!font) {
@@ -294,35 +319,15 @@ export class PixelService {
       throw new Refusal(`The studio holds no font file of "${input.subFamily}" for this brand. Save it with font_save, or leave subFamily out and the subline takes the headline font.`);
     }
     if (input.logo && !brand.logo) throw new Refusal("This brand has no saved logo. Save one with brand_save, or send logo false and tell the owner the ad has no logo yet.");
-    // The words of a concept ad stand where its direction says: the place follows the picture, not a habit.
-    const plan = batch.kind === "v3" ? (await this.deps.directions.get(input.batchId))?.concepts.find((concept) => concept.ideaId === root.ideaId) : undefined;
-    if (batch.kind === "v3" && !plan) throw new Refusal(`Concept ${root.ideaId} has no direction, so the studio does not know where its words stand. Save it first (direction_save).`);
-    // A final carries its words as the draft the owner picked carries them: the place, the size, the colour, the font and the logo are that draft's, not a second choice.
-    const picked = root.kind === "final" && root.fromId ? await this.setAs(input.batchId, root.fromId, all) : undefined;
-    if (!picked && !input.layout.area) throw new Refusal("Give area: the place of the words on this picture, as x0,y0,x1,y1.");
-    const layout = picked ? {} : plan && root.ideaId ? lockupLayout(plan.lockup, root.ideaId, input.layout) : input.layout;
-    const view = await this.start(
-      "headline",
-      input.batchId,
-      {
-        ...(picked ?? {
-          ...layout,
-          fontKey: font.key,
-          ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
-          // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
-          weight: input.weight,
-          ...(input.subWeight ? { subWeight: input.subWeight } : {}),
-          ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
-        }),
-        headline: words.headline,
-        subline: words.subline,
-        ...(words.footnote ? { footnote: words.footnote } : {}),
-        renderKey: on.key,
-      },
-      // The picture keeps the version of the words it was sent with: the owner can change them while the job runs.
-      { imageId: on.id, out: { kind: "typeset", fromId: on.id, rootId: root.id, wordsVersion: words.version, ...(root.ideaId ? { ideaId: root.ideaId } : {}) } },
-    );
-    return picked ? { ...view, next: `The words and the logo are set as on the draft the owner picked; the place, the colour and the logo you gave were not used. ${view.next}` } : view;
+    return {
+      ...(concept ? lockupLayout(concept.lockup, concept.ideaId, input.layout) : input.layout),
+      fontKey: font.key,
+      ...(sub && sub.key !== font.key ? { subFontKey: sub.key } : {}),
+      // A variable font holds every weight in one file: the tool sets its weight axis. A file of one weight keeps its own.
+      weight: input.weight,
+      ...(input.subWeight ? { subWeight: input.subWeight } : {}),
+      ...(input.logo && brand.logo ? { logoKey: brand.logo.key } : {}),
+    };
   }
 
   /** How the words stand on a draft as the owner last saw it: what its newest set of words was made with, less the words and the picture. Nothing for a draft whose words were never set. */
