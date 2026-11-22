@@ -1,7 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   type Batch,
-  COMMENT_MAX_CHARS,
   EXAMPLE_COMMENTS_MAX,
   type FunnelStage,
   type MetaVariant,
@@ -31,6 +30,7 @@ import { adName } from "../meta/names.js";
 import type { MetaStore } from "../meta/store.js";
 import { MAX_PICTURE_BYTES, type Pictures, pictureType } from "../pictures/store.js";
 import type { ResultStore } from "../results/store.js";
+import { type CommentStore, exampleComment } from "./comments.js";
 import { CARRIED, type PackStore } from "./store.js";
 
 /** How long a picture link of a pack page works. The page asks again when it is opened again. */
@@ -48,6 +48,7 @@ interface Deps {
   meta: MetaStore;
   packs: PackStore;
   results: ResultStore;
+  comments: CommentStore;
   pictures: Pictures;
   publicOrigin: string;
   now: () => Date;
@@ -241,10 +242,6 @@ export class PackService {
       const { note, comments } = input.example;
       if (!note.trim()) throw new Refusal("An example needs its note: the line that says the brand shown is not a client.");
       if (comments.length > EXAMPLE_COMMENTS_MAX) throw new Refusal(`An example shows ${EXAMPLE_COMMENTS_MAX} example comments at most.`);
-      for (const comment of comments) {
-        if (!comment.text.trim() || comment.text.length > COMMENT_MAX_CHARS) throw new Refusal(`An example comment has 1 to ${COMMENT_MAX_CHARS} characters.`);
-        if (comment.adName !== undefined && !input.ads.some((ad) => ad.adName === comment.adName)) throw new Refusal(`An example comment names the ad "${comment.adName.slice(0, 80)}", which is not in this pack.`);
-      }
     }
 
     // Each picture is read once, and told by its first bytes: what the sender called it does not count.
@@ -285,7 +282,7 @@ export class PackService {
     if (begun && (await packs.versions(begun.id)).length > 0) throw new Refusal("This carry is saved already. Read its pack with pack_get.");
     const version: PackVersion = { version: 1, ads, launchPlan: input.launchPlan, at: now().toISOString(), by };
     const token = randomBytes(32).toString("base64url");
-    const pack: Pack = { id: input.carryId, source: "carried", brandId: brand.id, product: input.product, ...(input.example ? { example: input.example } : {}), tokenHash: hashToken(token), current: 1, createdAt: version.at, by };
+    const pack: Pack = { id: input.carryId, source: "carried", brandId: brand.id, product: input.product, ...(input.example ? { example: { note: input.example.note.trim(), comments: input.example.comments.map((comment) => exampleComment(comment, input.ads.map((ad) => ad.adName))) } } : {}), tokenHash: hashToken(token), current: 1, createdAt: version.at, by };
     if (begun) await packs.relink(begun, pack.tokenHash);
     else if (!(await packs.create(pack))) throw new Refusal("This carry is saved already. Read its pack with pack_get.");
     if (!(await packs.addVersion(pack.id, version))) throw new Refusal("Another save of this carry happened at the same moment. Read its pack with pack_get.");
@@ -345,7 +342,7 @@ export class PackService {
         }),
       ),
       launchPlan: version.launchPlan,
-      ...(pack.example ? { example: pack.example } : {}),
+      ...(pack.example ? { example: pack.example } : { comments: await this.deps.comments.shown(pack.id) }),
     };
   }
 

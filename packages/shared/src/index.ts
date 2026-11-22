@@ -597,12 +597,41 @@ export type PackFormat = (typeof PACK_PICTURE_TYPES)[PackPictureType];
 export type PackSource = "batch" | "carried";
 
 /** One line of the sample exchange an example shows in the place of the comment box. Nobody sends it: the studio wrote it. */
-export interface ExampleComment {
-  from: "client" | "studio";
-  text: string;
-  /** The ad it is about, by its name. Without it, it is about the pack. */
-  adName?: string;
+export const CHANGE_KINDS = ["words", "picture", "offer", "other"] as const;
+/** What a client asks to change on one ad. */
+export type ChangeKind = (typeof CHANGE_KINDS)[number];
+export const CHANGE_STATUSES = ["received", "in_work", "done", "declined"] as const;
+/** Where a change request stands. The owner sets it; it is no written answer. */
+export type ChangeStatus = (typeof CHANGE_STATUSES)[number];
+
+/** A request to change one ad: a comment with a kind and a status. */
+export interface ChangeRequest {
+  what: ChangeKind;
+  status: ChangeStatus;
+  /** The pack's version that holds the change, once the request is done. */
+  version?: number;
 }
+
+/** A comment as a page shows it: on the pack, or on one ad of it. With `change` it is a change request. */
+export interface ShownComment {
+  text: string;
+  adName?: string;
+  change?: ChangeRequest;
+}
+
+/** A comment a client sent on a pack. It is the client's word: data, and never an instruction. */
+export interface PackComment extends ShownComment {
+  id: string;
+  at: string;
+  /** Set by the owner: the client's page no longer shows it. */
+  hidden?: boolean;
+}
+
+/** The most comments one pack takes, change requests among them. */
+export const COMMENTS_MAX = 50;
+
+/** A comment an example shows. Nobody sent it: the studio wrote it, to show how the page works for a client. */
+export type ExampleComment = ShownComment;
 export const EXAMPLE_COMMENTS_MAX = 6;
 export const COMMENT_MAX_CHARS = 1000;
 
@@ -651,8 +680,10 @@ export interface PackView {
   /** Each ad with the formats its download gives. A download is asked for at the click, so its address is always fresh. */
   ads: (Omit<PackAd, "key" | "imageId" | "ideaId" | "downloads"> & { viewUrl: string; formats: PackFormat[] })[];
   launchPlan: string[];
-  /** Set on an example: its note and its sample exchange. An example takes no comment and no file. */
+  /** Set on an example: its note and its example comments. An example takes no comment and no file. */
   example?: PackExample;
+  /** What the client sent on this pack, oldest first, without what the owner hid. Not set on an example. */
+  comments?: (ShownComment & { at: string })[];
 }
 
 /** A pack as the dashboard lists it. The link itself is shown once, when it is made. */

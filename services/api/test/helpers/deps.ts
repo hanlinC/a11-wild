@@ -11,7 +11,7 @@ import { defineTool, ToolRegistry } from "../../src/mcp/registry.js";
 import { McpServer } from "../../src/mcp/server.js";
 import { createSession, SESSION_COOKIE } from "../../src/auth/session.js";
 import { studioTools } from "../../src/mcp/tools/index.js";
-import type { WaitingClient } from "../../src/notify.js";
+import type { ClientActivity, WaitingClient } from "../../src/notify.js";
 import type { Net } from "../../src/urlsafety.js";
 import { fakeNet } from "./net.js";
 import { fakeFal } from "./fal.js";
@@ -85,11 +85,16 @@ export async function createStudio(options: StudioOptions = {}) {
   await table.put(userItem({ sub: "sub-member", email: "member@example.com", role: "member" }));
 
   const notices: WaitingClient[] = [];
+  const activities: ClientActivity[] = [];
   const notifier = {
     fails: false,
     async clientWaiting(client: WaitingClient) {
       if (this.fails) throw new Error("topic is down");
       notices.push(client);
+    },
+    async clientActivity(activity: ClientActivity) {
+      if (this.fails) throw new Error("topic is down");
+      activities.push(activity);
     },
   };
   const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, now, notifier);
@@ -107,6 +112,7 @@ export async function createStudio(options: StudioOptions = {}) {
     parallelFetch: parallel.fetchFn,
     falFetch: fal.fetchFn,
     pixelRunner: pixels.runner,
+    notifier,
   });
   const spend = { ledger: services.ledger, gate: services.gate };
   const deps: Deps = {
@@ -135,6 +141,7 @@ export async function createStudio(options: StudioOptions = {}) {
     clock,
     approvals,
     notices,
+    activities,
     notifier,
     spend,
     services,

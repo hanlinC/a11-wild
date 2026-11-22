@@ -160,7 +160,13 @@ describe("a carried pack", () => {
 });
 
 describe("an example", () => {
-  const example = { note: NOTE, comments: [{ from: "client" as const, text: "Can the price sit a little higher?", adName: ad(2).adName }, { from: "studio" as const, text: "Done. The new version is in this link." }] };
+  const example = {
+    note: NOTE,
+    comments: [
+      { text: "Love the second one. Can we run it this week?" },
+      { text: "Can the price sit a little higher?", adName: ad(2).adName, change: { what: "words" as const, status: "done" as const, version: 2 } },
+    ],
+  };
   // The page shows a clean picture; a download gives the marked copy.
   const marked = () => carry({ example, ads: [ad(0, { downloads: [3, 4] }), ad(1, { downloads: [5] }), ad(2)] }, [JPEG, JPEG, JPEG, JPEG, PNG, JPEG]);
 
@@ -191,10 +197,13 @@ describe("an example", () => {
 
   it("is refused without its note, with too many or too long comments, or with a comment on an ad it does not hold", async () => {
     await expect(carry({ example: { note: " ", comments: [] } })).rejects.toThrow(/needs its note/);
-    await expect(carry({ example: { note: NOTE, comments: Array.from({ length: 7 }, () => ({ from: "client" as const, text: "Hello" })) } })).rejects.toThrow(/6 example comments/);
-    await expect(carry({ example: { note: NOTE, comments: [{ from: "client", text: "x".repeat(1001) }] } })).rejects.toThrow(/1 to 1000 characters/);
-    await expect(carry({ example: { note: NOTE, comments: [{ from: "client", text: "" }] } })).rejects.toThrow(/1 to 1000 characters/);
-    await expect(carry({ example: { note: NOTE, comments: [{ from: "client", text: "Hello", adName: "a11_other" }] } })).rejects.toThrow(/not in this pack/);
+    await expect(carry({ example: { note: NOTE, comments: Array.from({ length: 7 }, () => ({ text: "Hello" })) } })).rejects.toThrow(/6 example comments/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "x".repeat(1001) }] } })).rejects.toThrow(/1 to 1000 characters/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "" }] } })).rejects.toThrow(/1 to 1000 characters/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "Hello", adName: "a11_other" }] } })).rejects.toThrow(/not in this pack/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "Hello", change: { what: "words", status: "received" } }] } })).rejects.toThrow(/names the ad/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "Hello", adName: ad(0).adName, change: { what: "words", status: "received", version: 2 } }] } })).rejects.toThrow(/Only a done/);
+    await expect(carry({ example: { note: NOTE, comments: [{ text: "Hello", adName: ad(0).adName, change: { what: "all" as never, status: "received" } }] } })).rejects.toThrow(/kind and a status/);
     expect(stored()).not.toContain("CPACK#");
   });
 

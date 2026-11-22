@@ -14,7 +14,7 @@ import { PROMPTS } from "./mcp/prompts.js";
 import { ToolRegistry } from "./mcp/registry.js";
 import { McpServer } from "./mcp/server.js";
 import { studioTools } from "./mcp/tools/index.js";
-import { SnsNotifier } from "./notify.js";
+import { type Notifier, SnsNotifier } from "./notify.js";
 import { type Pictures, S3Pictures } from "./pictures/store.js";
 import { LambdaPixelRunner, type PixelRunner } from "./pixels/runner.js";
 import { ParameterKeys, type ProviderKeys } from "./secrets.js";
@@ -37,6 +37,7 @@ export interface WiredClients {
   cognito: UserPoolClients;
   approvals: ClientApprovals;
   table: DynamoTable;
+  notifier?: Notifier;
 }
 
 export interface Wired extends WiredClients {
@@ -54,7 +55,7 @@ export async function wireClients(): Promise<WiredClients> {
   const topic = process.env.OWNER_TOPIC_ARN;
   const notifier = topic ? new SnsNotifier(new SNSClient({}), topic, config.publicOrigin) : undefined;
   const approvals = new ClientApprovals(table, cognito, config.dashboardClientId, () => new Date(), notifier);
-  return { config, cognito, approvals, table };
+  return { config, cognito, approvals, table, ...(notifier ? { notifier } : {}) };
 }
 
 /** Connects the real AWS services for the API. Runs once for each function instance. */
@@ -66,9 +67,9 @@ export async function wire(): Promise<Wired> {
   return { ...clients, keys, pictures, ...(pixelFunction ? { pixelRunner: new LambdaPixelRunner(new LambdaClient({}), pixelFunction) } : {}) };
 }
 
-export function appDeps({ config, table, approvals, keys, pictures, pixelRunner }: Wired): Deps {
+export function appDeps({ config, table, approvals, keys, pictures, pixelRunner, notifier }: Wired): Deps {
   const now = () => new Date();
-  const { tools, services } = studioTools({ config, table, now, keys, pictures, net: realNet, ...(pixelRunner ? { pixelRunner } : {}) });
+  const { tools, services } = studioTools({ config, table, now, keys, pictures, net: realNet, ...(pixelRunner ? { pixelRunner } : {}), ...(notifier ? { notifier } : {}) });
   return {
     config,
     table,
