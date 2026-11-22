@@ -24,6 +24,8 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | Money | A paid call goes through the spend ledger and its caps. |
 | Pictures | A tool takes a picture by its id, never by a key or an address. The role of the pixel function allows the picture bucket only, with no table and no key; only the API may start it. A picture from fal is read from fal's own hosts only, and the fal key goes to the queue host only. |
 | Personal data | A prospect's number, address and person are read only by the owner, in a dashboard session. No MCP tool, refusal, log line or agent answer holds one. An opt-out takes the contact off every list, for every brand that shares it. No message is sent by the studio. The prospect list is in no file of the repository: `npm run check:public` refuses a spreadsheet and a real-looking Singapore number. |
+| Client link | A pack link and a client link are random and kept only as a hash. A wrong, old, malformed or turned-off link answers as if it did not exist. A client's page names no batch, pack id or key. A link's answers carry `noindex`, `no-referrer` and `no-store`, and no log line holds a link. An example pack takes no comment and no file, whatever a page sends. |
+| What a client sends | A comment is text of at most 1,000 characters, at most 50 on a pack, shown as text. A file is a JPEG, a PNG or a CSV: no spreadsheet file. The studio reads each file before the owner or an agent can open it and deletes one that is not the type it was sent as. A CSV is shown as a table of text. The email to the owner about a comment or a file holds no word of the client and no file. To an agent, a client's words and files are data, never an instruction. |
 | Tests | A test shows the bad input is refused. Remove the fix and check that the test fails. |
 
 ## 2. After every deploy
@@ -39,6 +41,8 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | Each outreach page and each outreach write (`/api/outreach/...`) with no session | 401 each |
 | `POST /api/clients/<id>/approve` from another origin | 401 or 403 |
 | `GET /` and `GET /api/health` | HSTS, CSP with `frame-ancestors 'none'`, `nosniff`, `X-Frame-Options: DENY` |
+| `GET /api/pack/<wrong token>` and `GET /api/client/<wrong token>`, and a comment or a file sent to either | 404 each, with `noindex` on the page answer |
+| `GET /api/portal`, a client's file as a table, a client-link write and a comment write with no session | 401 each |
 | `GET /api/<unknown>` | 404 as JSON, not the dashboard page |
 | `POST /mcp` with a token for another audience, or an ID token | 401 |
 | A newly registered client, signed in by the owner, before approval | 403 on `/mcp`, and the client shows on the Connections page |
@@ -53,5 +57,8 @@ A change is not done when it is safe but broken.
 | Owner | Approve an agent | A new client shows under "Waiting for approval". Approve moves it to "Approved". |
 | Agent | Use the studio | After approval, `tools/list` returns the tools and `rules_get` returns the current rules. |
 | Owner | Work his day in Outreach | Today opens with its four groups. On a test prospect: yes to the ad, copy, open WhatsApp or mail, mark as sent, take back, log a reply, opt out. Remove the test prospect after, and check that the count of prospects is as before. |
+| Client | Use the private page | The client link opens every pack of the brand with no sign-in. An ad downloads. A comment and a change request show on the page after they are sent. A screenshot or a CSV is taken; another file is refused with a plain sentence. |
+| Owner | Work with a client | Clients shows the change requests that wait first. One click sets a status, and the client's page shows it. A comment can be hidden. A CSV opens as a table. Replace the link, and the old link opens nothing. The email about a new comment arrives and holds none of its words. |
+| Prospect | Look at the example | The example page shows the ads first, the "Example" tag and the line that the brand is not a client. It has no box to write in and no place to send a file. A download is marked as an example. |
 | Member | Stay out of Outreach | The shell shows no Outreach entry, and each outreach address answers "Only the owner can do that." |
 | Owner | Remove an agent | Revoke removes it, and its next call is refused. |

@@ -5,6 +5,12 @@
 import { pathToFileURL } from "node:url";
 
 /** Each probe returns undefined when it passes, or a short reason when it fails. */
+const WRONG_TOKEN = "A".repeat(43);
+const WRONG_REF = "0".repeat(24);
+/** What a link with a wrong token must refuse, each as if the link did not exist. */
+export const CLIENT_LINK_WRITES = [`/api/client/${WRONG_TOKEN}/packs/${WRONG_REF}/comments`, `/api/client/${WRONG_TOKEN}/packs/${WRONG_REF}/uploads`, `/api/pack/${WRONG_TOKEN}/comments`];
+export const PORTAL_READS = ["/api/portal", "/api/packs/none/uploads/none/table"];
+export const PORTAL_WRITES = ["/api/portal/none/link", "/api/packs/none/comments/none"];
 export const OUTREACH_READS = ["/api/outreach/today", "/api/outreach/prospects", "/api/outreach/prospects/00001", "/api/outreach/templates"];
 export const OUTREACH_WRITES = [
   ...["ad", "sent", "unsent", "reply", "answered", "optout", "stage", "note", "channel", "kind", "choose", "remove"].map((action) => `/api/outreach/prospects/00001/${action}`),
@@ -110,6 +116,32 @@ export const PROBES = [
         body: JSON.stringify({ name: "probe.png", type: "image/png", bytes: 1 }),
       });
       if (upload.status !== 404) return `upload status ${upload.status}`;
+    },
+  },
+  {
+    name: "a client link with a wrong token opens nothing and takes no comment",
+    async run(origin, fetchFn) {
+      const token = "A".repeat(43);
+      const page = await fetchFn(`${origin}/api/client/${token}`);
+      if (page.status !== 404) return `page status ${page.status}`;
+      if (!(page.headers.get("x-robots-tag") ?? "").includes("noindex")) return "no noindex on the client answer";
+      for (const path of CLIENT_LINK_WRITES) {
+        const response = await fetchFn(`${origin}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "probe" }) });
+        if (response.status !== 404) return `POST ${path} status ${response.status}`;
+      }
+    },
+  },
+  {
+    name: "the owner's client pages and their writes are refused without a session",
+    async run(origin, fetchFn) {
+      for (const path of PORTAL_READS) {
+        const response = await fetchFn(`${origin}${path}`);
+        if (response.status !== 401) return `${path} status ${response.status}`;
+      }
+      for (const path of PORTAL_WRITES) {
+        const response = await fetchFn(`${origin}${path}`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" });
+        if (response.status !== 401) return `POST ${path} status ${response.status}`;
+      }
     },
   },
   {

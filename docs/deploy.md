@@ -61,6 +61,15 @@ The owner's list of prospects is private. It is never a file of this repository,
 3. After the load, compare the Prospects page with the list: the count of brands, and the counts by sector and by tier.
 4. To try the pages, make a test prospect on the Prospects page and remove it on its own page after. A brand of the list cannot be removed.
 
+## Client links and the example
+
+A client link and an example link are private. Neither is ever a file of this repository, a log line or a pull request text.
+
+1. **A client's link.** The owner makes it on the Clients page, or his agent with the tool `client_link`. The link is shown once and the studio keeps only its hash. The owner sends it to the client himself. If it is lost or was sent to the wrong person, replace it: the old link opens nothing from that moment.
+2. **A pack made outside the studio.** The agent sends each picture with `pack_carry_start` and saves the pack with `pack_carry`. A carried pack of a client shows on that client's page. A carried pack marked as an example shows on no client's page: it has its own link, takes no comment and no file, and marks each download as an example.
+3. **The notices.** A comment, a change request and a file that passed the studio's reading each send one email to the owner, on the same topic as the notice of a program that waits (step 4 of the one-time setup). The email names the brand and the kind of event, and holds no word of the client and no file.
+4. **After the deploy**, run the three client rows of section 3 of `docs/security-checklist.md` on a test brand, and turn its link off after.
+
 ## Provider keys
 
 The Parallel and fal keys are SecureString parameters in Parameter Store, at `/a11-wild/keys/parallel` and `/a11-wild/keys/fal`. Only the API function may read them. Until a key is there, each tool that needs it refuses and says so. The owner gives each one through a secure form at the step that first needs it. They are never in the repository, a workflow or a log.

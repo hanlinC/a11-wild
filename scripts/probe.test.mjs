@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { OUTREACH_READS, OUTREACH_WRITES, PROBES, runProbes } from "./probe.mjs";
+import { CLIENT_LINK_WRITES, OUTREACH_READS, OUTREACH_WRITES, PORTAL_READS, PORTAL_WRITES, PROBES, runProbes } from "./probe.mjs";
 
 const ORIGIN = "https://studio.example.com";
 const SECURITY_HEADERS = {
@@ -42,6 +42,10 @@ function healthyStudio(overrides = {}) {
     "GET /api/batches/none/done": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "POST /api/clients/probe/approve": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/no-such-path": () => Response.json({ error: "not_found" }, { status: 404 }),
+    [`GET /api/client/${"A".repeat(43)}`]: () => Response.json({ error: "not_found" }, { status: 404, headers: { "x-robots-tag": "noindex, nofollow" } }),
+    ...Object.fromEntries(CLIENT_LINK_WRITES.map((path) => [`POST ${path}`, () => Response.json({ error: "not_found" }, { status: 404 })])),
+    ...Object.fromEntries(PORTAL_READS.map((path) => [`GET ${path}`, signedOut])),
+    ...Object.fromEntries(PORTAL_WRITES.map((path) => [`POST ${path}`, signedOut])),
     ...Object.fromEntries(OUTREACH_READS.map((path) => [`GET ${path}`, signedOut])),
     ...Object.fromEntries(OUTREACH_WRITES.map((path) => [`POST ${path}`, signedOut])),
     ...overrides,
@@ -136,6 +140,30 @@ describe("live probe", () => {
     expect(await failedNames({ [`GET /api/pack/${token}`]: () => Response.json({ brand: "x" }) })).toEqual([name]);
     expect(await failedNames({ [`GET /api/pack/${token}`]: () => Response.json({ error: "not_found" }, { status: 404 }) })).toEqual([name]);
     expect(await failedNames({ [`POST /api/pack/${token}/uploads`]: () => Response.json({ putUrl: "https://x" }) })).toEqual([name]);
+  });
+
+  it("fails when a wrong client token opens a page, or takes a comment or a file", async () => {
+    const name = "a client link with a wrong token opens nothing and takes no comment";
+    const token = "A".repeat(43);
+    expect(await failedNames({ [`GET /api/client/${token}`]: () => Response.json({ brand: "x", packs: [] }) })).toEqual([name]);
+    expect(await failedNames({ [`GET /api/client/${token}`]: () => Response.json({ error: "not_found" }, { status: 404 }) })).toEqual([name]);
+    for (const path of CLIENT_LINK_WRITES) {
+      expect(await failedNames({ [`POST ${path}`]: () => Response.json({ comment: {} }) })).toEqual([name]);
+    }
+  });
+
+  it("fails when an owner's client page or write answers without a session", async () => {
+    const name = "the owner's client pages and their writes are refused without a session";
+    for (const path of PORTAL_READS) expect(await failedNames({ [`GET ${path}`]: () => Response.json({ clients: [] }) })).toEqual([name]);
+    for (const path of PORTAL_WRITES) expect(await failedNames({ [`POST ${path}`]: () => Response.json({}, { status: 403 }) })).toEqual([name]);
+  });
+
+  it("probes every owner route of the client pages", async () => {
+    const source = await readFile(new URL("../services/api/src/http/client-routes.ts", import.meta.url), "utf8");
+    const owner = [...source.matchAll(/routes\.(get|post)\("(\/api\/(?:portal|packs)[^"]*)"/g)].map(([, method, path]) => `${method} ${path.replace(/:[A-Za-z]+/g, "none")}`);
+    const probed = [...PORTAL_READS.map((path) => `get ${path}`), ...PORTAL_WRITES.map((path) => `post ${path}`)];
+    expect(owner.length).toBeGreaterThan(0);
+    expect(owner.sort()).toEqual(probed.sort());
   });
 
   it("reports a network failure as a failed probe, not a crash", async () => {
