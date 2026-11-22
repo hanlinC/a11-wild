@@ -17,6 +17,7 @@ const profileKey = (id: string) => `P#${id}`;
 const adKey = (id: string, n: number) => `P#${id}#AD#${String(n).padStart(2, "0")}`;
 const eventKey = (id: string, at: string, eventId: string) => `P#${id}#E#${at}#${eventId}`;
 const sendKey = (id: string, step: OutreachStep) => `P#${id}#S#${step}`;
+const uploadKey = (id: string, uploadId: string) => `P#${id}#U#${uploadId}`;
 
 /** The id of a list row: its number, padded so that the table's order is the list's order. */
 export const prospectId = (n: number): string => String(n).padStart(5, "0");
@@ -82,6 +83,16 @@ export class OutreachStore {
       if (await this.table.put({ pk: PK, sk: adKey(id, n), ...saved }, { ifNotExists: true })) return saved;
     }
     throw new Refusal(`Prospect ${id} has ${ADS_MAX} ads already.`);
+  }
+
+  /** Takes an owner's upload for one call to work on. False when another call took it first, so one upload is one ad. */
+  async claimUpload(id: string, uploadId: string): Promise<boolean> {
+    return this.table.put({ pk: PK, sk: uploadKey(id, uploadId), at: this.now().toISOString() }, { ifNotExists: true });
+  }
+
+  /** Gives an upload back when the call that took it could not attach it, so it can be confirmed again. */
+  async releaseUpload(id: string, uploadId: string): Promise<void> {
+    await this.table.delete(PK, uploadKey(id, uploadId));
   }
 
   /** Saves an ad under one exact number. False when that number is taken: another attach came first. */

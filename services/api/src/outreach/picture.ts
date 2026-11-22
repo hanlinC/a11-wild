@@ -56,17 +56,24 @@ export class OwnPicture {
     const inbox = inboxKey(id, uploadId);
     let ad = file.ads.find((entry) => entry.from === OWNER_AD && entry.imageId === uploadId);
     if (!ad) {
-      const body = await pictures.read(inbox, OWN_PICTURE_MAX_BYTES);
-      if (!body) throw new Refusal("The picture did not arrive, or it is over 8 MB. Choose it again.");
-      const kind = pictureType(body);
-      if (!kind || !isOwnPicture(kind.type)) {
-        await pictures.remove(inbox);
-        throw new Refusal("This file is not a JPEG or a PNG picture. Nothing of it was kept.");
+      // Two confirmations at the same moment both find no ad yet. Only the one that takes the upload attaches it.
+      if (!(await store.claimUpload(id, uploadId))) throw new Refusal("This picture is being saved already. Open the page again in a moment.");
+      try {
+        const body = await pictures.read(inbox, OWN_PICTURE_MAX_BYTES);
+        if (!body) throw new Refusal("The picture did not arrive, or it is over 8 MB. Choose it again.");
+        const kind = pictureType(body);
+        if (!kind || !isOwnPicture(kind.type)) {
+          await pictures.remove(inbox);
+          throw new Refusal("This file is not a JPEG or a PNG picture. Nothing of it was kept.");
+        }
+        // The kept copy is written before the ad names it, so an ad never points at a file that is not there.
+        const key = `outreach/owner/${id}/${uploadId}.${kind.ext}`;
+        await pictures.put(key, body, kind.type);
+        ad = await store.addAd(id, { batchId: OWNER_AD, imageId: uploadId, from: OWNER_AD, key, why: WHY });
+      } catch (error) {
+        await store.releaseUpload(id, uploadId);
+        throw error;
       }
-      // The kept copy is written before the ad names it, so an ad never points at a file that is not there.
-      const key = `outreach/owner/${id}/${uploadId}.${kind.ext}`;
-      await pictures.put(key, body, kind.type);
-      ad = await store.addAd(id, { batchId: OWNER_AD, imageId: uploadId, from: OWNER_AD, key, why: WHY });
     }
     if (!verdictOf(file, ad)) await store.addEvent(id, { type: "ad_yes", ad: ad.n }, "owner");
     await pictures.remove(inbox);

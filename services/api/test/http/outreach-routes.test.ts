@@ -372,6 +372,30 @@ describe("the owner's own picture", () => {
     expect(file.events.filter((event) => event.type === "ad_yes")).toHaveLength(1);
   });
 
+  it("attaches one upload once when two confirmations come at the same moment", async () => {
+    const [id] = await loadProspects(studio);
+    const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type: "image/png", bytes: PNG.length }));
+    await studio.pictures.put(new URL(started.putUrl).pathname.slice(1), PNG, "image/png");
+    const door = `/api/outreach/prospects/${id}/picture/${started.uploadId}/done`;
+    const both = await Promise.all([post(door), post(door)]);
+    expect(both.map((response) => response.status).sort()).toEqual([200, 400]);
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
+    // The one that was told to wait gets the same ad when it asks again.
+    expect((await post(door)).status).toBe(200);
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
+  });
+
+  it("lets an upload be confirmed again when the first confirmation could not keep it", async () => {
+    const [id] = await loadProspects(studio);
+    const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type: "image/png", bytes: PNG.length }));
+    const door = `/api/outreach/prospects/${id}/picture/${started.uploadId}/done`;
+    // Confirmed before the file arrived: refused, and the upload is not held.
+    expect((await post(door)).status).toBe(400);
+    await studio.pictures.put(new URL(started.putUrl).pathname.slice(1), PNG, "image/png");
+    expect((await post(door)).status).toBe(200);
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
+  });
+
   it("puts his picture after an agent's ad, and it is then the one the message carries", async () => {
     await ready();
     const { started, done } = await upload("00001", PNG);
