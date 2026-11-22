@@ -49,6 +49,20 @@ describe("the tools for a carried pack and a client's link", () => {
     expect(await studio.services.packs.clientLink(brandId)).toBeUndefined();
   });
 
+  it("replace the link of a carried pack, which has no batch, and read it by its own id", async () => {
+    const made = await carry();
+    const packId = (await studio.services.packs.all())[0]!.id;
+    const again = await callTool(studio, "pack_relink", { batchId: packId });
+    expect(again).toMatchObject({ ok: true, value: { link: expect.stringContaining("/c/") } });
+    expect((await studio.app.request(`/api/pack/${tokenOf(made.value.link)}`)).status).toBe(404);
+    expect((await studio.app.request(`/api/pack/${tokenOf(again.value.link)}`)).status).toBe(200);
+    const read = await callTool(studio, "pack_get", { batchId: packId });
+    expect(read.value.pack).toMatchObject({ id: packId });
+    expect(JSON.stringify(read.value)).not.toContain("tokenHash");
+    expect((await callTool(studio, "pack_relink", { batchId: packId }, member)).ok).toBe(false);
+    expect((await callTool(studio, "pack_relink", { batchId: "no-such-pack" })).ok).toBe(false);
+  });
+
   it("carry a pack in two steps and give its link once", async () => {
     const made = await carry();
     expect(made.ok).toBe(true);

@@ -5,6 +5,7 @@ import type { PackStore } from "../../pack/store.js";
 import { defineTool, Refusal, type ToolDefinition } from "../registry.js";
 
 const id = z.string().min(1).max(64);
+const packOrBatch = id.describe("The batch of the pack. For a pack carried in from outside, such as an example, its packId (client_get gives it).");
 const content = {
   why: z
     .array(z.strictObject({ ideaId: id, why: z.string().min(1).max(400).describe("One plain sentence or two for the client: the buyer truth, what the ad does, and the source. No notes, no slang quote.") }))
@@ -18,6 +19,8 @@ const ownerOnly = (role: string, what: string) => {
 };
 
 export function packTools({ batches, pack, packs }: { batches: BatchStore; pack: PackService; packs: PackStore }): ToolDefinition[] {
+  /** A pack is found by its batch, or by its own id when its ads were carried in. An id that is neither is refused in the batch's words. */
+  const packIdOf = async (given: string): Promise<string> => ((await packs.get(given)) ? given : (await batches.get(given)).id);
   return [
     defineTool({
       name: "pack_publish",
@@ -47,32 +50,34 @@ export function packTools({ batches, pack, packs }: { batches: BatchStore; pack:
     defineTool({
       name: "pack_restore",
       description: "Makes the link show an earlier version of the pack again. Nothing is deleted: the newer versions stay and can be shown again the same way.",
-      input: { batchId: id, version: z.number().int().min(1) },
+      input: { batchId: packOrBatch, version: z.number().int().min(1) },
       writes: true,
       handler: async ({ batchId, version }, context) => {
         ownerOnly(context.user.role, "changes a pack");
-        const { tokenHash: _tokenHash, ...shown } = await pack.restore((await batches.get(batchId)).id, version);
+        const { tokenHash: _tokenHash, ...shown } = await pack.restore(await packIdOf(batchId), version);
         return { pack: shown };
       },
     }),
     defineTool({
       name: "pack_relink",
       description: "Gives the pack a new link, for a link that was lost or went to the wrong person. The old link opens nothing from now on, so the client needs the new one. The owner asks for this; never do it to change the ads.",
-      input: { batchId: id },
+      input: { batchId: packOrBatch },
       writes: true,
       handler: async ({ batchId }, context) => {
         ownerOnly(context.user.role, "replaces a pack link");
-        return { ...(await pack.relink((await batches.get(batchId)).id)), nextStep: "Give the new link to the owner now: it is not shown again." };
+        return { ...(await pack.relink(await packIdOf(batchId))), nextStep: "Give the new link to the owner now: it is not shown again." };
       },
     }),
     defineTool({
       name: "pack_get",
       description: "Returns the pack of a batch: the version its link shows and every version of its content. It does not return the link: the studio keeps only its hash.",
-      input: { batchId: id },
+      input: { batchId: packOrBatch },
       handler: async ({ batchId }) => {
-        await batches.get(batchId);
         const found = await packs.get(batchId);
-        if (!found) return { pack: null, versions: [] };
+        if (!found) {
+          await batches.get(batchId);
+          return { pack: null, versions: [] };
+        }
         const { tokenHash: _tokenHash, ...shown } = found;
         return { pack: shown, versions: await packs.versions(batchId) };
       },
