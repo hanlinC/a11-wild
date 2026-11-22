@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adWaits, approvedAd, candidatesWait, channelOf, owedAnswer, owedByAgent, refusedDrafts, stageOf, wantsAd } from "../../src/outreach/stage.js";
+import { adWaits, approvedAd, candidatesWait, channelOf, owedAnswer, owedByAgent, owedNow, refusedDrafts, stageOf, wantsAd } from "../../src/outreach/stage.js";
 import { ad, event, file, profile, send } from "./helpers.js";
 
 const none = new Set<string>();
@@ -236,4 +236,16 @@ describe("the owner's pick among the drafts", () => {
     expect(approvedAd(done)).toMatchObject({ n: 2, picked: true });
   });
 
+  it("owes nothing now for a brand the owner parked or lost after his pick, or that opted out", () => {
+    const events = [shown(), pick()];
+    expect(owedNow(file({ events }), none)).toMatchObject({ imageId: "draft-1" });
+    for (const stage of ["parked", "lost"] as const) {
+      const stopped = file({ events: [...events, event({ type: "stage", stage })] });
+      expect(owedNow(stopped, none)).toBeUndefined();
+      expect(stageOf(stopped, none)).toBe(stage);
+    }
+    expect(owedNow(file({ events: [...events, event({ type: "optout" })] }), none)).toBeUndefined();
+    // Back on auto, the pick is owed again.
+    expect(owedNow(file({ events: [...events, event({ type: "stage", stage: "parked" }), event({ type: "stage", stage: "auto" })] }), none)).toMatchObject({ imageId: "draft-1" });
+  });
 });

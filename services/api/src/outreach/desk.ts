@@ -4,7 +4,7 @@ import type { IdeaFinal } from "../board/service.js";
 import { Refusal } from "../mcp/registry.js";
 import type { SpendLedger } from "../spend/ledger.js";
 import { chosen, sameContact } from "./sequence.js";
-import { adWaits, candidatesWait, kindOf, optedOut, owedByAgent, stageOf, wantsAd } from "./stage.js";
+import { adWaits, candidatesWait, kindOf, optedOut, owedNow, stageOf, TAKES_NO_AD, wantsAd } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The owner's campaign: the first 50 product brands of his two top tiers, in list order. */
@@ -73,7 +73,7 @@ export class OutreachDesk {
     const { files, optOuts, open, started, shared } = await this.read();
     const owed: OwedBrand[] = [];
     for (const file of files) {
-      const choice = optedOut(file, optOuts) ? undefined : owedByAgent(file);
+      const choice = owedNow(file, optOuts);
       if (!choice) continue;
       owed.push({ ...briefOf(file), batchId: choice.batchId, owes: choice.type === "pick" ? "final" : "words", ideaId: choice.ideaId, imageId: choice.imageId, ...(choice.type === "words" ? { ownerSaid: choice.ownerSaid } : {}) });
     }
@@ -116,7 +116,7 @@ export class OutreachDesk {
     const { file, optOuts, started } = await this.file(prospectId);
     if (file.profile.test) throw new Refusal("That is a test prospect. No ad is made for it.");
     const want = wantsAd(file, optOuts);
-    if (!want) throw new Refusal(adWaits(file) ? "An ad of this brand waits for the owner's yes or no. Make no other until he has answered." : candidatesWait(file) ? "The drafts of this brand wait for the owner's pick. Make no other until he has chosen." : owedByAgent(file) ? "The owner has chosen for this brand. outreach_next names what he is owed: do that first." : `This brand is at "${stageOf(file, optOuts)}": it needs no ad now. outreach_next gives the brands that do.`);
+    if (!want) throw new Refusal(adWaits(file) ? "An ad of this brand waits for the owner's yes or no. Make no other until he has answered." : candidatesWait(file) ? "The drafts of this brand wait for the owner's pick. Make no other until he has chosen." : owedNow(file, optOuts) ? "The owner has chosen for this brand. outreach_next names what he is owed: do that first." : `This brand is at "${stageOf(file, optOuts)}": it needs no ad now. outreach_next gives the brands that do.`);
     if (want.why === "more") return;
     if (!inCampaign(file)) throw new Refusal(`The campaign is for the tiers ${CAMPAIGN.tiers.join(" and ")} live ads. This brand is in "${file.profile.tier}".`);
     if (want.why === "first" && started >= CAMPAIGN.brands) throw new Refusal(`The campaign's ${CAMPAIGN.brands} brands have their ad. A new brand needs the owner's say.`);
@@ -165,12 +165,14 @@ export class OutreachDesk {
     }
     const imageId = final.delivered.id;
     const same = (ad: OutreachAd) => ad.batchId === batch.id && ad.imageId === imageId;
-    const owed = owedByAgent(file);
+    const owed = owedNow(file, optOuts);
     const owes = owed?.type === "pick" && owed.batchId === batch.id && owed.imageId === final.pick?.imageId;
     // Attached already, and he has not picked its draft again since: he may come back to a draft after a look at another.
     const before = file.ads.filter(same).at(-1);
     if (before && !owes) return { ad: shown(before), already: true };
     if (optedOut(file, optOuts)) throw new Refusal("This brand opted out. It takes no ad.");
+    const stage = stageOf(file, optOuts);
+    if (TAKES_NO_AD.includes(stage)) throw new Refusal(`This brand is at "${stage}" now. It takes no ad: make nothing more for it.`);
     if (!owes) {
       throw new Refusal("The owner has not picked this draft on the prospect's page. Only the final of his own pick is attached: outreach_show puts the drafts before him, and outreach_next names the pick he made.");
     }
@@ -211,7 +213,7 @@ export class OutreachDesk {
       ads: {
         waitForTheOwner: real.filter((file) => adWaits(file) && !optedOut(file, optOuts)).length,
         draftsWaitForHisPick: real.filter((file) => candidatesWait(file) && !optedOut(file, optOuts)).length,
-        owedByTheAgent: real.filter((file) => owedByAgent(file) && !optedOut(file, optOuts)).length,
+        owedByTheAgent: real.filter((file) => owedNow(file, optOuts)).length,
         wanted: wants,
       },
       firstMessagesSent: real.filter((file) => file.sends.some((send) => send.step === 0)).length,

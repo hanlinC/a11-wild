@@ -289,6 +289,22 @@ describe("an outreach batch and outreach_attach", () => {
     expect((await callTool(studio, "outreach_next", {})).value).toMatchObject({ owed: [], brands: [] });
   });
 
+  it("owes nothing and attaches nothing for a brand the owner parked after his pick, until he takes the park back", async () => {
+    const [id] = await loadProspects(studio);
+    const batchId = await outreachBatch(studio, id!);
+    const owed = async () => (await callTool(studio, "outreach_next", {})).value.owed;
+    expect(await owed()).toMatchObject([{ id, owes: "final" }]);
+    await outreach().sequence.setStage(id!, "parked", "Not a fit after all.");
+    expect(await owed()).toEqual([]);
+    expect((await callTool(studio, "outreach_state", {})).value).toMatchObject({ stages: { parked: 1 }, ads: { owedByTheAgent: 0 } });
+    expect(await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." })).toMatchObject({ ok: false, error: expect.stringMatching(/is at "parked" now. It takes no ad/) });
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(0);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    await outreach().sequence.setStage(id!, "auto");
+    expect(await owed()).toMatchObject([{ id, owes: "final" }]);
+    expect((await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its own colour." })).value).toMatchObject({ already: false, ad: { n: 1, picked: true } });
+  });
+
   it("attaches one ad when two calls come at one moment", async () => {
     await loadProspects(studio);
     const batchId = await outreachBatch(studio, "00001");

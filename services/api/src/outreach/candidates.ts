@@ -1,9 +1,9 @@
-import type { Batch, Board, BoardDraft, OutreachCandidate, OutreachCandidates, OutreachStage, ProspectFile } from "@a11-wild/shared";
+import type { Batch, Board, BoardDraft, OutreachCandidate, OutreachCandidates, ProspectFile } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import { defectOf, rejected } from "../checks/store.js";
 import { Refusal } from "../mcp/registry.js";
-import { candidatesWait, owedByAgent, refusedDrafts, stageOf } from "./stage.js";
+import { candidatesWait, owedByAgent, owedNow, refusedDrafts, stageOf, TAKES_NO_AD } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The states of a batch whose drafts are all made and checked. */
@@ -11,8 +11,6 @@ const SHOWN: Batch["state"][] = ["checked", "waiting_pick", "finals", "finished"
 /** The states in which the words of an idea can still change: before any final is made. */
 const WORDS_OPEN: Batch["state"][] = ["checked", "waiting_pick"];
 /** The stages at which a brand takes no ad, so nothing is chosen for it. */
-const CLOSED: OutreachStage[] = ["opted_out", "lost", "parked", "no_route", "needs_service_ad"];
-
 interface Deps {
   store: OutreachStore;
   batches: Pick<BatchStore, "list" | "get">;
@@ -74,7 +72,7 @@ export class OutreachPicks {
       }),
     );
     if (drafts.length === 0) return undefined;
-    const owed = owedByAgent(file);
+    const owed = owedNow(file, optOuts);
     const mine = owed?.batchId === batch.id ? owed : undefined;
     const picked = file.events.filter((event) => event.type === "pick" && event.batchId === batch.id).sort((a, b) => a.at.localeCompare(b.at)).at(-1);
     return {
@@ -82,7 +80,7 @@ export class OutreachPicks {
       words: hasWords(batch.kind) && WORDS_OPEN.includes(batch.state),
       waits: candidatesWait(file)?.batchId === batch.id,
       agentOwes: mine !== undefined,
-      choosing: CLOSED.includes(stageOf(file, optOuts)) ? "closed" : mine?.type === "words" ? "agent" : "open",
+      choosing: TAKES_NO_AD.includes(stageOf(file, optOuts)) ? "closed" : mine?.type === "words" ? "agent" : "open",
       ...(picked?.type === "pick" ? { picked: { ideaId: picked.ideaId, imageId: picked.imageId } } : {}),
       ...(mine?.type === "words" ? { wordsAsked: { imageId: mine.imageId, ownerSaid: mine.ownerSaid } } : {}),
       drafts,

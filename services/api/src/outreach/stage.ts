@@ -64,6 +64,7 @@ export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | unde
 /**
  * What the agent owes the owner after his choice: the final of the draft he picked, or the drafts again with the words he asked for.
  * A pick is owed until an ad of its batch is attached after it; other words are owed until the drafts are shown again.
+ * This reads the timeline only. `owedNow` is the one to ask before any work: it knows a brand that takes no ad.
  */
 export function owedByAgent(file: ProspectFile): EventOf<"pick"> | EventOf<"words"> | undefined {
   const choice = choices(file).at(-1);
@@ -144,6 +145,12 @@ export function stageOf(file: ProspectFile, optOuts: ReadonlySet<string>): Outre
   if (refusals(file).length >= AD_TRIES) return "parked";
   return "new";
 }
+
+/** The stages at which a brand takes no ad: nothing is chosen for it and nothing is made. */
+export const TAKES_NO_AD: readonly OutreachStage[] = ["opted_out", "lost", "parked", "no_route", "needs_service_ad"];
+
+/** What the agent owes the owner now. Nothing for a brand that takes no ad: he parked it, lost it, or it opted out after his choice. */
+export const owedNow = (file: ProspectFile, optOuts: ReadonlySet<string>): EventOf<"pick"> | EventOf<"words"> | undefined => (TAKES_NO_AD.includes(stageOf(file, optOuts)) ? undefined : owedByAgent(file));
 
 /**
  * Why the agent should make an ad for this prospect now, or nothing when it should not:
