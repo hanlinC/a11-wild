@@ -64,8 +64,9 @@ export function Spend() {
                         <tr key={`${line.at}${line.ref}${line.kind}`} className="border-t border-border">
                           <td className="px-5 py-3 whitespace-nowrap">{when(line.at)}</td>
                           <td className="px-5 py-3">{line.service}</td>
-                          <td className="px-5 py-3">
-                            {line.kind} <span className="break-all text-muted-foreground">{line.ref}</span>
+                          {/* On a phone the table scrolls sideways: a reference in a column four letters wide cannot be read. */}
+                          <td className="min-w-56 px-5 py-3">
+                            {line.kind} <span className="break-words text-muted-foreground">{line.ref}</span>
                           </td>
                           <td className="px-5 py-3 font-mono whitespace-nowrap">{usd(line.usd)}</td>
                           <td className="px-5 py-3">
