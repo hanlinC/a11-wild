@@ -30,6 +30,8 @@ Step 7. Show. Show the drafts with the logo in the picture and no words, numbere
 
 Step 8. Stop. The owner picks. Then make the finals under the same spend gate and measure them again. Call batch_done: it says which of his conditions hold, and lists what remains for the stranger test. He runs that test himself.
 
+Last step. Learn. Write down what the batch taught you (learn). Save what the owner chose for this brand in his words (brand_note). If a rule should change, propose it (canon_propose) and show him; it is not in use until his yes.
+
 Done when: the owner has picked one draft for each idea; no final has a D item; shape and proportions match the truth sheet; every claim traces to the fact sheet.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
@@ -54,6 +56,8 @@ Step 7. Show. Show the drafts with their words and logo, numbered 1 to 3 with no
 
 Step 8. Finals. Make each final from the picked draft, run the real-camera finish, set the same words again and measure it again. Call batch_done.
 
+Last step. Learn. Write down what the batch taught you (learn). Save what the owner chose for this brand in his words (brand_note). If a rule should change, propose it (canon_propose) and show him; it is not in use until his yes.
+
 Done when: the owner has picked one draft for each idea; each final has its approved words, no D item and the right shape; every claim traces to a saved fact.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
@@ -62,7 +66,7 @@ const CONCEPT_ADS = `Concept ads (v3) for one brand and one product: three ads, 
 
 Step 0. Ask first. If the brand or the product is not given, ask the owner for both and wait. Ask which kind of ad he wants; this prompt is for v3.
 
-Step 1. Set-up. Call rules_get with role "main" and kind "v3". Start the batch with kind "v3". Read the taste canon, the taste log, the swipe file and references_get with kind "v3": the owner's own proud ads are the bar, never a layout to copy.
+Step 1. Set-up. Call rules_get with role "main" and kind "v3". Start the batch with kind "v3". Call canon_get with the batch id: it gives the owner's taste, this brand's rules, craft, performance and what he chose for this brand before. Read the taste canon, the taste log, the swipe file and references_get with kind "v3": the owner's own proud ads are the bar, never a layout to copy.
 
 Step 2. Truth first. Save the facts, each with an exact quote and its page address. Build the truth sheet. Save a real photo of every thing a picture will show: the pack, the food, each variant, each prop (product_save). A rough or a draft with a missing photo is refused.
 
@@ -85,6 +89,8 @@ Step 10. Drafts. Send each draft with its number from the direction (render_subm
 Step 11. Words, rank and pick. Set the approved words on each draft where the direction says (type_set) and look at it. The fresh critic ranks the drafts blind. Show the owner the board (board_show): he picks one draft of each concept, each with the question it asks.
 
 Step 12. Finals. Render each picked draft as a final, check it, finish it (photo_finish), set its words (type_set), then look at it at full size and at phone size and save the eight points (final_points_save). A final with a failed point is not delivered. Then follow batch_get: its nextStep names the delivery.
+
+Step 13. Learn. Write down what the batch taught you (learn). Save what the owner chose for this brand in his words (brand_note). If a rule should change, propose it (canon_propose) and show him; it is not in use until his yes.
 
 If a step names work for which the server lists no tool, stop and tell the owner which step is missing.`;
 

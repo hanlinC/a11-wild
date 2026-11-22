@@ -26,6 +26,16 @@ describe("house rules", () => {
     expect(ids("v2")).toEqual(expect.arrayContaining(["burst", "concept", "copy-length", "type", "type-space", "owner-words"]));
   });
 
+  it("gives every role the four sets of rules, and only the main agent the steps that write a lesson", () => {
+    for (const role of RULE_ROLES) {
+      for (const kind of BATCH_KINDS) {
+        const ids = rulesFor(role, kind).map((rule) => rule.id);
+        expect(ids).toContain("four-canons");
+        expect(ids.includes("learn-then-ask")).toBe(role === "main");
+      }
+    }
+  });
+
   it("gives the writer the words rules and not the spend rule", () => {
     const ids = rulesFor("writer", "v2").map((rule) => rule.id);
     expect(ids).toEqual(expect.arrayContaining(["concept", "copy-voice", "funnel"]));

@@ -6,7 +6,7 @@ import type { BatchKind } from "@a11-wild/shared";
  * Change the text only with the owner's say, add a line to docs/decisions.md,
  * and raise RULES_VERSION so that every client reads the rules again.
  */
-export const RULES_VERSION = "2026-11-22.10";
+export const RULES_VERSION = "2026-11-22.11";
 
 /** `main` runs the batch. `writer` writes the ideas and the words. `art_director` makes and checks the pictures. `critic` judges blind. */
 export const RULE_ROLES = ["main", "writer", "art_director", "critic"] as const;
@@ -272,6 +272,16 @@ export const HOUSE_RULES: readonly HouseRule[] = [
     id: "taste-in-words",
     roles: ALL,
     text: "Read the taste canon, the taste log and the swipe file before you write or judge. Taste is learned from the owner's words and choices, never guessed.",
+  },
+  {
+    id: "four-canons",
+    roles: ALL,
+    text: "There are four sets of rules: the owner's taste, one brand's rules, creative craft, and performance. Read them for your batch with canon_get and the batch id; it also gives what the owner chose for that brand before (brand notes). A rule of one brand never enters the batch of another. None of them is a product fact: copy states only saved facts.",
+  },
+  {
+    id: "learn-then-ask",
+    roles: ["main"],
+    text: "When the batch taught you something, write it down with learn: what you saw, where, the lesson, how many times you saw it, and what speaks against it. A learning record changes no rule and no fact. To change a rule, propose the whole canon as it would read (canon_propose) with the records it rests on; a rule for every brand needs two separate pieces of evidence. Nothing is in use until the owner says yes in his own words (canon_decide). Never decide for him. Save what he chose for one brand in his words with brand_note. A test batch teaches nothing.",
   },
   {
     id: "missing-step",
