@@ -20,12 +20,11 @@ import type { TruthStore } from "../truth/store.js";
 export const PACK_CHECK = "pack_check";
 
 const TEST_PICK = "This is a test batch: the pick is saved for the batch only. It is not in the taste log and not in the calibration.";
-const OUTREACH_PICK = "This is an outreach batch: the pick is the agent's, saved for the batch only. It is not in the taste log and not in the calibration.";
 
 /** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
 // A finished batch still takes a newer choice: the owner may pick a draft of an idea he passed on.
 /** In an outreach batch the agent chooses nothing: the owner sees every draft and picks the one to send. */
-export const OWNER_PICKS = "The owner picks the ad of an outreach batch himself, on the prospect's page in his dashboard. Show the drafts (outreach_show) and stop: he sees every draft there.";
+export const OWNER_PICKS = "The ad of an outreach batch is picked on the brand's page under Outreach in the dashboard, where the owner sees every draft. An agent shows the drafts there with outreach_show and stops.";
 const PICKING: BatchState[] = ["checked", "waiting_pick", "finals", "finished"];
 
 interface Deps {
@@ -325,13 +324,14 @@ export class BoardService implements FinalRule {
   }
 
   /** Saves the owner's choice for one idea, in his words, and adds it to the taste log. */
-  async pick(batchId: string, input: { ideaId: string; imageId: string | null; ownerSaid: string; viaAgent?: true }, user: { email: string; role: Role }) {
+  async pick(batchId: string, input: { ideaId: string; imageId: string | null; ownerSaid: string }, user: { email: string; role: Role }) {
     const { batches, picks, tasteLog } = this.deps;
     if (user.role !== "owner") throw new Refusal("Only the owner picks a draft.");
-    if (input.viaAgent && (await batches.get(batchId)).purpose === "outreach") throw new Refusal(OWNER_PICKS);
     const ownerSaid = input.ownerSaid.trim();
     if (!ownerSaid) throw new Refusal("A pick or a pass is saved with the owner's own words. Ask him why, and send what he said.");
     let batch = await batches.get(batchId);
+    // The ad of an outreach batch is chosen on the prospect's page, where the owner sees every draft of every idea at once.
+    if (batch.purpose === "outreach") throw new Refusal(OWNER_PICKS);
     if (batch.state === "checked") batch = await batches.move(batch, "waiting_pick", "pick_save");
     if (!PICKING.includes(batch.state)) {
       throw new Refusal(`The owner picks when the board is ready. This batch is at "${batch.state}".`);
@@ -353,7 +353,7 @@ export class BoardService implements FinalRule {
     // A newer choice in a finished batch names a draft with no final yet: the batch goes back to its finals.
     if (batch.state === "finished") await this.progress(batch);
     // A pick in a test batch or an outreach batch is not the owner's taste.
-    if (teachesNothing(batch)) return { pick, note: batch.test ? TEST_PICK : OUTREACH_PICK };
+    if (batch.test) return { pick, note: TEST_PICK };
     await tasteLog.add({
       kind: draft ? "pick" : "pass",
       ownerSaid,
