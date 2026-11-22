@@ -137,7 +137,7 @@ describe("The owner's Clients page", () => {
     await openClient(user, "Wongi");
     await openClient(user, "Zest");
     expect(await screen.findByText("This brand has no client link yet.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Make the link" }));
+    await user.click(screen.getByRole("button", { name: "Make a client link" }));
     expect(await screen.findByText("https://studio.example.com/client/new-link")).toBeInTheDocument();
     expect(screen.getByText(/It is not shown again/)).toBeInTheDocument();
     // The link is shown once: a row that is closed and opened again still has it.
@@ -166,6 +166,18 @@ describe("The owner's Clients page", () => {
     await user.click(await screen.findByRole("button", { name: "Make a new link" }));
     expect(await screen.findByText("https://studio.example.com/client/again")).toBeInTheDocument();
     expect(sent).toEqual([{ action: "make" }]);
+  });
+
+  it("says that a brand with only an example is not a client yet, so the button is not taken for the example's link", async () => {
+    const example = { packId: "pack-9", product: "Cheesecake", version: 1, at: "2026-11-22T10:00:00.000Z", example: true, ads: [], comments: [], uploads: [] };
+    stubApi({ "GET /api/portal": () => ({ body: { clients: [{ brand: { id: "brand-3", name: "Tart" }, packs: [example] }, clients[1]] } }) });
+    const user = userEvent.setup();
+    renderSignedIn(<Clients />);
+    await openClient(user, "Tart");
+    expect(await screen.findByText(/This brand is not a client yet: its pack is the example you send in outreach/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Make a client link" })).toBeInTheDocument();
+    await openClient(user, "Zest");
+    expect(screen.getAllByText(/This brand is not a client yet/)).toHaveLength(1);
   });
 
   it("says so when nothing waits and no brand has a pack", async () => {

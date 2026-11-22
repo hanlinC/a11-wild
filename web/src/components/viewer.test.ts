@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { onPicture } from "./viewer";
+import { gesture, onPicture } from "./viewer";
 
 describe("onPicture", () => {
   // A 4:5 picture in a wide box: it is drawn 800 by 1000 in the middle, with 500 empty on each side.
@@ -27,5 +27,24 @@ describe("onPicture", () => {
 
   it("counts every point as on a picture that has not loaded, so a click closes nothing", () => {
     expect(onPicture(wide, { width: 0, height: 0 }, 5, 5)).toBe(true);
+  });
+});
+
+describe("gesture", () => {
+  it("closes on a pull down, and not on a pull up or a short one", () => {
+    expect(gesture(10, 120)).toBe("close");
+    expect(gesture(10, -120)).toBeUndefined();
+    expect(gesture(0, 60)).toBeUndefined();
+  });
+
+  it("steps on a sideways swipe: to the left is the next picture", () => {
+    expect(gesture(-80, 10)).toBe("next");
+    expect(gesture(80, -10)).toBe("previous");
+    expect(gesture(30, 0)).toBeUndefined();
+  });
+
+  it("takes the longer direction of a slanted move", () => {
+    expect(gesture(-150, 100)).toBe("next");
+    expect(gesture(100, 150)).toBe("close");
   });
 });

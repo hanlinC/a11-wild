@@ -143,6 +143,7 @@ function StatusButtons({ comment, onStatus }: { comment: PackComment; onStatus: 
 
 /** The client's link: whether it is on, and the buttons that make, replace or close it. A new link is shown once. */
 function Link({ client }: { client: OwnerClient }) {
+  const onlyExample = client.packs.length > 0 && client.packs.every((pack) => pack.example);
   const [state, setState] = useState(client.link?.state);
   const [url, setUrl] = useState<string>();
   const [failure, setFailure] = useState<string>();
@@ -174,10 +175,16 @@ function Link({ client }: { client: OwnerClient }) {
       <p className="text-body">
         {state === "on" ? "The client's link is on." : state === "off" ? "The client's link is turned off: it opens nothing." : "This brand has no client link yet."}
       </p>
+      {/* An example is sent before a brand is a client, so the owner must not take this button for the example's link. */}
+      {state === undefined && onlyExample ? (
+        <p className="mt-1 max-w-2xl text-caption text-muted-foreground">
+          This brand is not a client yet: its pack is the example you send in outreach, and that example has its own link. Make a client link when the brand becomes your client. Its page shows no example, so today it would be empty.
+        </p>
+      ) : null}
       <div className="mt-2 flex flex-wrap gap-2">
         {state === undefined ? (
           <Button variant="secondary" size="compact" onClick={() => void act("make")}>
-            Make the link
+            Make a client link
           </Button>
         ) : (
           <Button variant="secondary" size="compact" onClick={() => void act(state === "on" ? "replace" : "make")}>

@@ -4,6 +4,7 @@ import { useParams } from "react-router";
 import { FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { Card, Section } from "@/components/page";
+import { Viewer, ZOOM } from "@/components/viewer";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
@@ -81,6 +82,7 @@ type Shown = ShownComment & { at?: string };
  */
 export function PackBody({ pack, door }: { pack: PackView; door: string }) {
   const [added, setAdded] = useState<Shown[]>([]);
+  const [large, setLarge] = useState<number>();
   const example = pack.example;
   const comments: Shown[] = example ? example.comments : [...(pack.comments ?? []), ...added];
   const add = (comment: Shown) => setAdded((all) => [...all, comment]);
@@ -93,9 +95,9 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
         <Section key={ad.adName} title={ad.stage ? STAGES[ad.stage] : "Ad"}>
           <Card className="grid gap-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <figure>
-              <a href={ad.viewUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
+              <button type="button" onClick={() => setLarge(index)} title="Look at it large" className={ZOOM}>
                 <img src={ad.viewUrl} alt={`The ad ${ad.adName}`} referrerPolicy="no-referrer" className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
-              </a>
+              </button>
               <Downloads door={door} ad={index} adName={ad.adName} formats={ad.formats} />
             </figure>
             <div className="min-w-0 space-y-5">
@@ -126,6 +128,13 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
           </Card>
         </Section>
       ))}
+      {large === undefined ? null : (
+        <Viewer shots={pack.ads.map((ad) => ({ url: ad.viewUrl, alt: `The ad ${ad.adName}` }))} at={large} onAt={setLarge} onClose={() => setLarge(undefined)}>
+          {/* The name of the ad and its place in the funnel, so the client knows which one is large. */}
+          <p className="text-body font-medium">{pack.ads[large]?.stage ? STAGES[pack.ads[large].stage] : "Ad"}</p>
+          <p className="break-all font-mono text-caption text-muted-foreground">{pack.ads[large]?.adName}</p>
+        </Viewer>
+      )}
       {example ? <p className="mt-4 text-caption text-muted-foreground">{example.note}</p> : null}
       <Section title="Launch plan">
         <Card>

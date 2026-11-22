@@ -9,6 +9,15 @@ export interface Shot {
 const ROUND = "grid size-11 place-items-center rounded-full bg-black/50 text-white outline-none hover:bg-black/70 focus-visible:ring-2 focus-visible:ring-white";
 /** A sideways move of the finger this long, in pixels, is a swipe to the next picture. */
 const SWIPE = 48;
+/** A downward pull this long, in pixels, closes the picture. */
+const PULL = 96;
+
+/** What one finger did between touch and lift: a pull down closes, a swipe steps, anything shorter is nothing. */
+export function gesture(across: number, down: number): "close" | "next" | "previous" | undefined {
+  if (down >= PULL && down > Math.abs(across)) return "close";
+  if (Math.abs(across) >= SWIPE && Math.abs(across) > Math.abs(down)) return across < 0 ? "next" : "previous";
+  return undefined;
+}
 
 interface Box {
   left: number;
@@ -39,14 +48,29 @@ export function onPicture(box: Box, natural: { width: number; height: number }, 
 export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; at: number; onAt: (at: number) => void; onClose: () => void; children?: ReactNode }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const touch = useRef<{ x: number; y: number } | undefined>(undefined);
+  const [pull, setPull] = useState(0);
+  const [zoomed, setZoomed] = useState(false);
   const shot = shots[at];
   const many = shots.length > 1;
 
   // After every draw, not only the first: a viewer that is on the page is always open.
+  // The focus goes to the dialog and not to its first button, so no button shows a focus ring until the Tab key is used.
   useEffect(() => {
     const node = dialog.current;
-    if (node && !node.open) node.showModal();
+    if (node && !node.open) {
+      node.showModal();
+      node.focus();
+    }
   });
+  // A picture that is pinched larger is moved with one finger: then a swipe or a pull is not ours.
+  useEffect(() => {
+    const view = window.visualViewport;
+    if (!view) return;
+    const read = () => setZoomed(view.scale > 1.01);
+    read();
+    view.addEventListener("resize", read);
+    return () => view.removeEventListener("resize", read);
+  }, []);
 
   if (!shot) return null;
   // The dialog closes itself, so the focus goes back to the picture he opened; its close event tells the page.
@@ -60,39 +84,58 @@ export function Viewer({ shots, at, onAt, onClose, children }: { shots: Shot[]; 
     else return;
     event.preventDefault();
   }
-  function swiped(event: TouchEvent) {
+  function touched(event: TouchEvent) {
+    const first = event.touches[0];
+    touch.current = first && event.touches.length === 1 && !zoomed ? { x: first.clientX, y: first.clientY } : undefined;
+    setPull(0);
+  }
+  function moved(event: TouchEvent) {
+    const from = touch.current;
+    const now = event.touches[0];
+    if (!from || !now) return;
+    const down = now.clientY - from.y;
+    setPull(down > 0 && down > Math.abs(now.clientX - from.x) ? down : 0);
+  }
+  function lifted(event: TouchEvent) {
     const from = touch.current;
     const to = event.changedTouches[0];
     touch.current = undefined;
-    if (!many || !from || !to) return;
-    const across = to.clientX - from.x;
-    if (Math.abs(across) >= SWIPE && Math.abs(across) > Math.abs(to.clientY - from.y)) step(across < 0 ? 1 : -1);
+    setPull(0);
+    if (!from || !to) return;
+    const did = gesture(to.clientX - from.x, to.clientY - from.y);
+    if (did === "close") close();
+    else if (did && many) step(did === "next" ? 1 : -1);
   }
 
   return (
     <dialog
       ref={dialog}
       aria-label="Picture, large"
+      tabIndex={-1}
       onClose={onClose}
       onKeyDown={keys}
-      className="m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 text-foreground backdrop:bg-black/85"
+      className="m-0 h-dvh max-h-none w-screen max-w-none bg-transparent p-0 text-foreground outline-none backdrop:bg-black/85"
     >
       <div className="grid h-full grid-rows-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-1">
-        {/* A click beside the picture closes it; the key for that is Esc. */}
+        {/* A click beside the picture closes it; the key for that is Esc; on a phone a pull down closes it. */}
+        {/* One finger is ours and two fingers pinch the page larger, so a pull down never reloads the page. */}
         <div
-          className="relative min-h-0"
+          className={zoomed ? "relative min-h-0" : "relative min-h-0 touch-pinch-zoom"}
           onClick={(event) => (event.target === event.currentTarget ? close() : undefined)}
-          onTouchStart={(event) => {
-            const first = event.touches[0];
-            touch.current = first ? { x: first.clientX, y: first.clientY } : undefined;
-          }}
-          onTouchEnd={swiped}
+          onTouchStart={touched}
+          onTouchMove={moved}
+          onTouchEnd={lifted}
+          onTouchCancel={() => ((touch.current = undefined), setPull(0))}
         >
           {/* The box has its size from the window alone, and the picture fills it: a picture that loads late or is small opens as large as any other. */}
-          <div className="absolute inset-3 sm:inset-6">
+          <div
+            className={pull ? "absolute inset-3 sm:inset-6" : "absolute inset-3 transition-transform duration-150 sm:inset-6"}
+            style={pull ? { transform: `translateY(${pull}px)`, opacity: Math.max(0.4, 1 - pull / 400) } : undefined}
+          >
             <img
               src={shot.url}
               alt={shot.alt}
+              referrerPolicy="no-referrer"
               className="size-full object-contain"
               onClick={(event) => (onPicture(event.currentTarget.getBoundingClientRect(), { width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }, event.clientX, event.clientY) ? undefined : close())}
             />

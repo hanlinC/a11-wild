@@ -39,6 +39,22 @@ const open = () =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe("A client's pack page", () => {
+  it("opens an ad large over the page, with no new tab and no address of the link sent to the picture's host", async () => {
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
+    open();
+    const small = await screen.findByRole("img", { name: "The ad a11_W47_wongi_b01_tof_c1_v2" });
+    expect(small.closest("a")).toBeNull();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(small);
+    const dialog = screen.getByRole("dialog", { name: "Picture, large" });
+    const large = dialog.querySelector("img");
+    expect(large).toHaveAttribute("src", view.ads[0]?.viewUrl);
+    expect(large).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(dialog).toHaveFocus();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("opens with no sign-in and shows the ad, its text for Meta, why, the fact check and the plan", async () => {
     const calls = stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
     open();
