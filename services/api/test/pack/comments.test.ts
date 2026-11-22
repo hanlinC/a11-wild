@@ -136,12 +136,22 @@ describe("the notice to the owner", () => {
     expect(studio.activities).toEqual([{ brandId, brand: "WonGi", kind: "comment" }]);
     const { subject, body } = activityMessage(studio.activities[0] as never, "https://studio.example");
     expect(subject).toBe("a11 wild: WonGi sent a comment");
-    expect(body).toContain(`https://studio.example/clients/${brandId}`);
+    expect(body).toContain("https://studio.example/clients\n");
     expect(subject + body).not.toContain("SECRET-WORDS");
     const long = activityMessage({ brandId, brand: `Café\nbreak ${"x".repeat(200)}`, kind: "change" }, "https://studio.example").subject;
     expect(long).toMatch(/^a11 wild: Cafe break x+ asked for a change to an ad$/);
     expect(long.length).toBeLessThan(100);
     expect(activityMessage({ brandId, brand: "猫", kind: "file" }, "https://studio.example").subject).toBe("a11 wild: a client sent a results file");
+  });
+
+  it("sends one email when several comments arrive at the same moment", async () => {
+    const pack = await carried();
+    await Promise.all(["One", "Two", "Three", "Four"].map((text) => send(pack, { text })));
+    expect(studio.activities).toHaveLength(1);
+  });
+
+  it("points the owner to the Clients page, the one page that shows it", () => {
+    expect(activityMessage({ brandId, brand: "WonGi", kind: "comment" }, "https://studio.example").body).toContain("Read it in the dashboard: https://studio.example/clients\n");
   });
 
   it("sends one email for a brand in ten minutes, and the next after that", async () => {

@@ -32,7 +32,7 @@ export function activityMessage(activity: ClientActivity, dashboardOrigin: strin
     body: [
       `The client of ${brand} ${DID[activity.kind]} on their page.`,
       "",
-      `Read it in the dashboard: ${dashboardOrigin}/clients/${encodeURIComponent(activity.brandId)}`,
+      `Read it in the dashboard: ${dashboardOrigin}/clients`,
       "",
       "This email holds nothing the client wrote or sent. More from the same client in the next 10 minutes sends no second email.",
     ].join("\n"),
@@ -92,6 +92,9 @@ export class ActivityNotices {
     const at = this.now().getTime();
     const last = await this.table.get<Item & { at: number }>("NOTICE", activity.brandId);
     if (last && at - last.at < NOTICE_GAP_MS) return;
+    // Submissions at the same moment all pass the read above. Only one of them takes the ten minutes it falls in.
+    const window = Math.floor(at / NOTICE_GAP_MS);
+    if (!(await this.table.put({ pk: "NOTICE", sk: `${activity.brandId}#${window}`, at, expiresAt: Math.floor(at / 1000) + 24 * 60 * 60 }, { ifNotExists: true }))) return;
     await this.table.put({ pk: "NOTICE", sk: activity.brandId, at });
     await this.notifier.clientActivity(activity);
   }
