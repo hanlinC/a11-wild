@@ -12,7 +12,7 @@ A private ad studio on AWS. An AI agent takes a brand and a product to three fin
 |---|---|
 | Brain | Claude Code (the owner's subscription), or any MCP client the owner approves. The server never calls a language model. |
 | MCP | Our own remote MCP server: hand-written, stateless, JSON over one `POST /mcp`. No MCP SDK. |
-| Frontend | Vite, React, TypeScript, Tailwind v4, shadcn/ui, Fluid Functionalism (`@fluid`, Radix flavour), Inter |
+| Frontend | Vite, React, TypeScript, Tailwind v4, shadcn/ui, Fluid Functionalism (`@fluid`, Radix flavour), Plus Jakarta Sans |
 | Backend | TypeScript on Node.js 22; pixel tools in Python (Pillow, NumPy, OpenCV) |
 | Sign-in | Email and password, by invitation only. An MCP client signs in with OAuth and PKCE, then waits for the owner's approval. |
 | Research | Parallel (search, extract, image search, tasks), called by the server |
