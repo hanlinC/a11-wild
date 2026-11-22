@@ -304,7 +304,7 @@ export class PackService {
   }
 
   /** The pack a token opens and the version it shows, or nothing. */
-  private async opened(token: string): Promise<{ pack: Pack; version: PackVersion } | undefined> {
+  async opened(token: string): Promise<{ pack: Pack; version: PackVersion } | undefined> {
     const { packs } = this.deps;
     if (!TOKEN.test(token)) return undefined;
     const pack = await packs.byHash(hashToken(token));

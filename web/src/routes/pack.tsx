@@ -165,7 +165,7 @@ function Results({ token }: { token: string }) {
       <p className="text-body">
         After the ads have run, send a screenshot of Ads Manager or its export. Show the ad names, impressions, clicks and CTR, and the dates.
       </p>
-      <p className="mt-1 text-caption text-muted-foreground">JPEG, PNG or CSV, up to 10 MB each. In Ads Manager, choose "Export table data" and "CSV".</p>
+      <p className="mt-1 text-caption text-muted-foreground">JPEG, PNG or CSV, up to 10 MB each. Export the table from Ads Manager as CSV, not as Excel.</p>
       <label className="mt-4 inline-block">
         <span className="sr-only">Choose results files</span>
         <input type="file" multiple accept={ACCEPT} onChange={(event) => { void send(event.target.files); event.target.value = ""; }} className="text-body file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-card file:px-4 file:text-body" />

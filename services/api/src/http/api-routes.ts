@@ -4,6 +4,7 @@ import type { Deps } from "../app.js";
 import { log } from "../log.js";
 import { requireOwner, requireSameOrigin, requireSession, type SessionEnv } from "./guards.js";
 import { outreachRoutes } from "./outreach-routes.js";
+import { clientRoutes } from "./client-routes.js";
 import { packRoutes } from "./pack-routes.js";
 import { studioRoutes } from "./studio-routes.js";
 
@@ -35,6 +36,7 @@ export function apiRoutes(deps: Deps): Hono<SessionEnv> {
 
   studioRoutes(routes, deps, session, ownerWrite);
   packRoutes(routes, deps, session);
+  clientRoutes(routes, deps, session, ownerWrite);
   outreachRoutes(routes, deps, session, ownerWrite);
 
   return routes;

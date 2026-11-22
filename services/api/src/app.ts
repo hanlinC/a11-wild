@@ -26,8 +26,8 @@ export interface Deps {
   now: () => Date;
 }
 
-/** A path as a log line may carry it. The token of a pack link is the key to that pack, so it is never written. */
-export const loggedPath = (path: string): string => path.replace(/^\/api\/pack\/[^/]+/, "/api/pack/<token>");
+/** A path as a log line may carry it. The token of a pack link or a client link is the key to what it opens, so it is never written. */
+export const loggedPath = (path: string): string => path.replace(/^\/api\/(pack|client)\/[^/]+/, "/api/$1/<token>");
 
 export function createApp(deps: Deps): Hono {
   const app = new Hono();

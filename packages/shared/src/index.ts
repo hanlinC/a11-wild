@@ -580,6 +580,27 @@ export interface ClientView {
 }
 
 /** A client's link as the owner sees it. The link itself is not kept: only the hash of its token. */
+/** One pack as the owner's Clients page shows it: what the client sees, what the client wrote and what the client sent. */
+export interface OwnerClientPack {
+  packId: string;
+  product: string;
+  version: number;
+  at: string;
+  /** True for the example: it takes no comment and no file. */
+  example: boolean;
+  ads: { adName: string; viewUrl: string }[];
+  /** Every comment, hidden ones too, oldest first. */
+  comments: PackComment[];
+  uploads: PackSummary["uploads"];
+}
+
+export interface OwnerClient {
+  brand: { id: string; name: string };
+  /** The client's link, when one was ever made. The link itself is shown once, when it is made. */
+  link?: ClientLink;
+  packs: OwnerClientPack[];
+}
+
 export interface ClientLink {
   brandId: string;
   state: "on" | "off";
