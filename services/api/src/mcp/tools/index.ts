@@ -67,6 +67,7 @@ import { BrandNotes } from "../../brand/notes.js";
 import { LearningStore } from "../../taste/learning.js";
 import { ProposalStore } from "../../taste/proposals.js";
 import { OutreachDesk } from "../../outreach/desk.js";
+import { OwnPicture } from "../../outreach/picture.js";
 import { OutreachSequence } from "../../outreach/sequence.js";
 import { OutreachStore } from "../../outreach/store.js";
 import { outreachTools } from "./outreach.js";
@@ -146,7 +147,8 @@ export function studioTools(parts: StudioParts) {
   const outreachStore = new OutreachStore(table, now);
   const sequence = new OutreachSequence(outreachStore, now);
   const desk = new OutreachDesk({ store: outreachStore, batches, board, ledger });
-  const services = { outreach: { store: outreachStore, sequence, desk }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, uploads, results };
+  const ownPicture = new OwnPicture({ store: outreachStore, pictures });
+  const services = { outreach: { store: outreachStore, sequence, desk, picture: ownPicture }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, uploads, results };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),

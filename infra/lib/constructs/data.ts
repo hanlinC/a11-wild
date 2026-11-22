@@ -1,4 +1,4 @@
-import { RemovalPolicy } from "aws-cdk-lib";
+import { Duration, RemovalPolicy } from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
@@ -29,6 +29,9 @@ export class Data extends Construct {
       removalPolicy: RemovalPolicy.RETAIN,
       // A client sends a results file from the pack page straight to a link the server signed for that one file.
       // The link is the key, and no cookie goes with it, so any origin may use it; only PUT is opened.
+      // A picture the owner uploads for a prospect waits under this prefix until the studio has read it and kept its own copy.
+      // A file left here was never kept, so it goes after a day.
+      lifecycleRules: [{ id: "outreach-inbox", prefix: "outreach/inbox/", expiration: Duration.days(1), abortIncompleteMultipartUploadAfter: Duration.days(1) }],
       cors: [{ allowedMethods: [s3.HttpMethods.PUT], allowedOrigins: ["*"], allowedHeaders: ["content-type"], maxAge: 300 }],
     });
   }

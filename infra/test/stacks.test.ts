@@ -206,6 +206,12 @@ describe("studio stack", () => {
     });
   });
 
+  it("empties the place an owner's upload waits in after a day, and no other place", () => {
+    template.hasResourceProperties("AWS::S3::Bucket", {
+      LifecycleConfiguration: { Rules: [{ Id: "outreach-inbox", Prefix: "outreach/inbox/", ExpirationInDays: 1, AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }, Status: "Enabled" }] },
+    });
+  });
+
   it("limits the request rate on the API stage and keeps logs for a month", () => {
     template.hasResourceProperties("AWS::ApiGatewayV2::Stage", {
       DefaultRouteSettings: { ThrottlingRateLimit: 20, ThrottlingBurstLimit: 40 },

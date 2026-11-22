@@ -35,6 +35,7 @@ const BODY = {
 } as const;
 const TEMPLATES = z.strictObject({ steps: z.tuple([TEMPLATE, TEMPLATE, TEMPLATE]) });
 const DAILY_BODY = z.strictObject({ daily: z.number().int() });
+const PICTURE = z.strictObject({ type: z.string().max(40), bytes: z.number().int() });
 const TEST = z.strictObject({ whatsapp: z.string().max(40).optional(), email: z.string().max(254).optional() });
 
 /** The picture of a test prospect's ad: a small grey block. One file, written again each time, so a test leaves nothing new behind. */
@@ -50,7 +51,7 @@ export function outreachRoutes(
   session: MiddlewareHandler<SessionEnv>,
   ownerWrite: readonly [MiddlewareHandler<SessionEnv>, MiddlewareHandler, MiddlewareHandler<SessionEnv>],
 ): void {
-  const { store, sequence } = deps.studio.outreach;
+  const { store, sequence, picture } = deps.studio.outreach;
   const ownerRead = [session, requireOwner] as const;
   const refused = (error: unknown) => {
     if (error instanceof Refusal) return { error: "refused", message: error.message };
@@ -151,7 +152,38 @@ export function outreachRoutes(
   write("channel", (id, body) => sequence.setChannel(id, body.channel));
   write("kind", (id, body) => sequence.setKind(id, body.kind, "owner"));
   write("choose", (id) => sequence.choose(id));
-  write("remove", (id) => store.removeTest(id));
+  write("remove", async (id) => {
+    const own = (await store.all()).find((file) => file.profile.id === id)?.ads.filter((ad) => ad.from === "owner") ?? [];
+    await store.removeTest(id);
+    // A picture the owner uploaded to try the page goes with the test prospect.
+    for (const ad of own) await deps.pictures.remove(ad.key);
+  });
+
+  /**
+   * The owner's own picture for a prospect, in two steps: an address for exactly one file, then the studio's own read of it.
+   * The bytes go from the owner's browser to the store, never through this function. Only a file whose first bytes are a JPEG or a PNG is kept.
+   */
+  routes.post("/api/outreach/prospects/:id/picture", ...ownerWrite, async (c) => {
+    const body = PICTURE.safeParse(await c.req.json().catch(() => undefined));
+    if (!body.success) return c.json({ error: "bad_request", message: "Send the type and the size of one JPEG or PNG picture." }, 400);
+    try {
+      return c.json(await picture.start(c.req.param("id"), body.data));
+    } catch (error) {
+      return c.json(refused(error), 400);
+    }
+  });
+
+  routes.post("/api/outreach/prospects/:id/picture/:uploadId/done", ...ownerWrite, async (c) => {
+    if (!NONE.safeParse(await c.req.json().catch(() => undefined)).success) return c.json({ error: "bad_request", message: "This request takes no field." }, 400);
+    const id = c.req.param("id");
+    try {
+      const ad = await picture.done(id, c.req.param("uploadId"));
+      log.info("outreach_own_picture", { prospect: id, ad: ad.n, by: c.get("session").sub });
+    } catch (error) {
+      return c.json(refused(error), 400);
+    }
+    return c.json((await prospectPage(id)) ?? { error: "not_found" });
+  });
 
   routes.post("/api/outreach/templates", ...ownerWrite, async (c) => {
     const body = TEMPLATES.safeParse(await c.req.json().catch(() => undefined));

@@ -46,6 +46,56 @@ describe("Prospect page", () => {
     expect(screen.getAllByRole("listitem").map((item) => item.textContent).filter((text) => /Note|Yes to|attached/.test(text ?? "")).map((text) => text!.split(/You|The agent/)[0])).toEqual(["Note: Met at a fair.", "Yes to ad 1.", "Ad 1 attached: The cup on its own colour."]);
   });
 
+  it("uploads the owner's own picture from his computer, and shows it as his ad with his yes", async () => {
+    const own = adView({ from: "owner", batchId: "owner", verdict: "yes", why: "Your own picture, uploaded from your computer." });
+    const calls = stubApi({
+      [GET]: () => ({ body: prospectPage({ ads: [] }) }),
+      "POST /api/outreach/prospects/00001/picture": (sent) => {
+        const { type, bytes } = sent as { type: string; bytes: number };
+        return { body: { uploadId: "u1", putUrl: `/put?type=${type}&bytes=${bytes}` } };
+      },
+      "PUT /put?type=image/png&bytes=3": () => ({ body: {} }),
+      "POST /api/outreach/prospects/00001/picture/u1/done": () => ({ body: prospectPage({ ads: [own], message: { step: 0, messages: messages() } }) }),
+    });
+    const user = userEvent.setup();
+    open();
+    await user.upload(await screen.findByLabelText("Choose your picture"), new File(["PNG"], "ad.png", { type: "image/png" }));
+    expect(await screen.findByText("Your upload")).toBeInTheDocument();
+    expect(screen.getByText("You said yes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    expect(screen.getByText("Ad 1 uploaded from your computer.")).toBeInTheDocument();
+    expect(calls.filter((call) => !call.startsWith("GET"))).toEqual(["POST /api/outreach/prospects/00001/picture", "PUT /put?type=image/png&bytes=3", "POST /api/outreach/prospects/00001/picture/u1/done"]);
+  });
+
+  it("sends no file that is not a JPEG or a PNG, or that is too large, and says why the studio kept none", async () => {
+    const calls = stubApi({
+      [GET]: () => ({ body: prospectPage({ ads: [] }) }),
+      "POST /api/outreach/prospects/00001/picture": () => ({ body: { uploadId: "u1", putUrl: "/put" } }),
+      "PUT /put": () => ({ body: {} }),
+      "POST /api/outreach/prospects/00001/picture/u1/done": () => ({ status: 400, body: { error: "refused", message: "This file is not a JPEG or a PNG picture. Nothing of it was kept." } }),
+    });
+    // applyAccept is off: a person can still drop any file on the field.
+    const user = userEvent.setup({ applyAccept: false });
+    open();
+    const field = await screen.findByLabelText("Choose your picture");
+    await user.upload(field, new File(["%PDF"], "ad.pdf", { type: "application/pdf" }));
+    expect(await screen.findByText("Choose a JPEG or a PNG picture.")).toBeInTheDocument();
+    const large = new File(["x"], "ad.png", { type: "image/png" });
+    Object.defineProperty(large, "size", { value: 8_000_001 });
+    await user.upload(field, large);
+    expect(await screen.findByText("The picture can be up to 8 MB.")).toBeInTheDocument();
+    expect(calls.filter((call) => !call.startsWith("GET"))).toEqual([]);
+    await user.upload(field, new File(["MZ"], "ad.png", { type: "image/png" }));
+    expect(await screen.findByText("This file is not a JPEG or a PNG picture. Nothing of it was kept.")).toBeInTheDocument();
+  });
+
+  it("offers no upload for a contact that opted out", async () => {
+    stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "opted_out" }) }) }) });
+    open();
+    expect(await screen.findByText(/This contact opted out/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Choose your picture")).not.toBeInTheDocument();
+  });
+
   it("asks once before an opt-out, and the brand then offers no action", async () => {
     let asked = 0;
     stubApi({

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { approvedClient, config, createStudio, json, ORIGIN, sessionCookie, type Studio } from "../helpers/deps.js";
+import { JPEG, PNG } from "../helpers/pictures.js";
 import { loadProspects, row } from "../outreach/helpers.js";
 
 let studio: Studio;
@@ -22,6 +23,7 @@ const on = async (id: string, action: string, body: unknown = {}) => {
   return response;
 };
 
+const UPLOAD = "3f2b8c1e-5d4a-4e6f-9a7b-0c1d2e3f4a5b";
 /** Every outreach route, with a body that would pass. */
 const READS = ["/api/outreach/today", "/api/outreach/prospects", "/api/outreach/prospects/00001", "/api/outreach/templates"];
 const WRITES: [string, unknown][] = [
@@ -37,6 +39,8 @@ const WRITES: [string, unknown][] = [
   ["/api/outreach/prospects/00001/kind", { kind: "service" }],
   ["/api/outreach/prospects/00001/choose", {}],
   ["/api/outreach/prospects/00001/remove", {}],
+  ["/api/outreach/prospects/00001/picture", { type: "image/png", bytes: 12 }],
+  [`/api/outreach/prospects/00001/picture/${UPLOAD}/done`, {}],
   ["/api/outreach/templates", { steps: TEMPLATES }],
   ["/api/outreach/daily", { daily: 9 }],
   ["/api/outreach/test-prospect", {}],
@@ -297,5 +301,103 @@ describe("the message text and the test prospect", () => {
     expect(real.status).toBe(400);
     expect((await json(real)).message).toMatch(/Only a test prospect/);
     expect((await post("/api/outreach/test-prospect", { email: "not an address" })).status).toBe(400);
+  });
+});
+
+describe("the owner's own picture", () => {
+  /** Asks for an address, puts `body` where it points, as the owner's browser would, and lets the studio read it. */
+  async function upload(id: string, body: Uint8Array, type = "image/png") {
+    const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type, bytes: body.length }));
+    const key = new URL(started.putUrl).pathname.slice(1);
+    await studio.pictures.put(key, body, type);
+    const done = await post(`/api/outreach/prospects/${id}/picture/${started.uploadId}/done`);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+    return { started, key, done };
+  }
+
+  it("attaches his picture as the newest ad with his yes, so the first message is ready with no batch", async () => {
+    const [id] = await loadProspects(studio);
+    await outreach().sequence.saveTemplates(TEMPLATES as never);
+    const { started, key, done } = await upload(id!, PNG);
+    expect(started.putUrl).toContain(`outreach/inbox/${id}/${started.uploadId}`);
+    expect(started.putUrl).toContain("type=image%2Fpng&bytes=12");
+    expect(done.status).toBe(200);
+    const page = await json(done);
+    expect(page).toMatchObject({ prospect: { stage: "ready" }, ads: [{ n: 1, from: "owner", batchId: "owner", verdict: "yes", viewUrl: expect.stringContaining(`outreach/owner/${id}/${started.uploadId}.png`) }] });
+    expect(page.ads[0].kind).toBeUndefined();
+    // The studio keeps its own copy, and the place the browser wrote to is emptied.
+    expect(studio.pictures.files.has(key)).toBe(false);
+    expect(studio.pictures.files.get(`outreach/owner/${id}/${started.uploadId}.png`)).toEqual({ body: PNG, type: "image/png" });
+    expect((await on(id!, "sent", { step: 0, title: 0 })).status).toBe(200);
+  });
+
+  it("tells the type by the file's first bytes, not by what was said of it", async () => {
+    const [id] = await loadProspects(studio);
+    const { started, done } = await upload(id!, JPEG, "image/png");
+    expect((await json(done)).ads[0].viewUrl).toContain(`${started.uploadId}.jpg`);
+    expect(studio.pictures.files.get(`outreach/owner/${id}/${started.uploadId}.jpg`)?.type).toBe("image/jpeg");
+  });
+
+  it("keeps nothing of a file that is no JPEG or PNG, whatever it was called", async () => {
+    const [id] = await loadProspects(studio);
+    for (const body of [new TextEncoder().encode("<svg onload=alert(1)>"), new TextEncoder().encode("MZ this is a program"), new TextEncoder().encode("RIFF0000WEBPVP8 ")]) {
+      const { key, done } = await upload(id!, body);
+      expect(done.status).toBe(400);
+      expect((await json(done)).message).toMatch(/not a JPEG or a PNG/);
+      expect(studio.pictures.files.has(key)).toBe(false);
+    }
+    expect((await outreach().store.all())[0]).toMatchObject({ ads: [], events: [] });
+    expect([...studio.pictures.files.keys()].filter((key) => key.startsWith("outreach/"))).toEqual([]);
+  });
+
+  it("refuses another type, a size out of range, an upload that never arrived and an id that is none", async () => {
+    const [id] = await loadProspects(studio);
+    const door = `/api/outreach/prospects/${id}/picture`;
+    for (const body of [{ type: "image/webp", bytes: 12 }, { type: "image/svg+xml", bytes: 12 }, { type: "image/png", bytes: 0 }, { type: "image/png", bytes: 8_000_001 }]) {
+      expect((await post(door, body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect((await post(`${door}/${UPLOAD}/done`)).status).toBe(400);
+    expect((await post(`${door}/..%2F..%2Fbrands/done`)).status).toBe(400);
+    expect((await post("/api/outreach/prospects/99999/picture", { type: "image/png", bytes: 12 })).status).toBe(400);
+    expect((await outreach().store.all())[0]!.ads).toEqual([]);
+  });
+
+  it("attaches one upload once, however often it is confirmed", async () => {
+    const [id] = await loadProspects(studio);
+    const { started } = await upload(id!, PNG);
+    const again = await post(`/api/outreach/prospects/${id}/picture/${started.uploadId}/done`);
+    expect(again.status).toBe(200);
+    const file = (await outreach().store.all())[0]!;
+    expect(file.ads).toHaveLength(1);
+    expect(file.events.filter((event) => event.type === "ad_yes")).toHaveLength(1);
+  });
+
+  it("puts his picture after an agent's ad, and it is then the one the message carries", async () => {
+    await ready();
+    const { started, done } = await upload("00001", PNG);
+    const page = await json(done);
+    expect(page.ads.map((ad: { n: number; from?: string }) => [ad.n, ad.from])).toEqual([[2, "owner"], [1, undefined]]);
+    expect(page.ads[0]).toMatchObject({ verdict: "yes", downloadUrl: expect.stringContaining(started.uploadId) });
+    expect(page.message.step).toBe(0);
+    const today = await json(await get("/api/outreach/today"));
+    expect(JSON.stringify(today)).toContain(started.uploadId);
+  });
+
+  it("removes his picture with the test prospect it was uploaded to", async () => {
+    const made = await json(await post("/api/outreach/test-prospect", {}));
+    const { started } = await upload(made.id, PNG);
+    const kept = `outreach/owner/${made.id}/${started.uploadId}.png`;
+    expect(studio.pictures.files.has(kept)).toBe(true);
+    expect(await json(await on(made.id, "remove"))).toEqual({ removed: true });
+    expect(studio.pictures.files.has(kept)).toBe(false);
+  });
+
+  it("lets a brand that sells a service go on with his picture, and keeps none for a contact that opted out", async () => {
+    const [id] = await loadProspects(studio);
+    await on(id!, "kind", { kind: "service" });
+    expect((await json(await get(`/api/outreach/prospects/${id}`))).prospect.stage).toBe("needs_service_ad");
+    expect((await json((await upload(id!, PNG)).done)).prospect.stage).toBe("ready");
+    await on(id!, "optout");
+    expect((await post(`/api/outreach/prospects/${id}/picture`, { type: "image/png", bytes: 12 })).status).toBe(400);
   });
 });

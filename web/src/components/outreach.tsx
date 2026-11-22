@@ -72,7 +72,7 @@ export function AdPicture({ ad, brand }: { ad: OutreachAdView; brand: string }) 
   return (
     <figure className="w-full max-w-64 shrink-0">
       <a href={ad.viewUrl} target="_blank" rel="noopener noreferrer">
-        <img src={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className="aspect-[4/5] w-full rounded-lg border border-border bg-muted object-cover" />
+        <img src={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className={`aspect-[4/5] w-full rounded-lg border border-border bg-muted ${ad.from === "owner" ? "object-contain" : "object-cover"}`} />
       </a>
       <figcaption className="mt-1.5 text-caption text-muted-foreground">{ad.why}</figcaption>
     </figure>

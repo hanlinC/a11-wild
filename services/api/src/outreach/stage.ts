@@ -70,9 +70,10 @@ export function stageOf(file: ProspectFile, optOuts: ReadonlySet<string>): Outre
   if (set && set.stage !== "auto") return set.stage;
   if (file.events.some((event) => event.type === "reply")) return "replied";
   if (file.sends.some((send) => send.step === 0)) return "contacted";
-  if (last(file.events, "kind")?.kind === "service") return "needs_service_ad";
-  if (!hasRoute(file.profile)) return "no_route";
   const ad = newestAd(file);
+  // The studio makes no ad for a service. The owner's own picture is one, so the brand then goes on like any other.
+  if (last(file.events, "kind")?.kind === "service" && ad?.from !== "owner") return "needs_service_ad";
+  if (!hasRoute(file.profile)) return "no_route";
   const verdict = ad && verdictOf(file, ad);
   if (ad && !verdict) return "ad_waits";
   if (verdict?.type === "ad_yes") return "ready";

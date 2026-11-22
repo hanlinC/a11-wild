@@ -1160,15 +1160,25 @@ export interface ProspectBrief {
 export interface OutreachAd {
   /** 1 for the prospect's first ad. */
   n: number;
+  /** The outreach batch that made it. `owner` for a picture the owner uploaded himself. */
   batchId: string;
   imageId: string;
-  kind: BatchKind;
+  /** Missing for a picture the owner uploaded: it came from no batch. */
+  kind?: BatchKind;
+  /** Set when the owner uploaded the picture from his computer. His upload is his yes. */
+  from?: "owner";
   /** Where the studio's own copy of the final sits in the private store. */
   key: string;
   /** One line from the agent: what the ad shows and why it fits the brand. */
   why: string;
   at: string;
 }
+
+/** The picture types the owner may upload for a prospect, and the ending of each. */
+export const OWN_PICTURE_TYPES = { "image/jpeg": "jpg", "image/png": "png" } as const;
+export type OwnPictureType = keyof typeof OWN_PICTURE_TYPES;
+/** The largest picture the owner may upload for a prospect, in bytes. */
+export const OWN_PICTURE_MAX_BYTES = 8_000_000;
 
 /** A message the owner sent by hand and marked as sent, with the exact text. */
 export interface OutreachSend {

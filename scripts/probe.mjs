@@ -14,6 +14,8 @@ export const PORTAL_WRITES = ["/api/portal/none/link", "/api/packs/none/comments
 export const OUTREACH_READS = ["/api/outreach/today", "/api/outreach/prospects", "/api/outreach/prospects/00001", "/api/outreach/templates"];
 export const OUTREACH_WRITES = [
   ...["ad", "sent", "unsent", "reply", "answered", "optout", "stage", "note", "channel", "kind", "choose", "remove"].map((action) => `/api/outreach/prospects/00001/${action}`),
+  "/api/outreach/prospects/00001/picture",
+  "/api/outreach/prospects/00001/picture/none/done",
   "/api/outreach/templates",
   "/api/outreach/daily",
   "/api/outreach/test-prospect",

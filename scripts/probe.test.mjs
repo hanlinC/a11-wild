@@ -106,7 +106,7 @@ describe("live probe", () => {
 
   it("probes every outreach route the server has", async () => {
     const source = await readFile(new URL("../services/api/src/http/outreach-routes.ts", import.meta.url), "utf8");
-    const literal = [...source.matchAll(/routes\.(get|post)\("([^"]+)"/g)].map(([, method, path]) => `${method} ${path.replace(":id", "00001")}`);
+    const literal = [...source.matchAll(/routes\.(get|post)\("([^"]+)"/g)].map(([, method, path]) => `${method} ${path.replace(":id", "00001").replace(":uploadId", "none")}`);
     const actions = [...source.matchAll(/^\s*write\("([a-z]+)"/gm)].map(([, action]) => `post /api/outreach/prospects/00001/${action}`);
     const served = [...literal, ...actions];
     const probed = [...OUTREACH_READS.map((path) => `get ${path}`), ...OUTREACH_WRITES.map((path) => `post ${path}`)];

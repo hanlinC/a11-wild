@@ -1,4 +1,4 @@
-import type { OutreachEvent, ProspectPage } from "@a11-wild/shared";
+import { OWN_PICTURE_MAX_BYTES, OWN_PICTURE_TYPES, type OutreachEvent, type OwnPictureType, type ProspectPage } from "@a11-wild/shared";
 import { type FormEvent, useCallback, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { FIELD } from "@/components/canon-card";
@@ -77,8 +77,9 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
       ) : null}
 
       <Section title="Ads" count={ads.length}>
+        {out ? null : <OwnPicture id={prospect.id} done={done} />}
         {ads.length === 0 ? (
-          <Empty>No ad yet. The agent makes one, and it then waits here for your yes or no.</Empty>
+          <Empty>No ad yet. The agent makes one, and it then waits here for your yes or no. Or upload your own above.</Empty>
         ) : (
           <ul className="grid gap-3">
             {ads.map((ad) => (
@@ -88,6 +89,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
                   <div className="grid content-start gap-3">
                     <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
                       Ad {ad.n} · {when(ad.at)}
+                      {ad.from === "owner" ? <Badge color="blue">Your upload</Badge> : null}
                       {ad.verdict ? <Badge color={ad.verdict === "yes" ? "green" : "gray"}>{ad.verdict === "yes" ? "You said yes" : "You said no"}</Badge> : null}
                     </p>
                     {!ad.verdict && ad.n === newest?.n && !out ? <AdVerdict prospect={prospect} ad={ad} done={done} /> : null}
@@ -173,6 +175,57 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
 
       {prospect.test ? <Remove id={prospect.id} /> : null}
     </>
+  );
+}
+
+/** The owner's own picture: the ad he sends with his first message when it came from no batch. The upload is his yes. */
+function OwnPicture({ id, done }: { id: string; done: (page: ProspectPage) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function send(file: File | undefined) {
+    if (!file) return;
+    if (!Object.hasOwn(OWN_PICTURE_TYPES, file.type)) return setError("Choose a JPEG or a PNG picture.");
+    if (file.size > OWN_PICTURE_MAX_BYTES) return setError("The picture can be up to 8 MB.");
+    setBusy(true);
+    try {
+      done(await api.sendOwnPicture(id, file, file.type as OwnPictureType));
+      setError(undefined);
+    } catch (cause) {
+      setError(describeError(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="mb-3 grid gap-3">
+      <div>
+        <p className="text-body">Upload your own picture</p>
+        <p className="mt-1 text-caption text-muted-foreground">
+          The ad you send with the first message, from your computer. JPEG or PNG, up to 8 MB. Your upload counts as your yes, so the message is ready right after.
+        </p>
+      </div>
+      <label className="inline-block">
+        <span className="sr-only">Choose your picture</span>
+        <input
+          type="file"
+          accept={Object.keys(OWN_PICTURE_TYPES).join(",")}
+          disabled={busy}
+          onChange={(event) => {
+            void send(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+          className="text-body file:mr-3 file:h-9 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-card file:px-4 file:text-body disabled:opacity-60"
+        />
+      </label>
+      {busy ? (
+        <p role="status" className="text-caption text-muted-foreground">
+          Uploading…
+        </p>
+      ) : null}
+      <Failure error={error} />
+    </Card>
   );
 }
 
@@ -279,7 +332,7 @@ function Timeline({ page }: { page: ProspectPage }) {
   const lines = [
     ...page.events.map((event) => ({ at: event.at, by: event.by === "agent" ? "The agent" : "You", text: (SAID[event.type] as (event: OutreachEvent) => string)(event) })),
     ...page.sends.map((send) => ({ at: send.at, by: "You", text: `${STEPS[send.step]} sent by ${CHANNELS[send.channel]}, with the title "${send.title}".` })),
-    ...page.ads.map((ad) => ({ at: ad.at, by: "The agent", text: `Ad ${ad.n} attached: ${ad.why}` })),
+    ...page.ads.map((ad) => (ad.from === "owner" ? { at: ad.at, by: "You", text: `Ad ${ad.n} uploaded from your computer.` } : { at: ad.at, by: "The agent", text: `Ad ${ad.n} attached: ${ad.why}` })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   if (lines.length === 0) return <Empty>Nothing has happened with this brand yet.</Empty>;
   return (

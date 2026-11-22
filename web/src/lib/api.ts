@@ -1,4 +1,4 @@
-import type { ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { OwnPictureType, ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -52,6 +52,17 @@ export const api = {
   },
   prospect: (id: string) => request<ProspectPage>(`/api/outreach/prospects/${encodeURIComponent(id)}`),
   prospectWrite: (id: string, write: ProspectWrite) => send<ProspectPage>(`/api/outreach/prospects/${encodeURIComponent(id)}/${write.action}`, write.body ?? {}),
+  /**
+   * Attaches the owner's own picture to a prospect: asks for an address, sends the file to it, then lets the studio read the file.
+   * The answer is the prospect as it now stands.
+   */
+  sendOwnPicture: async (id: string, file: File, type: OwnPictureType) => {
+    const door = `/api/outreach/prospects/${encodeURIComponent(id)}/picture`;
+    const { uploadId, putUrl } = await send<{ uploadId: string; putUrl: string }>(door, { type, bytes: file.size });
+    const sent = await fetch(putUrl, { method: "PUT", headers: { "content-type": type }, body: file, referrerPolicy: "no-referrer" });
+    if (!sent.ok) throw new ApiError(sent.status, "upload_failed", "The picture did not arrive. Try again in a moment.");
+    return send<ProspectPage>(`${door}/${encodeURIComponent(uploadId)}/done`, {});
+  },
   removeTestProspect: (id: string) => send<{ removed: boolean }>(`/api/outreach/prospects/${encodeURIComponent(id)}/remove`, {}),
   makeTestProspect: (contact: { whatsapp?: string; email?: string }) => send<{ id: string }>("/api/outreach/test-prospect", contact),
   outreachTemplates: () => request<TemplatesPage>("/api/outreach/templates"),
