@@ -276,7 +276,8 @@ export class PackService {
         meta: { version: 1, variants: ad.variants },
         why: ad.why,
         claims: ad.claims,
-        ...(downloads ? { downloads } : {}),
+        // A carried picture's address has no ending, so the type the studio read is kept with it.
+        downloads: downloads ?? [shown],
       });
     }
 

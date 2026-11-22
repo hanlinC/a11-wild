@@ -124,6 +124,15 @@ describe("a carried pack", () => {
     expect(uploads).toEqual([{ picture: 0, putUrl: expect.stringContaining(`carried/${carryId}/0?put=1&type=image%2Fpng&bytes=12`) }]);
   });
 
+  it("downloads a PNG as a PNG, though the address the picture was sent to has no ending", async () => {
+    const made = await carry({}, [JPEG, PNG, JPEG]);
+    const view = await studio.services.pack.view(token(made.link));
+    expect(view?.ads.map((shown) => shown.formats)).toEqual([["jpg"], ["png"], ["jpg"]]);
+    expect(await studio.services.pack.download(token(made.link), 1, "png")).toContain(`carried/${made.packId}/1?download=${ad(1).adName}.png`);
+    expect(await studio.services.pack.download(token(made.link), 1)).toContain(`${ad(1).adName}.png`);
+    expect(await studio.services.pack.download(token(made.link), 1, "jpg")).toBeUndefined();
+  });
+
   it("downloads the picture the page shows, under the ad's name", async () => {
     const made = await carry();
     const url = await studio.services.pack.download(token(made.link), 1);
