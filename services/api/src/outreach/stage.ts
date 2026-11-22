@@ -24,12 +24,25 @@ export function verdictOf(file: ProspectFile, ad: OutreachAd): EventOf<"ad_yes">
 
 type Choice = EventOf<"pick"> | EventOf<"none"> | EventOf<"words">;
 
-/** The drafts that wait for the owner's pick: the newest ones shown, with no answer of his and no ad of that batch after them. */
+const choices = (file: ProspectFile, batchId?: string): Choice[] =>
+  byTime(file.events).filter((event): event is Choice => (event.type === "pick" || event.type === "none" || event.type === "words") && (batchId === undefined || event.batchId === batchId));
+
+/** The ad made of a pick: the newest ad of the pick's batch that was attached after it. */
+const adOfPick = (file: ProspectFile, pick: EventOf<"pick">): OutreachAd | undefined =>
+  [...file.ads].sort((a, b) => a.n - b.n).filter((ad) => ad.batchId === pick.batchId && ad.at >= pick.at).at(-1);
+
+/**
+ * The drafts that wait for the owner's pick: the newest ones shown, with no answer of his after them.
+ * A pick whose final he then refused is no answer any more: he chooses among the drafts again.
+ */
 export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | undefined {
   const shown = last(file.events, "candidates");
   if (!shown) return undefined;
-  const answered = file.events.some((event) => (event.type === "pick" || event.type === "none" || event.type === "words") && event.batchId === shown.batchId && event.at >= shown.at);
-  return answered || file.ads.some((ad) => ad.batchId === shown.batchId && ad.at >= shown.at) ? undefined : shown;
+  const answer = choices(file, shown.batchId).filter((event) => event.at >= shown.at).at(-1);
+  if (!answer) return shown;
+  if (answer.type !== "pick") return undefined;
+  const ad = adOfPick(file, answer);
+  return ad && verdictOf(file, ad)?.type === "ad_no" ? shown : undefined;
 }
 
 /**
@@ -37,17 +50,18 @@ export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | unde
  * A pick is owed until an ad of its batch is attached after it; other words are owed until the drafts are shown again.
  */
 export function owedByAgent(file: ProspectFile): EventOf<"pick"> | EventOf<"words"> | undefined {
-  const choice = byTime(file.events)
-    .filter((event): event is Choice => event.type === "pick" || event.type === "none" || event.type === "words")
-    .at(-1);
+  const choice = choices(file).at(-1);
   if (!choice || choice.type === "none") return undefined;
-  if (choice.type === "pick") return file.ads.some((ad) => ad.batchId === choice.batchId && ad.at >= choice.at) ? undefined : choice;
+  if (choice.type === "pick") return adOfPick(file, choice) ? undefined : choice;
   return file.events.some((event) => event.type === "candidates" && event.batchId === choice.batchId && event.at >= choice.at) ? undefined : choice;
 }
 
-/** Each no of the owner, to one ad or to all the drafts of a batch, oldest first. */
+/**
+ * Each no of the owner that uses up a try, oldest first: a no to an ad the agent chose, or to all the drafts of a batch.
+ * A no to the final of his own pick uses none: he goes back to the drafts.
+ */
 export const refusals = (file: ProspectFile): (EventOf<"ad_no"> | EventOf<"none">)[] =>
-  byTime(file.events).filter((event): event is EventOf<"ad_no"> | EventOf<"none"> => event.type === "ad_no" || event.type === "none");
+  byTime(file.events).filter((event): event is EventOf<"ad_no"> | EventOf<"none"> => event.type === "none" || (event.type === "ad_no" && !file.ads.find((ad) => ad.n === event.ad)?.picked));
 
 export const newestAd = (file: ProspectFile): OutreachAd | undefined => [...file.ads].sort((a, b) => a.n - b.n).at(-1);
 
@@ -117,7 +131,7 @@ export function stageOf(file: ProspectFile, optOuts: ReadonlySet<string>): Outre
  */
 export function wantsAd(file: ProspectFile, optOuts: ReadonlySet<string>): { why: "more" | "first" | "again"; ownerSaid?: string } | undefined {
   const stage = stageOf(file, optOuts);
-  if (adWaits(file)) return undefined;
+  if (adWaits(file) || candidatesWait(file) || owedByAgent(file)) return undefined;
   const more = byTime(file.events)
     .filter((event): event is EventOf<"reply"> => event.type === "reply" && event.reply === "more")
     .at(-1);
@@ -125,9 +139,10 @@ export function wantsAd(file: ProspectFile, optOuts: ReadonlySet<string>): { why
     // One more ad for each "more", and a second try when the owner said no to it.
     const since = file.ads.filter((ad) => ad.at > more.at);
     const refused = since.filter((ad) => verdictOf(file, ad)?.type === "ad_no");
-    if (since.length - refused.length > 0 || refused.length >= AD_TRIES) return undefined;
-    const no = refused.at(-1) && verdictOf(file, refused.at(-1)!);
-    return { why: "more", ...(no?.type === "ad_no" ? { ownerSaid: no.ownerSaid } : {}) };
+    const tries = refusals(file).filter((no) => no.at > more.at);
+    if (since.length - refused.length > 0 || tries.length >= AD_TRIES) return undefined;
+    const no = tries.at(-1);
+    return { why: "more", ...(no ? { ownerSaid: no.ownerSaid } : {}) };
   }
   if (stage !== "new") return undefined;
   const no = refusals(file).at(-1);

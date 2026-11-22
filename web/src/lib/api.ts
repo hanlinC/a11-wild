@@ -35,6 +35,9 @@ export type ProspectWrite =
   | { action: "note"; body: { text: string } }
   | { action: "channel"; body: { channel: "whatsapp" | "email" } }
   | { action: "kind"; body: { kind: "product" | "service" } }
+  | { action: "pick"; body: { imageId: string } }
+  | { action: "none"; body: { ownerSaid: string } }
+  | { action: "words"; body: { imageId: string; ownerSaid: string } }
   | { action: "answered" | "optout" | "choose"; body?: undefined };
 
 export interface ProspectFilter {

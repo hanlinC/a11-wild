@@ -1193,7 +1193,7 @@ export type OutreachEventBody =
   | { type: "ad_yes"; ad: number }
   | { type: "ad_no"; ad: number; ownerSaid: string }
   /** The drafts of an outreach batch are ready for the owner's look on the prospect's page. */
-  | { type: "candidates"; batchId: string }
+  | { type: "candidates"; batchId: string; /** How many drafts he can pick from. */ drafts: number }
   /** The owner chose the draft to send. The agent then makes its final. */
   | { type: "pick"; batchId: string; ideaId: string; imageId: string }
   /** The owner wants none of the drafts of a batch. It counts as a no. */
@@ -1277,6 +1277,8 @@ export interface TodayLine {
   messages?: [OutreachMessage, OutreachMessage];
   /** The reply that is owed an answer. */
   reply?: { text?: string; at: string };
+  /** How many drafts wait for the owner's pick on the prospect's page. */
+  drafts?: number;
 }
 
 export interface TodayPage {
@@ -1294,6 +1296,8 @@ export interface TodayPage {
   followUps: TodayLine[];
   firsts: TodayLine[];
   adsWaiting: TodayLine[];
+  /** The brands whose drafts wait for the owner's pick. */
+  picks: TodayLine[];
 }
 
 /** A count of prospects, also by spend tier and by the channel of the brand. */
@@ -1410,7 +1414,7 @@ export interface BatchLine {
   chat?: true;
 }
 
-export const ATTENTION_KINDS = ["replies", "ads", "follow_ups", "firsts", "change_requests", "taste", "connections"] as const;
+export const ATTENTION_KINDS = ["replies", "ad_picks", "ads", "follow_ups", "firsts", "change_requests", "taste", "connections"] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
 /** A group of things that wait for the owner outside the batches, with the page where he acts. */

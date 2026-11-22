@@ -34,6 +34,7 @@ export const waitsForOwner = (comment: Pick<PackComment, "change">): boolean => 
 
 const PAGE: Record<AttentionKind, string> = {
   replies: "/outreach",
+  ad_picks: "/outreach",
   ads: "/outreach",
   follow_ups: "/outreach",
   firsts: "/outreach",
@@ -58,7 +59,7 @@ export class AttentionService {
     const counts: AttentionCounts = owner
       ? {
           studio: batches.filter((line) => line.who === "owner").length,
-          outreach: of("replies", "ads", "follow_ups", "firsts"),
+          outreach: of("replies", "ad_picks", "ads", "follow_ups", "firsts"),
           clients: of("change_requests"),
           taste: of("taste"),
           connections: of("connections"),
@@ -118,6 +119,7 @@ export class AttentionService {
     ]);
     const found: [AttentionKind, number][] = [
       ["replies", today.owed.length],
+      ["ad_picks", today.picks.length],
       ["ads", today.adsWaiting.length],
       ["follow_ups", today.followUps.length],
       ["firsts", today.firsts.length],

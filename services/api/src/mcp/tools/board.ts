@@ -57,7 +57,7 @@ export function boardTools({ board }: { board: BoardService }): ToolDefinition[]
         ownerSaid: z.string().min(1).max(2000).describe("The owner's own words."),
       },
       writes: true,
-      handler: ({ batchId, ideaId, imageId, ownerSaid }, context) => board.pick(batchId, { ideaId, imageId, ownerSaid }, context.user),
+      handler: ({ batchId, ideaId, imageId, ownerSaid }, context) => board.pick(batchId, { ideaId, imageId, ownerSaid, viaAgent: true }, context.user),
     }),
   ];
 }

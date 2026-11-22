@@ -34,6 +34,7 @@ export const todayPage = (overrides: Partial<TodayPage> = {}): TodayPage => ({
   followUps: [],
   firsts: [],
   adsWaiting: [],
+  picks: [],
   ...overrides,
 });
 

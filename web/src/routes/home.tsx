@@ -21,6 +21,7 @@ const ORDER = Object.keys(ASKS) as (keyof typeof ASKS)[];
 /** The work of the Outreach page, in the order of that page. The start page gives it one line, as it has one place. */
 const OUTREACH = {
   replies: (n: number) => many(n, "reply to answer", "replies to answer"),
+  ad_picks: (n: number) => many(n, "brand whose ad you pick", "brands whose ad you pick"),
   follow_ups: (n: number) => many(n, "follow-up due", "follow-ups due"),
   firsts: (n: number) => many(n, "first message to send", "first messages to send"),
   ads: (n: number) => many(n, "ad to look at", "ads to look at"),

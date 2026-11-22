@@ -4,7 +4,7 @@ import type { IdeaFinal } from "../board/service.js";
 import { Refusal } from "../mcp/registry.js";
 import type { SpendLedger } from "../spend/ledger.js";
 import { chosen, sameContact } from "./sequence.js";
-import { adWaits, kindOf, optedOut, stageOf, wantsAd } from "./stage.js";
+import { adWaits, candidatesWait, kindOf, optedOut, owedByAgent, stageOf, wantsAd } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The owner's campaign: the first 50 product brands of his two top tiers, in list order. */
@@ -19,8 +19,17 @@ export interface NextBrand extends ProspectBrief {
   sells?: "product";
   /** An outreach batch of this brand that is not done: resume it before you start a new one. */
   openBatchId?: string;
-  /** A done outreach batch of this brand whose ad is not on its page yet: attach it before you start a new one. */
-  doneBatchId?: string;
+}
+
+/** A brand whose owner has chosen: the agent's work on it comes before any new brand. */
+export interface OwedBrand extends ProspectBrief {
+  batchId: string;
+  /** `final`: make the final of the draft he picked, then batch_done and outreach_attach. `words`: set other words on that draft, then outreach_show. */
+  owes: "final" | "words";
+  ideaId: string;
+  imageId: string;
+  /** His words with "other words": what the words should say. */
+  ownerSaid?: string;
 }
 
 interface Deps {
@@ -46,26 +55,28 @@ export class OutreachDesk {
     const { store, batches } = this.deps;
     const [files, optOuts, all] = await Promise.all([store.all(), store.optOuts(), batches.list()]);
     // Newest first, so the first one found for a prospect is its newest.
+    const refused = new Set(files.flatMap((file) => file.events.flatMap((event) => (event.type === "none" ? [event.batchId] : []))));
     const open = new Map<string, string>();
     const newest = new Map<string, Batch>();
     for (const batch of all) {
       if (batch.purpose !== "outreach" || !batch.prospectId) continue;
       if (!newest.has(batch.prospectId)) newest.set(batch.prospectId, batch);
-      if (batch.state !== "done" && !open.has(batch.prospectId)) open.set(batch.prospectId, batch.id);
+      // A batch whose drafts the owner refused whole is not resumed: the next try is a new batch.
+      if (batch.state !== "done" && !open.has(batch.prospectId) && !refused.has(batch.id)) open.set(batch.prospectId, batch.id);
     }
-    // A session that stopped between batch_done and outreach_attach left a paid ad that is on no page.
-    const done = new Map<string, string>();
-    for (const file of files) {
-      const batch = newest.get(file.profile.id);
-      if (batch?.state === "done" && !file.ads.some((ad) => ad.batchId === batch.id)) done.set(file.profile.id, batch.id);
-    }
-    const started = files.filter((file) => inCampaign(file) && file.ads.length > 0).length;
-    return { files, optOuts, open, done, started, shared: sameContact(files) };
+    const started = files.filter((file) => inCampaign(file) && (file.ads.length > 0 || file.events.some((event) => event.type === "candidates"))).length;
+    return { files, optOuts, open, started, shared: sameContact(files) };
   }
 
-  /** The brands that need an ad now: a "more" reply first, then the list's order. */
-  async next(limit: number): Promise<{ brands: NextBrand[]; brandsWithAnAd: number; brandsLimit: number }> {
-    const { files, optOuts, open, done, started, shared } = await this.read();
+  /** What the owner is owed first (the final of his pick, or other words), then the brands that need an ad now: a "more" reply first, then the list's order. */
+  async next(limit: number): Promise<{ owed: OwedBrand[]; brands: NextBrand[]; brandsWithAnAd: number; brandsLimit: number }> {
+    const { files, optOuts, open, started, shared } = await this.read();
+    const owed: OwedBrand[] = [];
+    for (const file of files) {
+      const choice = optedOut(file, optOuts) ? undefined : owedByAgent(file);
+      if (!choice) continue;
+      owed.push({ ...briefOf(file), batchId: choice.batchId, owes: choice.type === "pick" ? "final" : "words", ideaId: choice.ideaId, imageId: choice.imageId, ...(choice.type === "words" ? { ownerSaid: choice.ownerSaid } : {}) });
+    }
     const more: { at: string; brand: NextBrand }[] = [];
     const others: NextBrand[] = [];
     let firsts = Math.max(0, CAMPAIGN.brands - started);
@@ -74,8 +85,7 @@ export class OutreachDesk {
       const want = wantsAd(file, optOuts);
       if (!want) continue;
       const openBatchId = open.get(file.profile.id);
-      const doneBatchId = openBatchId ? undefined : done.get(file.profile.id);
-      const brand: NextBrand = { ...briefOf(file), why: want.why, ...(want.ownerSaid ? { ownerSaid: want.ownerSaid } : {}), ...(kindOf(file) === "product" ? { sells: "product" as const } : {}), ...(openBatchId ? { openBatchId } : {}), ...(doneBatchId ? { doneBatchId } : {}) };
+      const brand: NextBrand = { ...briefOf(file), why: want.why, ...(want.ownerSaid ? { ownerSaid: want.ownerSaid } : {}), ...(kindOf(file) === "product" ? { sells: "product" as const } : {}), ...(openBatchId ? { openBatchId } : {}) };
       if (want.why === "more") {
         const asked = file.events.filter((event) => event.type === "reply" && event.reply === "more").at(-1);
         more.push({ at: asked?.at ?? "", brand });
@@ -91,7 +101,7 @@ export class OutreachDesk {
       others.push(brand);
     }
     more.sort((a, b) => a.at.localeCompare(b.at));
-    return { brands: [...more.map((entry) => entry.brand), ...others].slice(0, limit), brandsWithAnAd: started, brandsLimit: CAMPAIGN.brands };
+    return { owed, brands: [...more.map((entry) => entry.brand), ...others].slice(0, limit), brandsWithAnAd: started, brandsLimit: CAMPAIGN.brands };
   }
 
   private async file(id: string) {
@@ -106,7 +116,7 @@ export class OutreachDesk {
     const { file, optOuts, started } = await this.file(prospectId);
     if (file.profile.test) throw new Refusal("That is a test prospect. No ad is made for it.");
     const want = wantsAd(file, optOuts);
-    if (!want) throw new Refusal(adWaits(file) ? "An ad of this brand waits for the owner's yes or no. Make no other until he has answered." : `This brand is at "${stageOf(file, optOuts)}": it needs no ad now. outreach_next gives the brands that do.`);
+    if (!want) throw new Refusal(adWaits(file) ? "An ad of this brand waits for the owner's yes or no. Make no other until he has answered." : candidatesWait(file) ? "The drafts of this brand wait for the owner's pick. Make no other until he has chosen." : owedByAgent(file) ? "The owner has chosen for this brand. outreach_next names what he is owed: do that first." : `This brand is at "${stageOf(file, optOuts)}": it needs no ad now. outreach_next gives the brands that do.`);
     if (want.why === "more") return;
     if (!inCampaign(file)) throw new Refusal(`The campaign is for the tiers ${CAMPAIGN.tiers.join(" and ")} live ads. This brand is in "${file.profile.tier}".`);
     if (want.why === "first" && started >= CAMPAIGN.brands) throw new Refusal(`The campaign's ${CAMPAIGN.brands} brands have their ad. A new brand needs the owner's say.`);
@@ -130,28 +140,50 @@ export class OutreachDesk {
     return { stage: stageOf(after, optOuts) };
   }
 
-  /** Puts the one final of a done outreach batch on its prospect's page, where it waits for the owner's yes or no. */
+  /**
+   * Puts the final of the draft the owner picked on the prospect's page. His pick is his yes, so the message is ready; a no of his takes it back.
+   * A batch can give more than one ad: he may pick another draft later, and each pick is attached once.
+   */
   async attach(batchId: string, why: string): Promise<{ ad: Omit<OutreachAd, "key">; already: boolean }> {
     const { store, batches, board } = this.deps;
     const batch = await batches.get(batchId);
-    if (batch.purpose !== "outreach" || !batch.prospectId) throw new Refusal("This is not an outreach batch. Only the ad of a batch that was started for a prospect is attached.");
-    if (batch.state !== "done") throw new Refusal(`This batch is "${batch.state}". Only the final of a done batch is attached: run batch_done first.`);
+    if (batch.purpose !== "outreach" || !batch.prospectId) {
+      throw new Refusal("This is not an outreach batch. Only the ad of a batch that was started for a prospect is attached.");
+    }
+    if (batch.state !== "done") {
+      throw new Refusal(`This batch is "${batch.state}". Only the final of a done batch is attached: run batch_done first.`);
+    }
     const { file, optOuts } = await this.file(batch.prospectId);
     const shown = ({ key: _key, ...ad }: OutreachAd) => ad;
-    const before = file.ads.find((ad) => ad.batchId === batch.id);
-    if (before) return { ad: shown(before), already: true };
     const picked = (await board.finals(batch)).filter((entry) => entry.pick?.imageId);
     const final = picked[0];
-    if (picked.length !== 1 || !final) throw new Refusal("An outreach batch has one picked final. This one does not.");
-    // A final that fails a check is not attached, even in a batch that was done before the check was saved.
-    if (!final.delivered) throw new Refusal(`The final is not ready for the owner: ${final.missing.join("; ")}.`);
-    if (!wantsAd(file, optOuts)) throw new Refusal(adWaits(file) ? "An ad of this brand waits for the owner's yes or no. No other is attached until he has answered." : `This brand is at "${stageOf(file, optOuts)}": it takes no ad now.`);
-    const saved = await store.putAd(file.profile.id, file.ads.length + 1, { batchId: batch.id, imageId: final.delivered.id, kind: batch.kind, key: final.delivered.key, why });
+    if (picked.length !== 1 || !final) {
+      throw new Refusal("An outreach batch has one picked final. This one does not.");
+    }
+    if (!final.delivered) {
+      throw new Refusal(`The final is not ready for the owner: ${final.missing.join("; ")}.`);
+    }
+    const imageId = final.delivered.id;
+    const same = (ad: OutreachAd) => ad.batchId === batch.id && ad.imageId === imageId;
+    const before = file.ads.find(same);
+    if (before) return { ad: shown(before), already: true };
+    if (optedOut(file, optOuts)) throw new Refusal("This brand opted out. It takes no ad.");
+    const owed = owedByAgent(file);
+    if (owed?.type !== "pick" || owed.batchId !== batch.id || owed.imageId !== final.pick?.imageId) {
+      throw new Refusal("The owner has not picked this draft on the prospect's page. Only the final of his own pick is attached: outreach_show puts the drafts before him, and outreach_next names the pick he made.");
+    }
+    const saved = await store.putAd(file.profile.id, file.ads.length + 1, {
+      batchId: batch.id,
+      imageId,
+      kind: batch.kind,
+      picked: true,
+      key: final.delivered.key,
+      why,
+    });
     if (saved) return { ad: shown(saved), already: false };
-    // Another attach came first: it is the same batch, or the brand has its ad now.
-    const again = (await store.all()).find((entry) => entry.profile.id === file.profile.id)?.ads.find((ad) => ad.batchId === batch.id);
+    const again = (await store.all()).find((entry) => entry.profile.id === file.profile.id)?.ads.find(same);
     if (again) return { ad: shown(again), already: true };
-    throw new Refusal("Another ad was attached to this brand at the same moment. It waits for the owner's yes or no.");
+    throw new Refusal("Another ad was attached to this brand at the same moment. Call outreach_attach again.");
   }
 
   /** The campaign in numbers. It names no brand and holds no contact. */
@@ -174,7 +206,12 @@ export class OutreachDesk {
       prospects: real.length,
       stages: count(real),
       campaign: { tiers: CAMPAIGN.tiers, prospects: campaign.length, stages: count(campaign), brandsWithAnAd: started, brandsLimit: CAMPAIGN.brands },
-      ads: { waitForTheOwner: real.filter((file) => adWaits(file) && !optedOut(file, optOuts)).length, wanted: wants },
+      ads: {
+        waitForTheOwner: real.filter((file) => adWaits(file) && !optedOut(file, optOuts)).length,
+        draftsWaitForHisPick: real.filter((file) => candidatesWait(file) && !optedOut(file, optOuts)).length,
+        owedByTheAgent: real.filter((file) => owedByAgent(file) && !optedOut(file, optOuts)).length,
+        wanted: wants,
+      },
       firstMessagesSent: real.filter((file) => file.sends.some((send) => send.step === 0)).length,
       spend,
     };

@@ -156,8 +156,15 @@ export class OutreachSequence {
     const ad = file.ads.find((entry) => entry.n === input.ad);
     if (!ad) throw new Refusal(`This brand has no ad ${input.ad}.`);
     if (ad.n !== newestAd(file)?.n) throw new Refusal("Only the newest ad of a brand waits for a yes or a no.");
-    if (verdictOf(file, ad)) throw new Refusal("This ad has its yes or no already.");
+    const said = verdictOf(file, ad);
+    // The final of his own pick has his yes from the pick. He can still say no to it once he has seen it, and then chooses among the drafts again.
+    const ownPick = ad.picked === true && said?.type === "ad_yes" && !file.events.some((event) => event.id === said.id);
+    if (said && !(ownPick && !input.yes)) throw new Refusal("This ad has its yes or no already.");
     if (input.yes) return this.store.addEvent(id, { type: "ad_yes", ad: ad.n }, "owner");
+    if (ownPick) {
+      if (file.sends.some((send) => send.at >= ad.at)) throw new Refusal("A message went out after this ad was attached. Pick another draft for the next message instead.");
+      return this.store.addEvent(id, { type: "ad_no", ad: ad.n, ownerSaid: input.ownerSaid ?? "Not this after all." }, "owner");
+    }
     if (!input.ownerSaid) throw new Refusal("A no needs your words: the next ad is made from them.");
     return this.store.addEvent(id, { type: "ad_no", ad: ad.n, ownerSaid: input.ownerSaid }, "owner");
   }

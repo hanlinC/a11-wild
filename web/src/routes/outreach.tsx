@@ -61,6 +61,23 @@ export function Outreach() {
         )}
       </Section>
 
+      {today.picks.length > 0 ? (
+        <Section title="Brands that wait for your pick" count={today.picks.length}>
+          <Lines lines={today.picks}>
+            {(line) => (
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-body">
+                  {line.drafts === 1 ? "1 draft" : `${line.drafts ?? "Some"} drafts`} to choose from. You pick the one to send; the agent then makes it full size.
+                </p>
+                <Button asChild className={TAP}>
+                  <Link to={`/outreach/prospects/${line.prospect.id}`}>Pick the ad</Link>
+                </Button>
+              </div>
+            )}
+          </Lines>
+        </Section>
+      ) : null}
+
       <Section title="Ads that wait for your yes or no" count={today.adsWaiting.length}>
         {today.adsWaiting.length === 0 ? (
           <Empty>No ad waits for you.</Empty>

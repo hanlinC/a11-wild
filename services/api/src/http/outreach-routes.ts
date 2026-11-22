@@ -33,6 +33,12 @@ const BODY = {
   choose: NONE,
   remove: NONE,
 } as const;
+/** The owner's choice among the drafts of a brand. */
+const CHOICE = {
+  pick: z.strictObject({ imageId: z.string().min(1).max(64) }),
+  none: z.strictObject({ ownerSaid: TEXT }),
+  words: z.strictObject({ imageId: z.string().min(1).max(64), ownerSaid: TEXT }),
+} as const;
 const TEMPLATES = z.strictObject({ steps: z.tuple([TEMPLATE, TEMPLATE, TEMPLATE]) });
 const DAILY_BODY = z.strictObject({ daily: z.number().int() });
 const PICTURE = z.strictObject({ type: z.string().max(40), bytes: z.number().int() });
@@ -51,7 +57,7 @@ export function outreachRoutes(
   session: MiddlewareHandler<SessionEnv>,
   ownerWrite: readonly [MiddlewareHandler<SessionEnv>, MiddlewareHandler, MiddlewareHandler<SessionEnv>],
 ): void {
-  const { store, sequence, picture } = deps.studio.outreach;
+  const { store, sequence, picture, picks } = deps.studio.outreach;
   const ownerRead = [session, requireOwner] as const;
   const refused = (error: unknown) => {
     if (error instanceof Refusal) return { error: "refused", message: error.message };
@@ -85,6 +91,7 @@ export function outreachRoutes(
     const due = stage === "contacted" ? nextStep(file) : undefined;
     const step = stage === "ready" ? 0 : due && due.due <= day ? due.step : undefined;
     const ads = await Promise.all([...file.ads].sort((a, b) => b.n - a.n).map((ad: OutreachAd) => adView(file, ad, deps.pictures)));
+    const candidates = await picks.view(file, optOuts);
     return {
       prospect: rowOf(file, optOuts, sameContact(files)),
       ...(file.profile.newestAd ? { newestAd: file.profile.newestAd } : {}),
@@ -96,6 +103,7 @@ export function outreachRoutes(
       day,
       ...(step !== undefined && templates && approvedAd(file) ? { message: { step, messages: messagesFor(templates.steps[step], file.profile, channelOf(file)) } } : {}),
       ...(reply && (stage === "replied" || stage === "in_talks") ? { owed: { ...(reply.text ? { text: reply.text } : {}), at: reply.at } } : {}),
+      ...(candidates ? { candidates } : {}),
     };
   }
 
@@ -159,6 +167,28 @@ export function outreachRoutes(
     if (file?.profile.test) for (const ad of file.ads) if (ad.from === "owner") await deps.pictures.remove(ad.key);
     await store.removeTest(id);
   });
+
+  /**
+   * The owner's choice among every draft the studio made for a brand: one to send, one with other words, or none of them.
+   * It makes no picture and sends nothing: the agent makes the final of his pick, and he sends the message himself.
+   */
+  const choice = <K extends keyof typeof CHOICE>(action: K, change: (id: string, body: z.infer<(typeof CHOICE)[K]>, by: string) => Promise<void>) =>
+    routes.post(`/api/outreach/prospects/:id/${action}`, ...ownerWrite, async (c) => {
+      const body = CHOICE[action].safeParse(await c.req.json().catch(() => undefined));
+      if (!body.success) return c.json({ error: "bad_request", message: "The request has a field that is missing, wrong or not known." }, 400);
+      const id = c.req.param("id") ?? "";
+      try {
+        await change(id, body.data as z.infer<(typeof CHOICE)[K]>, c.get("session").email);
+      } catch (error) {
+        return c.json(refused(error), 400);
+      }
+      // The id and the action only: the owner's words never go to a log.
+      log.info("outreach_choice", { action, prospect: id, by: c.get("session").sub });
+      return c.json((await prospectPage(id)) ?? { error: "not_found" });
+    });
+  choice("pick", (id, body, by) => picks.pick(id, body.imageId, by));
+  choice("none", (id, body) => picks.none(id, body.ownerSaid));
+  choice("words", (id, body) => picks.words(id, body.imageId, body.ownerSaid));
 
   /**
    * The owner's own picture for a prospect, in two steps: an address for exactly one file, then the studio's own read of it.

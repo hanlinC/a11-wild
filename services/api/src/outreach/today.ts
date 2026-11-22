@@ -2,7 +2,7 @@ import type { OutreachAd, OutreachAdView, OutreachStep, OutreachTemplates, Prosp
 import { isSendingDay, nextSendingDay, singaporeDay } from "./days.js";
 import { messagesFor } from "./messages.js";
 import { chosen, nextStep, sameContact, type OutreachSequence } from "./sequence.js";
-import { adWaits, approvedAd, channelOf, newestAd, owedAnswer, stageOf, verdictOf } from "./stage.js";
+import { adWaits, approvedAd, candidatesWait, channelOf, newestAd, owedAnswer, stageOf, verdictOf } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 import type { Pictures } from "../pictures/store.js";
 
@@ -52,6 +52,8 @@ export interface TodayLists {
   followUps: { file: ProspectFile; step: OutreachStep }[];
   firsts: ProspectFile[];
   adsWaiting: ProspectFile[];
+  /** The brands whose drafts wait for the owner's pick, with how many he can pick from. */
+  picks: { file: ProspectFile; drafts: number }[];
 }
 
 /**
@@ -63,7 +65,7 @@ export async function todayLists(deps: { store: OutreachStore; sequence: Outreac
   const day = singaporeDay(deps.now());
   const [files, optOuts, daily, firstsSent, templates] = await Promise.all([store.all(), store.optOuts(), sequence.daily(), store.placesTaken(day), sequence.templates()]);
   const shared = sameContact(files);
-  const lists: TodayLists = { day, daily, firstsSent, templates, optOuts, shared, owed: [], followUps: [], firsts: [], adsWaiting: [] };
+  const lists: TodayLists = { day, daily, firstsSent, templates, optOuts, shared, owed: [], followUps: [], firsts: [], adsWaiting: [], picks: [] };
   let places = Math.max(0, daily - firstsSent);
 
   for (const file of files) {
@@ -72,6 +74,8 @@ export async function todayLists(deps: { store: OutreachStore; sequence: Outreac
     const reply = owedAnswer(file);
     if (reply && (stage === "replied" || stage === "in_talks")) lists.owed.push({ file, reply: { ...(reply.text ? { text: reply.text } : {}), at: reply.at } });
     if (adWaits(file) && stage !== "lost" && stage !== "parked") lists.adsWaiting.push(file);
+    const shown = candidatesWait(file);
+    if (shown && stage !== "lost" && stage !== "parked") lists.picks.push({ file, drafts: shown.drafts });
     if (stage === "contacted") {
       const next = nextStep(file);
       if (next && next.due <= day) lists.followUps.push({ file, step: next.step });
@@ -93,7 +97,7 @@ export async function todayLists(deps: { store: OutreachStore; sequence: Outreac
 /** What the owner does today, in his order: answers that are owed, follow-ups that are due, new first messages, and ads that wait for his look. */
 export async function todayPage(deps: { store: OutreachStore; sequence: OutreachSequence; pictures: AdLinks; now: () => Date }): Promise<TodayPage> {
   const { pictures } = deps;
-  const { day, daily, firstsSent, templates, optOuts, shared, owed, followUps, firsts, adsWaiting } = await todayLists(deps);
+  const { day, daily, firstsSent, templates, optOuts, shared, owed, followUps, firsts, adsWaiting, picks } = await todayLists(deps);
 
   const line = async (file: ProspectFile, step: OutreachStep | undefined, ad: OutreachAd | undefined, extra: Partial<TodayLine> = {}): Promise<TodayLine> => ({
     prospect: rowOf(file, optOuts, shared),
@@ -103,11 +107,12 @@ export async function todayPage(deps: { store: OutreachStore; sequence: Outreach
     ...extra,
   });
 
-  const [owedLines, followUpLines, firstLines, waitingLines] = await Promise.all([
+  const [owedLines, followUpLines, firstLines, waitingLines, pickLines] = await Promise.all([
     Promise.all(owed.map(({ file, reply }) => line(file, undefined, approvedAd(file), { reply }))),
     Promise.all(followUps.map(({ file, step }) => line(file, step, approvedAd(file)))),
     Promise.all(firsts.map((file) => line(file, 0, approvedAd(file)))),
     Promise.all(adsWaiting.map((file) => line(file, undefined, newestAd(file)))),
+    Promise.all(picks.map(({ file, drafts }) => line(file, undefined, undefined, { drafts }))),
   ]);
   return {
     day,
@@ -120,5 +125,6 @@ export async function todayPage(deps: { store: OutreachStore; sequence: Outreach
     followUps: followUpLines,
     firsts: firstLines,
     adsWaiting: waitingLines,
+    picks: pickLines,
   };
 }

@@ -274,7 +274,8 @@ export class BoardService implements FinalRule {
           const counted = countedOf(image, all);
           return (hasWords(batch.kind) ? typesetOf(counted, all, words) : undefined) ?? counted;
         };
-        if (!mine.every((image) => judged.get(image.id) === seen(image).id)) {
+        // The owner sees every draft of an outreach batch and picks one himself, so no critic ranks them.
+        if (batch.purpose !== "outreach" && !mine.every((image) => judged.get(image.id) === seen(image).id)) {
           missing.push(`the blind critic's rank of the drafts of ${idea.id} as they are now (a fresh helper: critic_open with step "drafts", then critic_rank)`);
         }
       }

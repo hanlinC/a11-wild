@@ -1,15 +1,15 @@
-import type { Batch, Board, BoardDraft, OutreachCandidate, OutreachCandidates, ProspectFile } from "@a11-wild/shared";
+import type { Batch, Board, BoardDraft, OutreachCandidate, OutreachCandidates, OutreachStage, ProspectFile } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import { defectOf, rejected } from "../checks/store.js";
 import { Refusal } from "../mcp/registry.js";
-import { owedByAgent, stageOf } from "./stage.js";
+import { candidatesWait, owedByAgent, stageOf } from "./stage.js";
 import type { OutreachStore } from "./store.js";
 
 /** The states of a batch whose drafts are all made and checked. */
 const SHOWN: Batch["state"][] = ["checked", "waiting_pick", "finals", "finished", "done"];
-/** The stages at which the owner still chooses the ad of the first message. */
-const CHOOSING = ["new", "pick_waits", "pick_made", "ad_waits", "ready"];
+/** The stages at which a brand takes no ad, so nothing is chosen for it. */
+const CLOSED: OutreachStage[] = ["opted_out", "lost", "parked", "no_route", "needs_service_ad"];
 
 interface Deps {
   store: OutreachStore;
@@ -73,11 +73,35 @@ export class OutreachPicks {
     return {
       batchId: batch.id,
       words: hasWords(batch.kind),
-      choosing: !CHOOSING.includes(stageOf(file, optOuts)) || file.sends.some((send) => send.step === 0) ? "closed" : mine?.type === "words" ? "agent" : "open",
+      choosing: CLOSED.includes(stageOf(file, optOuts)) ? "closed" : mine?.type === "words" ? "agent" : "open",
       ...(picked?.type === "pick" ? { picked: { ideaId: picked.ideaId, imageId: picked.imageId } } : {}),
       ...(mine?.type === "words" ? { wordsAsked: { imageId: mine.imageId, ownerSaid: mine.ownerSaid } } : {}),
       drafts,
     };
+  }
+
+  /**
+   * The agent's last step before the owner's pick: it puts the checked drafts of an outreach batch on the prospect's page.
+   * Called again after other words were set, it shows the drafts as they are now.
+   */
+  async show(batchId: string): Promise<{ drafts: number; canBePicked: number; already: boolean; note: string }> {
+    const batch = await this.deps.batches.get(batchId);
+    if (batch.purpose !== "outreach" || !batch.prospectId) throw new Refusal("This is not an outreach batch. Only the drafts of a batch that was started for a prospect are shown on its page.");
+    if (!SHOWN.includes(batch.state)) throw new Refusal(`This batch is "${batch.state}". Its drafts are shown when each one is made, checked and carries its words.`);
+    const { file, optOuts } = await this.file(batch.prospectId);
+    const view = await this.view(file, optOuts);
+    if (!view || view.batchId !== batch.id) throw new Refusal("A newer outreach batch of this brand has drafts. Only the newest is shown.");
+    if (view.choosing === "closed") throw new Refusal(`This brand is at "${stageOf(file, optOuts)}": it takes no ad now.`);
+    const canBePicked = view.drafts.filter((draft) => !draft.blocked).length;
+    if (canBePicked === 0) throw new Refusal("No draft of this batch can be sent: each has a D item, two F items or no words. Repair them with one more round of pictures at most, or park the brand with outreach_mark.");
+    const counts = { drafts: view.drafts.length, canBePicked };
+    const note = "The drafts wait for the owner's pick on the prospect's page. Stop work on this brand: pick nothing and make no final. outreach_next names it again when he has chosen.";
+    const waiting = candidatesWait(file);
+    const owed = owedByAgent(file);
+    // Shown already and nothing has changed since: a second call adds no second line to the owner's list.
+    if (waiting?.batchId === batch.id || (owed?.type === "pick" && owed.batchId === batch.id)) return { ...counts, already: true, note };
+    await this.deps.store.addEvent(file.profile.id, { type: "candidates", batchId: batch.id, drafts: canBePicked }, "agent");
+    return { ...counts, already: false, note };
   }
 
   /** The drafts the owner may choose from now, or a refusal that says why he may not. */
@@ -85,7 +109,8 @@ export class OutreachPicks {
     const { file, optOuts } = await this.file(prospectId);
     const view = await this.view(file, optOuts);
     if (!view) throw new Refusal("The studio has no drafts for this brand yet.");
-    if (view.choosing === "closed") throw new Refusal("The first message is sent, or this brand takes no ad now. The ad is not chosen again.");
+    if (view.choosing === "closed") throw new Refusal("This brand takes no ad now, so none is chosen for it.");
+    if (view.choosing === "agent") throw new Refusal("The agent is setting the other words you asked for. The drafts come back for your pick after that.");
     const draft = imageId ? view.drafts.find((entry) => entry.imageId === imageId) : undefined;
     if (imageId && !draft) throw new Refusal("That picture is not one of this brand's drafts.");
     if (draft?.blocked) throw new Refusal(`This draft cannot be sent: ${draft.blocked}`);
@@ -96,7 +121,12 @@ export class OutreachPicks {
   async pick(prospectId: string, imageId: string, by: string): Promise<void> {
     const { file, view, draft } = await this.open(prospectId, imageId);
     if (!draft) throw new Refusal("Name the draft to send.");
+    if (view.picked?.imageId === imageId && owedByAgent(file)?.type === "pick") return;
     await this.deps.board.ownerPick(view.batchId, { ideaId: draft.ideaId, imageId }, by);
+    // Drafts made before this page showed them were never marked as shown. They are now, so a no to the final brings him back to them.
+    if (!file.events.some((event) => event.type === "candidates" && event.batchId === view.batchId)) {
+      await this.deps.store.addEvent(file.profile.id, { type: "candidates", batchId: view.batchId, drafts: view.drafts.filter((entry) => !entry.blocked).length }, "agent");
+    }
     await this.deps.store.addEvent(file.profile.id, { type: "pick", batchId: view.batchId, ideaId: draft.ideaId, imageId }, "owner");
   }
 
