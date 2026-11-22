@@ -12,6 +12,8 @@ export const STAGES: Record<OutreachStage, { label: string; color: "green" | "am
   new: { label: "New", color: "gray" },
   no_route: { label: "No route", color: "gray" },
   needs_service_ad: { label: "Needs a service ad", color: "gray" },
+  pick_waits: { label: "Pick an ad", color: "amber" },
+  pick_made: { label: "Waits for the agent", color: "gray" },
   ad_waits: { label: "Ad waits for you", color: "amber" },
   ready: { label: "Ready to send", color: "green" },
   contacted: { label: "Contacted", color: "green" },

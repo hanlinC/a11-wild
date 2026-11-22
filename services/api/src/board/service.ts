@@ -24,6 +24,8 @@ const OUTREACH_PICK = "This is an outreach batch: the pick is the agent's, saved
 
 /** The states in which the owner picks. A checked batch moves to `waiting_pick` with his first pick. */
 // A finished batch still takes a newer choice: the owner may pick a draft of an idea he passed on.
+/** In an outreach batch the agent chooses nothing: the owner sees every draft and picks the one to send. */
+export const OWNER_PICKS = "The owner picks the ad of an outreach batch himself, on the prospect's page in his dashboard. Show the drafts (outreach_show) and stop: he sees every draft there.";
 const PICKING: BatchState[] = ["checked", "waiting_pick", "finals", "finished"];
 
 interface Deps {
@@ -322,9 +324,10 @@ export class BoardService implements FinalRule {
   }
 
   /** Saves the owner's choice for one idea, in his words, and adds it to the taste log. */
-  async pick(batchId: string, input: { ideaId: string; imageId: string | null; ownerSaid: string }, user: { email: string; role: Role }) {
+  async pick(batchId: string, input: { ideaId: string; imageId: string | null; ownerSaid: string; viaAgent?: true }, user: { email: string; role: Role }) {
     const { batches, picks, tasteLog } = this.deps;
     if (user.role !== "owner") throw new Refusal("Only the owner picks a draft.");
+    if (input.viaAgent && (await batches.get(batchId)).purpose === "outreach") throw new Refusal(OWNER_PICKS);
     const ownerSaid = input.ownerSaid.trim();
     if (!ownerSaid) throw new Refusal("A pick or a pass is saved with the owner's own words. Ask him why, and send what he said.");
     let batch = await batches.get(batchId);
@@ -361,6 +364,35 @@ export class BoardService implements FinalRule {
     });
     const defect = defectOf(draft?.checks ?? undefined) ?? defectOf(draft?.words?.checks ?? undefined);
     return { pick, ...(defect ? { note: `The picked draft has ${defect.code} (${defect.note}), so no final can be made from it. Tell the owner.` } : {}) };
+  }
+
+  /**
+   * The owner's pick of the one ad of an outreach batch, made on the prospect's page: one draft of one idea, and a pass on each other idea.
+   * It can change after the batch is done: the batch then goes back to its finals. It teaches the studio nothing.
+   */
+  async ownerPick(batchId: string, input: { ideaId: string; imageId: string }, by: string): Promise<void> {
+    const { batches, picks } = this.deps;
+    let batch = await batches.get(batchId);
+    if (batch.purpose !== "outreach") throw new Refusal("Only the ad of an outreach batch is picked on a prospect's page.");
+    if (batch.state === "checked") batch = await batches.move(batch, "waiting_pick", "pick_save");
+    if (!PICKING.includes(batch.state) && batch.state !== "done") throw new Refusal(`The drafts are not ready. This batch is at "${batch.state}".`);
+    const board = await this.board(batchId);
+    const entry = board.ideas.find(({ idea }) => idea.id === input.ideaId);
+    const draft = entry?.drafts.find(({ image }) => image.id === input.imageId);
+    if (!entry || !draft) throw new Refusal(`Picture ${input.imageId} is not a draft of ${input.ideaId}.`);
+    for (const { idea, pick } of board.ideas) {
+      const mine = idea.id === input.ideaId;
+      if (mine ? pick?.imageId === input.imageId : pick && pick.imageId === null) continue;
+      await picks.save(batchId, {
+        ideaId: idea.id,
+        imageId: mine ? input.imageId : null,
+        ...(mine ? { shownId: seenOf(draft).id } : {}),
+        ownerSaid: mine ? "Picked on the prospect's page." : "The owner picked another idea on the prospect's page.",
+        by,
+      });
+    }
+    // A newer choice in a finished or done batch names a draft with no final yet: the batch goes back to its finals.
+    if (batch.state === "finished" || batch.state === "done") await this.progress(batch);
   }
 
   /** Saves the eight-point look at the final of a concept ad as the owner would send it. A failed point keeps it out of a pack. */

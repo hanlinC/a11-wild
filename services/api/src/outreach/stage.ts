@@ -14,12 +14,40 @@ function last<T extends OutreachEvent["type"]>(events: OutreachEvent[], type: T)
     .at(-1);
 }
 
-/** The owner's yes or no to one ad: the newest one counts. */
+/** The owner's yes or no to one ad: the newest one counts. The final of the draft he picked has his yes until he says no to it. */
 export function verdictOf(file: ProspectFile, ad: OutreachAd): EventOf<"ad_yes"> | EventOf<"ad_no"> | undefined {
-  return byTime(file.events)
+  const said = byTime(file.events)
     .filter((event): event is EventOf<"ad_yes"> | EventOf<"ad_no"> => (event.type === "ad_yes" || event.type === "ad_no") && event.ad === ad.n)
     .at(-1);
+  return said ?? (ad.picked ? { type: "ad_yes", ad: ad.n, id: `pick-${ad.n}`, at: ad.at, by: "owner" } : undefined);
 }
+
+type Choice = EventOf<"pick"> | EventOf<"none"> | EventOf<"words">;
+
+/** The drafts that wait for the owner's pick: the newest ones shown, with no answer of his and no ad of that batch after them. */
+export function candidatesWait(file: ProspectFile): EventOf<"candidates"> | undefined {
+  const shown = last(file.events, "candidates");
+  if (!shown) return undefined;
+  const answered = file.events.some((event) => (event.type === "pick" || event.type === "none" || event.type === "words") && event.batchId === shown.batchId && event.at >= shown.at);
+  return answered || file.ads.some((ad) => ad.batchId === shown.batchId && ad.at >= shown.at) ? undefined : shown;
+}
+
+/**
+ * What the agent owes the owner after his choice: the final of the draft he picked, or the drafts again with the words he asked for.
+ * A pick is owed until an ad of its batch is attached after it; other words are owed until the drafts are shown again.
+ */
+export function owedByAgent(file: ProspectFile): EventOf<"pick"> | EventOf<"words"> | undefined {
+  const choice = byTime(file.events)
+    .filter((event): event is Choice => event.type === "pick" || event.type === "none" || event.type === "words")
+    .at(-1);
+  if (!choice || choice.type === "none") return undefined;
+  if (choice.type === "pick") return file.ads.some((ad) => ad.batchId === choice.batchId && ad.at >= choice.at) ? undefined : choice;
+  return file.events.some((event) => event.type === "candidates" && event.batchId === choice.batchId && event.at >= choice.at) ? undefined : choice;
+}
+
+/** Each no of the owner, to one ad or to all the drafts of a batch, oldest first. */
+export const refusals = (file: ProspectFile): (EventOf<"ad_no"> | EventOf<"none">)[] =>
+  byTime(file.events).filter((event): event is EventOf<"ad_no"> | EventOf<"none"> => event.type === "ad_no" || event.type === "none");
 
 export const newestAd = (file: ProspectFile): OutreachAd | undefined => [...file.ads].sort((a, b) => a.n - b.n).at(-1);
 
@@ -74,10 +102,12 @@ export function stageOf(file: ProspectFile, optOuts: ReadonlySet<string>): Outre
   // The studio makes no ad for a service. The owner's own picture is one, so the brand then goes on like any other.
   if (last(file.events, "kind")?.kind === "service" && ad?.from !== "owner") return "needs_service_ad";
   if (!hasRoute(file.profile)) return "no_route";
+  if (owedByAgent(file)) return "pick_made";
   const verdict = ad && verdictOf(file, ad);
   if (ad && !verdict) return "ad_waits";
+  if (candidatesWait(file)) return "pick_waits";
   if (verdict?.type === "ad_yes") return "ready";
-  if (file.events.filter((event) => event.type === "ad_no").length >= AD_TRIES) return "parked";
+  if (refusals(file).length >= AD_TRIES) return "parked";
   return "new";
 }
 
@@ -100,7 +130,7 @@ export function wantsAd(file: ProspectFile, optOuts: ReadonlySet<string>): { why
     return { why: "more", ...(no?.type === "ad_no" ? { ownerSaid: no.ownerSaid } : {}) };
   }
   if (stage !== "new") return undefined;
-  const no = last(file.events, "ad_no");
+  const no = refusals(file).at(-1);
   return no ? { why: "again", ownerSaid: no.ownerSaid } : { why: "first" };
 }
 
