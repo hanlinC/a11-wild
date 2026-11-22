@@ -114,8 +114,11 @@ describe("the tools for a carried pack and a client's link", () => {
     await studio.pictures.put(await key(good), new TextEncoder().encode("Ad name,Clicks\na11_cake,180\n"), "text/csv");
     await studio.pictures.put(await key(bad), new Uint8Array([0x4d, 0x5a, 0x90, 0, 3, 0, 0, 0]), "image/png");
     const { uploads } = (await callTool(studio, "results_get", { batchId: packId })).value;
-    expect(uploads).toMatchObject([{ id: good, state: "checked", downloadUrl: expect.any(String) }, { id: bad, state: "refused" }]);
-    expect(uploads[1]).not.toHaveProperty("downloadUrl");
+    // A CSV comes as its rows of text and never as a file; a file the studio did not keep comes with nothing.
+    expect(uploads).toMatchObject([{ id: good, state: "checked", table: { rows: [["Ad name", "Clicks"], ["a11_cake", "180"]], cut: false } }, { id: bad, state: "refused" }]);
+    expect(uploads[0]).not.toHaveProperty("viewUrl");
+    expect(uploads[1]).not.toHaveProperty("viewUrl");
+    expect(uploads[1]).not.toHaveProperty("table");
     const saved = await callTool(studio, "results_save", { batchId: packId, adName: "a11_cake", from: "2026-11-23", to: "2026-11-25", impressions: 12000, clicks: 180, context: "Sales, Singapore 25 to 44.", uploadId: good });
     expect(saved.value.result).toMatchObject({ adName: "a11_cake", packVersion: 1, ctr: 0.015 });
     expect((await callTool(studio, "results_get", { batchId: "no-such-pack" })).ok).toBe(false);

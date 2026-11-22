@@ -1,4 +1,4 @@
-import { type Pack, type PackUpload, TABLE_MAX_CELL, TABLE_MAX_COLUMNS, TABLE_MAX_ROWS, UPLOAD_MAX_BYTES, type UploadTable, type UploadType } from "@a11-wild/shared";
+import { type Pack, type PackUpload, TABLE_MAX_CELL, TABLE_MAX_COLUMNS, TABLE_MAX_ROWS, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadTable, type UploadType } from "@a11-wild/shared";
 import { log } from "../log.js";
 import { Refusal } from "../mcp/registry.js";
 import type { ClientActivity } from "../notify.js";
@@ -77,7 +77,7 @@ export function csvTable(text: string): UploadTable {
 interface Deps {
   results: ResultStore;
   pictures: Pictures;
-  brandOf: (pack: Pack) => Promise<{ id: string; name: string }>;
+  brandOf: (packId: string) => Promise<{ id: string; name: string }>;
   notify: (activity: ClientActivity) => Promise<void>;
   now: () => Date;
 }
@@ -89,33 +89,45 @@ interface Deps {
 export class UploadService {
   constructor(private readonly deps: Deps) {}
 
-  /** Reads a file the studio has not read yet, and keeps what it found. A file already read is returned as it is. */
+  /**
+   * Reads a file the studio has not read yet, and keeps what it found. A file already read is returned as it is.
+   * A file that passes is copied to a place of the studio's own: the address it was sent to still takes a file
+   * for some minutes, and what is sent there later must never stand in for the file the studio read.
+   */
   async settle(packId: string, upload: PackUpload): Promise<PackUpload> {
     const { results, pictures, now } = this.deps;
     if (upload.state) return upload;
+    // A type the studio took once and takes no more. It is not opened, and it is not deleted: deleting is the owner's word.
+    if (!Object.hasOwn(UPLOAD_TYPES, upload.type)) return results.settle(packId, upload, "refused");
     const body = await pictures.read(upload.key, UPLOAD_MAX_BYTES);
     if (!body) {
-      // Not there yet, or larger than what was signed, which the store does not let in.
+      // Not there yet, or larger than what was signed, which the store does not let in. Or another reader settled it a moment ago.
+      const settled = (await results.uploads(packId)).find((entry) => entry.id === upload.id);
+      if (settled?.state) return settled;
       return now().getTime() - Date.parse(upload.at) > ARRIVES_WITHIN_MS ? results.settle(packId, upload, "missing") : upload;
     }
-    if (isSentType(upload.type, body)) return results.settle(packId, upload, "checked");
+    if (!isSentType(upload.type, body)) {
+      await pictures.remove(upload.key);
+      log.warn("upload_refused", { type: upload.type });
+      return results.settle(packId, upload, "refused");
+    }
+    const key = `results/packs/${packId}/${upload.id}.${UPLOAD_TYPES[upload.type]}`;
+    await pictures.put(key, body, upload.type);
     await pictures.remove(upload.key);
-    log.warn("upload_refused", { type: upload.type });
-    return results.settle(packId, upload, "refused");
+    const kept = await results.settle(packId, { ...upload, key }, "checked");
+    // Whoever reads the file first, the client's page or the owner's list, the owner hears of it once.
+    await this.deps
+      .brandOf(packId)
+      .then((brand) => this.deps.notify({ brandId: brand.id, brand: brand.name, kind: "file" }))
+      .catch((error: unknown) => log.error("client_activity_notice_failed", { error: error instanceof Error ? error.name : "unknown" }));
+    return kept;
   }
 
-  /** The client's page says the file is sent. The studio reads it now, and tells the owner of a file it keeps. */
+  /** The client's page says the file is sent. The studio reads it now. */
   async done(pack: Pack, uploadId: string): Promise<{ state: "checked" | "refused" | "waiting" }> {
     const upload = (await this.deps.results.uploads(pack.id)).find((entry) => entry.id === uploadId);
     if (!upload) throw new Refusal("This pack has no such file.");
-    if (upload.state) return { state: upload.state === "checked" ? "checked" : "refused" };
     const settled = await this.settle(pack.id, upload);
-    if (settled.state === "checked") {
-      await this.deps
-        .brandOf(pack)
-        .then((brand) => this.deps.notify({ brandId: brand.id, brand: brand.name, kind: "file" }))
-        .catch((error: unknown) => log.error("client_activity_notice_failed", { error: error instanceof Error ? error.name : "unknown" }));
-    }
     return { state: settled.state === "checked" ? "checked" : settled.state ? "refused" : "waiting" };
   }
 
@@ -136,18 +148,25 @@ export class UploadService {
     return upload;
   }
 
-  /** A client's CSV as a table of text for the dashboard. */
-  async table(packId: string, uploadId: string): Promise<UploadTable> {
-    const upload = await this.checked(packId, uploadId);
-    if (upload.type !== "text/csv") throw new Refusal("This file is a picture. Only a CSV has a table.");
+  private async tableOf(upload: PackUpload): Promise<UploadTable> {
     const text = csvText((await this.deps.pictures.read(upload.key, UPLOAD_MAX_BYTES)) ?? new Uint8Array());
     if (text === undefined) throw new Refusal("This file is no text.");
     return csvTable(text);
   }
 
-  /** How the owner or his agent opens a checked file: a picture to look at, or a CSV to read as data. */
-  async open(packId: string, uploadId: string): Promise<{ upload: PackUpload; url: string }> {
+  /** A client's CSV as a table of text for the dashboard. */
+  async table(packId: string, uploadId: string): Promise<UploadTable> {
     const upload = await this.checked(packId, uploadId);
-    return { upload, url: upload.type === "text/csv" ? await this.deps.pictures.downloadUrl(upload.key, upload.name) : await this.deps.pictures.viewUrl(upload.key) };
+    if (upload.type !== "text/csv") throw new Refusal("This file is a picture. Only a CSV has a table.");
+    return this.tableOf(upload);
+  }
+
+  /**
+   * What the owner's agent gets of a file from `list`: an address to look at a checked picture, the rows of a checked CSV as text,
+   * and nothing of any other file. A CSV is never handed out as a file, so it cannot end in a spreadsheet program.
+   */
+  async forAgent(upload: PackUpload): Promise<{ viewUrl: string } | { table: UploadTable } | Record<string, never>> {
+    if (upload.state !== "checked") return {};
+    return upload.type === "text/csv" ? { table: await this.tableOf(upload) } : { viewUrl: await this.deps.pictures.viewUrl(upload.key) };
   }
 }

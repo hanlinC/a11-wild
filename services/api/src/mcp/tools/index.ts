@@ -132,7 +132,14 @@ export function studioTools(parts: StudioParts) {
   const commentStore = new CommentStore(table, now);
   const notices = new ActivityNotices(table, now, parts.notifier);
   // A file's brand is asked for when a client sends one, long after the pack service below exists.
-  const uploads: UploadService = new UploadService({ results, pictures, brandOf: async (of) => brands.brand(await pack.brandOf(of)), notify: (activity) => notices.tell(activity), now });
+  const uploads: UploadService = new UploadService({
+    results,
+    pictures,
+    brandOf: async (packId) => {
+      const found = await packs.get(packId);
+      if (!found) throw new Error("no pack");
+      return brands.brand(await pack.brandOf(found));
+    }, notify: (activity) => notices.tell(activity), now });
   const pack = new PackService({ batches, brands, facts, board, copy, meta, packs, results, comments: commentStore, uploads, pictures, publicOrigin: config.publicOrigin, now });
   const clients = new ClientService({ brands, packs, pack, publicOrigin: config.publicOrigin, now });
   const comments = new CommentService({ comments: commentStore, brandOf: async (of) => brands.brand(await pack.brandOf(of)), notify: (activity) => notices.tell(activity) });

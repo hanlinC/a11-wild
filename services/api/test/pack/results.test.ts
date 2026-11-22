@@ -43,10 +43,11 @@ describe("a results file through the pack link", () => {
     // Until the studio has read the file, nobody gets an address for it.
     const waiting = (await callTool(studio, "results_get", { batchId })).value.uploads;
     expect(waiting).toMatchObject([{ id: upload.id, type: "text/csv", bytes: 48211, packVersion: 1 }]);
-    expect(waiting[0]).not.toHaveProperty("downloadUrl");
+    expect(waiting[0]).not.toHaveProperty("table");
     await studio.pictures.put(`quarantine/packs/${batchId}/${upload.id}.csv`, new TextEncoder().encode("Ad name,Impressions\na11,1000\n"), "text/csv");
     const kept = (await callTool(studio, "results_get", { batchId })).value.uploads;
-    expect(kept).toMatchObject([{ id: upload.id, state: "checked", downloadUrl: expect.stringContaining("?download=") }]);
+    expect(kept).toMatchObject([{ id: upload.id, state: "checked", table: { rows: [["Ad name", "Impressions"], ["a11", "1000"]], cut: false } }]);
+    expect(JSON.stringify(kept)).not.toContain("Url");
     expect(JSON.stringify(kept)).not.toContain('"key"');
   });
 

@@ -81,7 +81,8 @@ describe("a file a client sent", () => {
     expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "checked" });
     expect(studio.activities).toMatchObject([{ brand: "WonGi", kind: "file" }]);
     expect(await studio.services.uploads.list(pack.id)).toMatchObject([{ id: upload.id, state: "checked" }]);
-    expect((await studio.services.uploads.open(pack.id, upload.id)).url).toContain("?signed=1");
+    const [kept] = await studio.services.uploads.list(pack.id);
+    expect(await studio.services.uploads.forAgent(kept!)).toEqual({ viewUrl: expect.stringContaining("?signed=1") });
     // Saying it twice changes nothing and sends no second notice.
     expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "checked" });
     expect(studio.activities).toHaveLength(1);
@@ -97,7 +98,7 @@ describe("a file a client sent", () => {
       const upload = await sent(name, type, body);
       expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "refused" });
       expect(studio.pictures.files.has(upload.key)).toBe(false);
-      await expect(studio.services.uploads.open(pack.id, upload.id)).rejects.toThrow(/did not keep this file/);
+      expect(await studio.services.uploads.forAgent((await studio.services.uploads.list(pack.id)).find((entry) => entry.id === upload.id)!)).toEqual({});
       await expect(studio.services.uploads.table(pack.id, upload.id)).rejects.toThrow(/did not keep this file/);
     }
     expect(studio.activities).toEqual([]);
@@ -122,7 +123,43 @@ describe("a file a client sent", () => {
     studio.clock.now = new Date(studio.clock.now.getTime() + 11 * 60 * 1000);
     expect(await studio.services.uploads.list(pack.id)).toMatchObject([{ state: "missing" }]);
     expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "refused" });
-    await expect(studio.services.uploads.open(pack.id, upload.id)).rejects.toThrow(/did not keep this file/);
+    expect(await studio.services.uploads.forAgent((await studio.services.uploads.list(pack.id))[0]!)).toEqual({});
+  });
+
+  it("keeps its own copy of a checked file, so a file sent later to the same address stands in for nothing", async () => {
+    const upload = await sent("week-1.png", "image/png", PNG);
+    expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "checked" });
+    const [kept] = await studio.services.uploads.list(pack.id);
+    expect(kept?.key).not.toBe(upload.key);
+    expect(kept?.key.startsWith("quarantine/")).toBe(false);
+    expect(studio.pictures.files.has(upload.key)).toBe(false);
+    // The signed address still takes a file for some minutes. The sender uses it again, with a program.
+    await studio.pictures.put(upload.key, PROGRAM, "image/png");
+    const [again] = await studio.services.uploads.list(pack.id);
+    expect(again?.key).toBe(kept?.key);
+    expect(studio.pictures.files.get(kept!.key)?.body).toEqual(PNG);
+  });
+
+  it("tells the owner of a file also when the owner's list read it before the client's page said it was sent", async () => {
+    const upload = await sent("week-1.png", "image/png", PNG);
+    await studio.services.uploads.list(pack.id);
+    expect(studio.activities).toMatchObject([{ brand: "WonGi", kind: "file" }]);
+    expect(await studio.services.uploads.done(pack, upload.id)).toEqual({ state: "checked" });
+    expect(studio.activities).toHaveLength(1);
+  });
+
+  it("gives an agent the rows of a CSV and never the file", async () => {
+    await sent("week-1.csv", "text/csv", bytes("Ad name,Clicks\n=cmd|' /C calc'!A0,12\n"));
+    const [kept] = await studio.services.uploads.list(pack.id);
+    expect(await studio.services.uploads.forAgent(kept!)).toEqual({ table: { rows: [["Ad name", "Clicks"], ["=cmd|' /C calc'!A0", "12"]], cut: false } });
+  });
+
+  it("neither opens nor deletes a file of a type the studio took once and takes no more", async () => {
+    const old = await studio.services.results.addUpload(pack.id, { name: "week-1.xlsx", type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" as never, bytes: 4, packVersion: 1 }, (id) => `quarantine/packs/${pack.id}/${id}.xlsx`);
+    await studio.pictures.put(old!.key, bytes("PK\u0003\u0004"), "application/octet-stream");
+    expect(await studio.services.uploads.list(pack.id)).toMatchObject([{ id: old!.id, state: "refused" }]);
+    expect(studio.pictures.files.has(old!.key)).toBe(true);
+    expect(studio.activities).toEqual([]);
   });
 
   it("refuses a file the pack does not have, and a table of a picture", async () => {
