@@ -6,7 +6,7 @@ import { AttentionService } from "../attention/service.js";
 import { log } from "../log.js";
 import { Refusal } from "../mcp/registry.js";
 import { scopeOf } from "../taste/canon.js";
-import type { SessionEnv } from "./guards.js";
+import { requireOwner, type SessionEnv } from "./guards.js";
 
 const SCOPE = z.strictObject({ kind: z.enum(CANON_SCOPES), brandId: z.string().min(1).max(64).optional() });
 const CANON = z.strictObject({ text: z.string().max(40_000), reason: z.string().max(500), scope: SCOPE.optional() });
@@ -25,7 +25,7 @@ export function studioRoutes(
   session: MiddlewareHandler<SessionEnv>,
   ownerWrite: readonly [MiddlewareHandler<SessionEnv>, MiddlewareHandler, MiddlewareHandler<SessionEnv>],
 ): void {
-  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board, calibration, done, conceptBoard, conceptPicks, learning, proposals, brandNotes } = deps.studio;
+  const { brands, facts, truth, batches, ledger, canon, tasteLog, swipe, board, calibration, done, conceptBoard, conceptPicks, learning, proposals, brandNotes, made } = deps.studio;
   /** The scope a request names. A brand's scope names a brand the studio has. */
   async function scopeIn(input: { kind: CanonScope["kind"]; brandId?: string | undefined } | undefined): Promise<CanonScope> {
     const scope = scopeOf(input);
@@ -87,6 +87,9 @@ export function studioRoutes(
   });
 
   routes.get("/api/spend", session, async (c) => c.json(await ledger.summary()));
+
+  /** The pictures made beside the ads kept. The owner's alone: it counts the work of his earlier tools too. */
+  routes.get("/api/made", session, requireOwner, async (c) => c.json(await made.read()));
 
   routes.get("/api/taste", session, async (c) => {
     const page: TastePage = {

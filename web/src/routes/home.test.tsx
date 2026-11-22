@@ -3,7 +3,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AttentionProvider } from "@/lib/attention";
-import { MEMBER, OWNER, renderSignedIn } from "@/test-helpers";
+import { MEMBER, OWNER, renderSignedIn, stubApi } from "@/test-helpers";
 import { Home } from "./home";
 
 const at = "2026-11-22T03:00:00.000Z";
@@ -107,6 +107,38 @@ describe("the start page", () => {
     expect(within(section(/in work/i)).getAllByRole("link").map((link) => link.textContent)).toEqual(["pick", "drafting"]);
     expect(screen.getByText("Waits for the owner.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /open the/i })).not.toBeInTheDocument();
+  });
+
+  it("ends the owner's page with the images made beside the ads he holds up, and shows a member none of it", async () => {
+    const calls = stubApi({ "GET /api/made": () => ({ body: { images: 1580, chosen: 18 } }) });
+    const { unmount } = show({ batches: [line("drafting")] });
+
+    const made = within(await screen.findByRole("region", { name: /made and kept/i }));
+    expect(made.getByText("1,580")).toBeInTheDocument();
+    expect(made.getByText("images made")).toBeInTheDocument();
+    expect(made.getByText("18")).toBeInTheDocument();
+    expect(made.getByText("ads you hold up as your bar")).toBeInTheDocument();
+    expect(made.getByText("About 88 images made for each ad you hold up.")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Needs you0", "In work1"]);
+
+    unmount();
+    calls.length = 0;
+    show({ batches: [line("drafting")], counts: { studio: 0 } }, MEMBER);
+    expect(screen.queryByRole("region", { name: /made and kept/i })).not.toBeInTheDocument();
+    expect(calls).toEqual([]);
+  });
+
+  it("leaves the figures out when no ad is held up yet or the count could not be read", async () => {
+    stubApi({ "GET /api/made": () => ({ body: { images: 1, chosen: 0 } }) });
+    const { unmount } = show({});
+    expect(await screen.findByText("image made")).toBeInTheDocument();
+    expect(screen.queryByText(/for each ad/i)).not.toBeInTheDocument();
+
+    unmount();
+    stubApi({ "GET /api/made": () => ({ status: 500, body: { error: "internal" } }) });
+    show({});
+    await screen.findByRole("heading", { name: /in work/i });
+    expect(screen.queryByRole("region", { name: /made and kept/i })).not.toBeInTheDocument();
   });
 
   it("says that it is loading, and says why when the studio did not answer", () => {

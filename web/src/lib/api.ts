@@ -1,4 +1,4 @@
-import type { Attention, OwnPictureType, ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { Attention, OwnPictureType, ChangeKind, ChangeStatus, ClientLink, ClientView, Made, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -81,6 +81,7 @@ export const api = {
   brands: async () => (await request<{ brands: BrandSummary[] }>("/api/brands")).brands,
   brand: (brandId: string) => request<BrandPage>(`/api/brands/${encodeURIComponent(brandId)}`),
   spend: () => request<SpendSummary>("/api/spend"),
+  made: () => request<Made>("/api/made"),
   attention: () => request<Attention>("/api/attention"),
   taste: () => request<TastePage>("/api/taste"),
   canonVersion: (version: number, scope?: CanonScope) =>

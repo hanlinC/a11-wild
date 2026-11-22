@@ -8,6 +8,8 @@ import type { ImageStore } from "../images/store.js";
 import { Refusal } from "../mcp/registry.js";
 import type { Pictures } from "../pictures/store.js";
 import { GateError, type GateStage, type SpendGate } from "../spend/gate.js";
+import { log } from "../log.js";
+import type { MadeCount } from "../made/count.js";
 import { NotBilledError, type SpendLedger } from "../spend/ledger.js";
 import { toMicro, toUsd } from "../spend/money.js";
 import { RENDER_RULES, wordsAsked } from "./prompt-guard.js";
@@ -71,6 +73,7 @@ interface Deps {
   fal: FalClient;
   pictures: Pictures;
   finals: FinalRule;
+  made: Pick<MadeCount, "one">;
 }
 
 const STAGE: Record<RenderKind, GateStage> = { rough: "roughs", draft: "drafts", final: "finals" };
@@ -296,7 +299,7 @@ export class RenderService {
 
   /** Reads a render. When fal is done, the picture is copied into the private store once and the ledger is settled once. */
   async status(batchId: string, renderId: string): Promise<RenderView> {
-    const { renders, images, pictures, ledger, gate, batches, fal } = this.deps;
+    const { renders, images, pictures, ledger, gate, batches, fal, made } = this.deps;
     const render = await renders.get(batchId, renderId);
     if (render.status !== "queued") return this.view(render);
     const result = await fal.poll(render.fal);
@@ -318,6 +321,8 @@ export class RenderService {
     await images.add({ id: render.id, batchId, kind: render.kind, key, ideaId: render.ideaId, ...(render.fromId ? { fromId: render.fromId } : {}) });
     if (await renders.end(render, { status: "done", imageId: render.id })) {
       await ledger.settle(render.reservation);
+      // The count is a number for the owner to read: a write of it that fails does not fail the render.
+      await made.one().catch((error: unknown) => log.error("made_count_failed", { error: error instanceof Error ? error.name : "unknown" }));
       const stage = STAGE[render.kind];
       if (!(await gate.peek(batchId, stage))) {
         const batch = await batches.get(batchId);

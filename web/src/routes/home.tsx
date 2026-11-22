@@ -1,10 +1,12 @@
-import type { AttentionKind, AttentionLine, BatchLine } from "@a11-wild/shared";
+import type { AttentionKind, AttentionLine, BatchLine, Made } from "@a11-wild/shared";
 import { Link } from "react-router";
 import { Batches } from "@/components/batches";
 import { Loading } from "@/components/loading";
 import { Ask, Empty, Fold, PageHeader, Section } from "@/components/page";
+import { api } from "@/lib/api";
 import { useAttention } from "@/lib/attention";
 import { useMe } from "@/lib/session";
+import { useLoad } from "@/lib/use-load";
 
 const many = (count: number, one: string, more: string) => `${count} ${count === 1 ? one : more}`;
 
@@ -28,6 +30,31 @@ type OutreachKind = keyof typeof OUTREACH;
 const OUTREACH_ORDER = Object.keys(OUTREACH) as OutreachKind[];
 
 const nameOf = ({ batch, brand, product }: BatchLine) => `${batch.label ?? "Batch"} · ${brand.name}: ${product.name}`;
+
+const number = (value: number) => value.toLocaleString("en-GB");
+
+/** How much was made for how much was kept. It is for reading only, so it stands last and shows nothing until it is read. */
+function MadeLine() {
+  const { value } = useLoad(api.made);
+  if (!value) return null;
+  const figures: [keyof Made, string][] = [
+    ["images", value.images === 1 ? "image made" : "images made"],
+    ["chosen", value.chosen === 1 ? "ad you hold up as your bar" : "ads you hold up as your bar"],
+  ];
+  return (
+    <section aria-label="Made and kept" className="mt-10 border-t border-border pt-6">
+      <dl className="flex flex-wrap gap-x-10 gap-y-4">
+        {figures.map(([key, label]) => (
+          <div key={key} className="flex flex-col-reverse">
+            <dt className="text-caption text-muted-foreground">{label}</dt>
+            <dd className="text-title font-medium tabular-nums">{number(value[key])}</dd>
+          </div>
+        ))}
+      </dl>
+      {value.chosen > 0 ? <p className="mt-3 text-caption text-muted-foreground">About {number(Math.round(value.images / value.chosen))} images made for each ad you hold up.</p> : null}
+    </section>
+  );
+}
 
 /** The start page. What waits for the owner is first, what is in work is second, and the rest is folded away. */
 export function Home() {
@@ -131,6 +158,8 @@ export function Home() {
           ) : null}
         </div>
       ) : null}
+
+      {isOwner ? <MadeLine /> : null}
     </>
   );
 }

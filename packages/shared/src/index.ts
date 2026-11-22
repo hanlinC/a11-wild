@@ -1442,6 +1442,14 @@ export interface AttentionCounts {
   connections?: number;
 }
 
+/** How much was made for how much was kept: the pictures the image models returned, beside the ads the owner holds up as his bar. */
+export interface Made {
+  /** Every picture a model returned, drafts and finals. No failed call, and no picture the studio's own tools worked on. */
+  images: number;
+  /** The owner's reference ads. */
+  chosen: number;
+}
+
 /** What the start page and the top bar read: every batch with who acts next, and what else waits for the owner. */
 export interface Attention {
   /** Newest first. */

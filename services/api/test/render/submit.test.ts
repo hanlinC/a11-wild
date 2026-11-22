@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { RenderStore } from "../../src/render/store.js";
 import { RULES_VERSION } from "../../src/houserules.js";
+import { MADE_BEFORE } from "../../src/made/count.js";
 import { batchAtTruth, idea, judgeIdeas } from "../helpers/batch.js";
 import { approvedClient, callTool, createStudio, type Studio } from "../helpers/deps.js";
 import type { FalCall } from "../helpers/fal.js";
@@ -173,6 +174,31 @@ describe("render_status", () => {
     expect((await callTool(studio, "render_list", { batchId })).value.renders).toHaveLength(1);
     expect(await studio.spend.ledger.summary(batchId)).toMatchObject({ batchUsd: 0.009, lines: [expect.objectContaining({ status: "spent" })] });
     expect((await studio.services.images.list(batchId, "draft"))).toHaveLength(1);
+  });
+
+  it("counts a picture the model returned once, and no render that failed", async () => {
+    const made = async () => (await studio.services.made.read()).images - MADE_BEFORE;
+    const first = await draft();
+    expect(await made()).toBe(0);
+    await Promise.all([1, 2].map(() => callTool(studio, "render_status", { batchId, renderId: first.value.id })));
+    await callTool(studio, "render_status", { batchId, renderId: first.value.id });
+    expect(await made()).toBe(1);
+    // A skeleton is the work of the studio's own tools, not of a model.
+    await skeleton(1);
+    expect(await made()).toBe(1);
+
+    await batchAtIdeas({ fal: (call) => (call.method === "GET" && !call.url.endsWith("/status") ? { status: 422 } : undefined) });
+    expect((await callTool(studio, "render_status", { batchId, renderId: (await draft()).value.id })).value.status).toBe("failed");
+    expect(await made()).toBe(0);
+  });
+
+  it("ends the render with its picture when the count cannot be written", async () => {
+    const first = await draft();
+    studio.services.made.one = async () => {
+      throw new Error("the table is away");
+    };
+    expect((await callTool(studio, "render_status", { batchId, renderId: first.value.id })).value.status).toBe("done");
+    expect(await studio.spend.ledger.summary(batchId)).toMatchObject({ lines: [expect.objectContaining({ status: "spent" })] });
   });
 
   it("keeps the first read's result when a second read with another result ends the render after it", async () => {

@@ -59,7 +59,7 @@ export const PROBES = [
   {
     name: "dashboard API without a session is refused",
     async run(origin, fetchFn) {
-      for (const path of ["/api/me", "/api/attention", "/api/clients", "/api/brands", "/api/spend", "/api/taste", "/api/calibration", "/api/packs", "/api/batches/none/board", "/api/batches/none/done"]) {
+      for (const path of ["/api/me", "/api/attention", "/api/clients", "/api/brands", "/api/spend", "/api/made", "/api/taste", "/api/calibration", "/api/packs", "/api/batches/none/board", "/api/batches/none/done"]) {
         const response = await fetchFn(`${origin}${path}`);
         if (response.status !== 401) return `${path} status ${response.status}`;
       }

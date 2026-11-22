@@ -33,6 +33,7 @@ function healthyStudio(overrides = {}) {
     "GET /api/clients": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/brands": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/spend": () => Response.json({ error: "signed_out" }, { status: 401 }),
+    "GET /api/made": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/attention": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/taste": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/calibration": () => Response.json({ error: "signed_out" }, { status: 401 }),

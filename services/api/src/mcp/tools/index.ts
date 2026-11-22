@@ -30,6 +30,7 @@ import type { PixelRunner } from "../../pixels/runner.js";
 import { PixelService } from "../../pixels/service.js";
 import { JobStore } from "../../pixels/store.js";
 import { ResultStore } from "../../results/store.js";
+import { MadeCount } from "../../made/count.js";
 import { RenderService } from "../../render/service.js";
 import { RenderStore } from "../../render/store.js";
 import type { ProviderKeys } from "../../secrets.js";
@@ -126,7 +127,8 @@ export function studioTools(parts: StudioParts) {
   const conceptPicks = new ConceptPicks({ table, now, batches, brands, briefs, critic, tasteLog });
   const conceptBoard = new ConceptBoardService({ batches, brands, briefs, critic, images, pictures, conceptPicks });
   const done = new DoneGate({ batches, brands, facts, truth, board, copy });
-  const render = new RenderService({ directions, batches, brands, images, renders, ledger, gate, fal, pictures, finals: board });
+  const made = new MadeCount(table, references);
+  const render = new RenderService({ directions, batches, brands, images, renders, ledger, gate, fal, pictures, finals: board, made });
   const jobs = new JobStore(table, now);
   const pixels = new PixelService({ batches, brands, images, checks, board, renders, jobs, pictures, copy, directions, runner: parts.pixelRunner, now });
   const packs = new PackStore(table);
@@ -150,7 +152,7 @@ export function studioTools(parts: StudioParts) {
   const desk = new OutreachDesk({ store: outreachStore, batches, board, ledger });
   const ownPicture = new OwnPicture({ store: outreachStore, pictures });
   const outreachPicks = new OutreachPicks({ store: outreachStore, batches, board });
-  const services = { outreach: { store: outreachStore, sequence, desk, picture: ownPicture, picks: outreachPicks }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, uploads, results };
+  const services = { outreach: { store: outreachStore, sequence, desk, picture: ownPicture, picks: outreachPicks }, learning, proposals, brandNotes, ledger, gate, parallel, brands, facts, canon, tasteLog, swipe, reads, importer, batches, truth, images, renders, render, checks, picks, board, jobs, pixels, calibration, critic, conceptPicks, conceptBoard, directions, done, copy, meta, packs, pack, clients, comments, notices, uploads, results, made };
   const tools: ToolDefinition[] = [
     ...coreTools(config),
     ...spendTools({ ledger, gate }),
