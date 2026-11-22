@@ -39,7 +39,7 @@ function MadeLine() {
   if (!value) return null;
   const figures: [keyof Made, string][] = [
     ["images", value.images === 1 ? "image generated so far" : "images generated so far"],
-    ["chosen", value.chosen === 1 ? "of them is among your best ads" : "of them are among your best ads"],
+    ["chosen", value.chosen === 1 ? "ad you chose as your best" : "ads you chose as your best"],
   ];
   return (
     <section aria-label="Made and kept" className="mt-10 border-t border-border pt-6">

@@ -117,7 +117,7 @@ describe("the start page", () => {
     expect(made.getByText("1,580")).toBeInTheDocument();
     expect(made.getByText("images generated so far")).toBeInTheDocument();
     expect(made.getByText("18")).toBeInTheDocument();
-    expect(made.getByText("of them are among your best ads")).toBeInTheDocument();
+    expect(made.getByText("ads you chose as your best")).toBeInTheDocument();
     expect(made.getByText("That is 1 best ad for about every 88 images. Your best ads are the reference ads you gave the studio.")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Needs you0", "In work1"]);
 
