@@ -18,6 +18,17 @@ describe("Connections page", () => {
     expect(waiting.getByRole("button", { name: "Approve" })).toBeInTheDocument();
   });
 
+  it("leads with the program that waits, before the address and the approved programs", async () => {
+    stubApi({ "GET /api/clients": () => ({ body: { clients: [client({ clientId: "client-2", name: "Older", status: "approved" }), client()] } }) });
+    renderSignedIn(<Connections />);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Asked of you1 program waits for your approval, and can do nothing until then. Approve only a program you started yourself, and check where it sends you back to.");
+    const order = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
+    expect(order).toEqual(["Waiting for approval1", "Connect an agent", "Approved1"]);
+    // One filled button on the page: the approval.
+    expect(within(section(/waiting for approval/i)).getAllByRole("button").map((button) => button.textContent)).toEqual(["Approve", "Reject"]);
+  });
+
   it("names the time zone beside each time", async () => {
     stubApi({ "GET /api/clients": () => ({ body: { clients: [client()] } }) });
     renderSignedIn(<Connections />);
@@ -37,7 +48,9 @@ describe("Connections page", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
 
     await waitFor(() => expect(within(section(/^approved/i)).getByText("Devin")).toBeInTheDocument());
-    expect(within(section(/waiting for approval/i)).queryByText("Devin")).not.toBeInTheDocument();
+    // Nothing waits any more: the section is gone, and the page says so.
+    expect(screen.queryByRole("heading", { name: /waiting for approval/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("No program waits for approval.");
     expect(calls).toContain("POST /api/clients/client-1/approve");
   });
 
@@ -52,7 +65,11 @@ describe("Connections page", () => {
     expect(calls).not.toContain("POST /api/clients/client-1/revoke");
 
     await userEvent.click(screen.getByRole("button", { name: "Yes, remove it" }));
-    await waitFor(() => expect(within(section(/^removed/i)).getByText("Devin")).toBeInTheDocument());
+    // A removed program is folded away: one row with a count, and the program inside it.
+    const removed = await screen.findByRole("button", { name: /^Removed\s*1$/ });
+    expect(screen.queryByText("Devin")).not.toBeInTheDocument();
+    await userEvent.click(removed);
+    expect(within(section(/^removed/i)).getByText("Devin")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
   });
 
@@ -76,6 +93,8 @@ describe("Connections page", () => {
     expect(await screen.findAllByText("Devin")).toHaveLength(2);
     expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["Copy address"]);
     expect(screen.getByText(/only the owner can approve or remove/i)).toBeInTheDocument();
+    expect(screen.getByText("1 program waits for the owner's approval, and can do nothing until then.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing is asked of you")).toBeInTheDocument();
   });
 
   it("shows a program's name as text, never as markup", async () => {
@@ -92,7 +111,8 @@ describe("Connections page", () => {
     stubApi({ "GET /api/clients": () => ({ body: { clients: [] } }) });
     renderSignedIn(<Connections />);
 
-    expect(await screen.findByText(/nothing is waiting/i)).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Nothing is asked of youNo program waits for approval. One shows here after it signs in for the first time");
+    expect(screen.queryByRole("heading", { name: /waiting for approval/i })).not.toBeInTheDocument();
     expect(screen.getByText(/no program is connected yet/i)).toBeInTheDocument();
   });
 

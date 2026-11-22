@@ -24,7 +24,37 @@ const proposal = (overrides: Partial<ProposalView> = {}): ProposalView => ({
   ...overrides,
 });
 
+/** The rules and the logs are folded: one row each, opened with a click. */
+const open = async (name: RegExp) => userEvent.click(await screen.findByRole("button", { name }));
+const CANON = /^Canon/;
+const OTHER = /^Other rules/;
+
 describe("Taste page", () => {
+  it("leads with what waits, says so when nothing does, and keeps the rules and the logs folded", async () => {
+    stubApi({ "GET /api/taste": () => ({ body: page({ canons: [craft], log: [{ id: "t1", at: "2026-11-21T10:00:00.000Z", kind: "pass", ownerSaid: "all three look like stock photos", savedBy: "owner@example.com" }] }) }) });
+    renderSignedIn(<Taste />);
+    expect(await screen.findByRole("status")).toHaveTextContent("Nothing is asked of youNo change to a rule waits for a yes.");
+    expect(screen.queryByRole("heading", { name: /Waiting for/ })).not.toBeInTheDocument();
+    // Each fold says what it holds in a few words.
+    expect(screen.getByRole("button", { name: CANON })).toHaveTextContent(/version 1, /);
+    expect(screen.getByRole("button", { name: OTHER })).toHaveTextContent("0 written");
+    expect(screen.getByRole("button", { name: /^Taste log\s*1$/ })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("One clever object.")).not.toBeInTheDocument();
+    expect(screen.queryByText("all three look like stock photos")).not.toBeInTheDocument();
+  });
+
+  it("keeps a canon that is being edited when its row is closed and opened again", async () => {
+    stubApi({ "GET /api/taste": () => ({ body: page() }) });
+    renderSignedIn(<Taste />);
+    await open(CANON);
+    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await userEvent.type(screen.getByLabelText("The whole canon"), " No clutter.");
+    await open(CANON);
+    expect(screen.getByLabelText("The whole canon")).not.toBeVisible();
+    await open(CANON);
+    expect(screen.getByLabelText("The whole canon")).toHaveValue("One clever object. No clutter.");
+  });
+
   it("shows the canon, the owner's words in the log, and a saved reference", async () => {
     stubApi({
       "GET /api/taste": () => ({
@@ -35,6 +65,9 @@ describe("Taste page", () => {
       }),
     });
     renderSignedIn(<Taste />);
+    await open(CANON);
+    await open(/^Taste log/);
+    await open(/^Swipe file/);
     expect(await screen.findByText("One clever object.")).toBeInTheDocument();
     expect(screen.getByText("all three look like stock photos")).toBeInTheDocument();
     expect(screen.getByText("Passed")).toBeInTheDocument();
@@ -52,6 +85,7 @@ describe("Taste page", () => {
       },
     });
     renderSignedIn(<Taste />);
+    await open(CANON);
     await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
     await userEvent.type(screen.getByLabelText("The whole canon"), " No clutter.");
     await userEvent.type(screen.getByLabelText("What changed, and why"), "He passed on a busy draft.");
@@ -68,6 +102,7 @@ describe("Taste page", () => {
       "POST /api/taste/canon": () => ({ status: 400, body: { error: "refused", message: "A canon save needs a reason: one line on what changed and why." } }),
     });
     renderSignedIn(<Taste />);
+    await open(CANON);
     await userEvent.click(await screen.findByRole("button", { name: "Edit" }));
     await userEvent.type(screen.getByLabelText("What changed, and why"), " ");
     await userEvent.click(screen.getByRole("button", { name: "Save as version 2" }));
@@ -79,6 +114,7 @@ describe("Taste page", () => {
     const v2 = { ...v1, version: 2, text: "Newer.", reason: "Changed." };
     stubApi({ "GET /api/taste": () => ({ body: page({ canon: v2, versions: [v2, v1] }) }), "GET /api/taste/canon/1": () => ({ body: v1 }) });
     renderSignedIn(<Taste />);
+    await open(CANON);
     await userEvent.click((await screen.findAllByRole("button", { name: "Read" }))[1]!);
     expect(await screen.findByText("One clever object.")).toBeInTheDocument();
   });
@@ -86,6 +122,7 @@ describe("Taste page", () => {
   it("gives a member no way to edit the canon", async () => {
     stubApi({ "GET /api/taste": () => ({ body: page() }) });
     renderSignedIn(<Taste />, MEMBER);
+    await open(CANON);
     expect(await screen.findByText("One clever object.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
@@ -100,6 +137,7 @@ describe("Taste page", () => {
       },
     });
     renderSignedIn(<Taste />);
+    await open(OTHER);
     await userEvent.click(await screen.findByRole("button", { name: "Write Creative craft" }));
     await userEvent.type(screen.getByLabelText("All the rules"), "One light source.");
     await userEvent.type(screen.getByLabelText("What changed, and why"), "Seen in checks.");
@@ -119,6 +157,7 @@ describe("Taste page", () => {
       },
     });
     renderSignedIn(<Taste />);
+    await open(CANON);
     await userEvent.click((await screen.findAllByRole("button", { name: "Read" }))[1]!);
     await userEvent.type(await screen.findByLabelText("Why bring version 1 back"), "The first was right.");
     await userEvent.click(screen.getByRole("button", { name: "Bring it back as version 3" }));
@@ -138,6 +177,9 @@ describe("Taste page", () => {
     });
     renderSignedIn(<Taste />);
     const waiting = (await screen.findByRole("heading", { name: /Waiting for your yes/ })).closest("section")!;
+    // What waits is the first thing under the header, before every rule and log.
+    expect(screen.getByText("1 change to a rule waits for your yes or no. Nothing in it is in use until then.")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 })[0]).toHaveTextContent("Waiting for your yes");
     expect(within(waiting).getByText("No prop beside the food.")).toBeInTheDocument();
     expect(within(waiting).getByText("He passed on every prop.")).toBeInTheDocument();
     expect(within(waiting).getByText("Rests on 2 notes")).toBeInTheDocument();
@@ -149,6 +191,7 @@ describe("Taste page", () => {
     await userEvent.click(within(waiting).getByRole("button", { name: "Yes, use it" }));
     await waitFor(() => expect(sent).toEqual({ approve: true, ownerSaid: "yes, no props" }));
     expect(calls).toContain("POST /api/taste/proposals/pr1");
+    await open(/^Changes you decided/);
     expect(await screen.findByText("You said yes")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Waiting for your yes/ })).not.toBeInTheDocument();
   });
@@ -203,6 +246,10 @@ describe("Taste page", () => {
       }),
     });
     renderSignedIn(<Taste />, MEMBER);
+    await open(/^What the studio noticed/);
+    await open(OTHER);
+    expect(screen.getByRole("heading", { name: /Waiting for the owner's yes/ })).toBeInTheDocument();
+    expect(screen.getByText("1 change to a rule waits for the owner's yes or no. Nothing in it is in use until then.")).toBeInTheDocument();
     expect(await screen.findByText("The food is the picture.")).toBeInTheDocument();
     expect(screen.getByText(/Seen 2 times · Fairly sure/)).toBeInTheDocument();
     expect(screen.getByText("Against it: Idea 4 kept its fork.")).toBeInTheDocument();

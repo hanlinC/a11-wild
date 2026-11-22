@@ -2,7 +2,7 @@ import type { LearningRecord, ProposalView, TasteEntry } from "@a11-wild/shared"
 import { useState } from "react";
 import { CanonCard, FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,14 @@ export function Taste() {
     <>
       <Header />
 
+      <Step who={waiting.length > 0 && isOwner ? "you" : "nobody"}>
+        {waiting.length === 0
+          ? "No change to a rule waits for a yes. One shows here when an agent asks to change a canon; no rule changes before the owner says yes."
+          : `${waiting.length === 1 ? "1 change to a rule waits" : `${waiting.length} changes to a rule wait`} for ${isOwner ? "your yes or no" : "the owner's yes or no"}. Nothing in it is in use until then.`}
+      </Step>
+
       {waiting.length > 0 ? (
-        <Section title="Waiting for your yes" count={waiting.length}>
-          <p className="mb-3 max-w-2xl text-caption text-muted-foreground">A change an agent wants to make to a canon. Nothing here is in use until you say yes.</p>
+        <Section title={isOwner ? "Waiting for your yes" : "Waiting for the owner's yes"} count={waiting.length}>
           <ul className="grid gap-3">
             {waiting.map((proposal) => (
               <li key={proposal.id}>
@@ -55,15 +60,16 @@ export function Taste() {
         </Section>
       ) : null}
 
-      <Section title="Canon">
-        <CanonCard canon={canon} versions={versions} isOwner={isOwner} empty="No canon yet. It is your taste in plain words; every agent reads it before it writes an idea." reload={reload} />
-      </Section>
-
-      <Section title="Other rules">
-        <p className="mb-3 max-w-2xl text-caption text-muted-foreground">
-          Rules that are not your taste: what makes an ad well made, what the results of past ads showed, and what holds for one brand only. A brand's rules reach only that brand's batches.
-        </p>
-        <div className="grid gap-6">
+      <Section title="What the studio works by">
+        {/* Kept when closed: a canon that is being edited must not lose its text. */}
+        <Fold title="Canon" note={written(canon)} keep>
+          <CanonCard canon={canon} versions={versions} isOwner={isOwner} empty="No canon yet. It is your taste in plain words; every agent reads it before it writes an idea." reload={reload} />
+        </Fold>
+        <Fold title="Other rules" count={canons.length} note={`${canons.filter((entry) => entry.canon.version > 0).length} written`} keep>
+          <p className="mb-3 max-w-2xl px-2 text-caption text-muted-foreground">
+            Rules that are not your taste: what makes an ad well made, what the results of past ads showed, and what holds for one brand only. A brand's rules reach only that brand's batches.
+          </p>
+          <div className="grid gap-6">
           {canons.map((entry) => (
             <CanonCard
               key={`${entry.scope.kind}${entry.scope.brandId ?? ""}`}
@@ -75,114 +81,120 @@ export function Taste() {
               empty={entry.scope.kind === "craft" ? "Nothing yet. Rules of craft that hold for every brand go here." : entry.scope.kind === "performance" ? "Nothing yet. What the results of past ads showed goes here." : "Nothing yet for this brand."}
               reload={reload}
             />
-          ))}
-        </div>
+            ))}
+          </div>
+        </Fold>
       </Section>
 
-      <Section title="What the studio noticed" count={learning.length}>
-        {learning.length === 0 ? (
-          <Empty>Nothing yet. An agent writes here what it saw in a batch or in results. A note changes no rule until you say yes to a change built on it.</Empty>
-        ) : (
-          <ul className="grid gap-2">
-            {learning.map((entry) => (
-              <li key={entry.id}>
-                <Card className="py-4">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
-                    <Badge variant="dot" color="gray">
-                      {entry.scopeName}
-                    </Badge>
-                    <span>{when(entry.savedAt)}</span>
-                    <span>
-                      Seen {entry.evidence} {entry.evidence === 1 ? "time" : "times"} · {SURE[entry.confidence]}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-body">{entry.lesson}</p>
-                  <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">
-                    {entry.observation} ({entry.source})
-                  </p>
-                  {entry.counterexamples.length > 0 ? <p className="mt-1 text-caption text-muted-foreground">Against it: {entry.counterexamples.join("; ")}</p> : null}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      <Section title="What it learned from">
+        <Fold title="What the studio noticed" count={learning.length}>
+          {learning.length === 0 ? (
+            <Empty>Nothing yet. An agent writes here what it saw in a batch or in results. A note changes no rule until you say yes to a change built on it.</Empty>
+          ) : (
+            <ul className="grid gap-2">
+              {learning.map((entry) => (
+                <li key={entry.id}>
+                  <Card className="py-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                      <Badge variant="dot" color="gray">
+                        {entry.scopeName}
+                      </Badge>
+                      <span>{when(entry.savedAt)}</span>
+                      <span>
+                        Seen {entry.evidence} {entry.evidence === 1 ? "time" : "times"} · {SURE[entry.confidence]}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-body">{entry.lesson}</p>
+                    <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">
+                      {entry.observation} ({entry.source})
+                    </p>
+                    {entry.counterexamples.length > 0 ? <p className="mt-1 text-caption text-muted-foreground">Against it: {entry.counterexamples.join("; ")}</p> : null}
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Fold>
 
-      {decided.length > 0 ? (
-        <Section title="Changes you decided" count={decided.length}>
-          <ul className="grid gap-2">
-            {decided.map((proposal) => (
-              <li key={proposal.id}>
-                <Card className="py-4">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
-                    <Badge variant="dot" color={DECIDED[proposal.status as "approved" | "declined"].color}>
-                      {DECIDED[proposal.status as "approved" | "declined"].label}
-                    </Badge>
-                    <span>{proposal.scopeName}</span>
-                    {proposal.decidedAt ? <span>{when(proposal.decidedAt)}</span> : null}
-                    {proposal.version ? <span>Version {proposal.version}</span> : null}
-                  </div>
-                  <p className="mt-2 text-body">{proposal.reason}</p>
-                  {proposal.ownerSaid ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">{proposal.ownerSaid}</p> : null}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      ) : null}
+        {decided.length > 0 ? (
+          <Fold title="Changes you decided" count={decided.length}>
+            <ul className="grid gap-2">
+              {decided.map((proposal) => (
+                <li key={proposal.id}>
+                  <Card className="py-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                      <Badge variant="dot" color={DECIDED[proposal.status as "approved" | "declined"].color}>
+                        {DECIDED[proposal.status as "approved" | "declined"].label}
+                      </Badge>
+                      <span>{proposal.scopeName}</span>
+                      {proposal.decidedAt ? <span>{when(proposal.decidedAt)}</span> : null}
+                      {proposal.version ? <span>Version {proposal.version}</span> : null}
+                    </div>
+                    <p className="mt-2 text-body">{proposal.reason}</p>
+                    {proposal.ownerSaid ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">{proposal.ownerSaid}</p> : null}
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          </Fold>
+        ) : null}
 
-      <Section title="Taste log" count={log.length}>
-        {log.length === 0 ? (
-          <Empty>Nothing yet. Each draft you pick or pass, and what you say about it, is kept here in your words.</Empty>
-        ) : (
-          <ul className="grid gap-2">
-            {log.map((entry) => (
-              <li key={entry.id}>
-                <Card className="py-4">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
-                    <Badge variant="dot" color={KIND[entry.kind].color}>
-                      {KIND[entry.kind].label}
-                    </Badge>
-                    <span>{when(entry.at)}</span>
-                  </div>
-                  <p className="mt-2 text-body whitespace-pre-line">{entry.ownerSaid}</p>
-                  {entry.about ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">{entry.about}</p> : null}
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+        <Fold title="Taste log" count={log.length}>
+          {log.length === 0 ? (
+            <Empty>Nothing yet. Each draft you pick or pass, and what you say about it, is kept here in your words.</Empty>
+          ) : (
+            <ul className="grid gap-2">
+              {log.map((entry) => (
+                <li key={entry.id}>
+                  <Card className="py-4">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-muted-foreground">
+                      <Badge variant="dot" color={KIND[entry.kind].color}>
+                        {KIND[entry.kind].label}
+                      </Badge>
+                      <span>{when(entry.at)}</span>
+                    </div>
+                    <p className="mt-2 text-body whitespace-pre-line">{entry.ownerSaid}</p>
+                    {entry.about ? <p className="mt-1 text-caption whitespace-pre-line text-muted-foreground">{entry.about}</p> : null}
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Fold>
 
-      <Section title="Swipe file" count={swipe.length}>
-        {swipe.length === 0 ? (
-          <Empty>No reference yet. Tell your agent when a piece of work is worth keeping.</Empty>
-        ) : (
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {swipe.map((item) => (
-              <li key={item.id}>
-                <Card className="h-full py-4">
-                  <span className="text-body font-medium">{item.title}</span>
-                  <p className="mt-1 text-caption text-muted-foreground">{item.why}</p>
-                  <p className="mt-2 text-caption text-muted-foreground">
-                    {item.sourceUrl ? <OutLink href={item.sourceUrl}>{item.source}</OutLink> : item.source}
-                    {item.tags?.length ? ` · ${item.tags.join(", ")}` : ""}
-                  </p>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
+        <Fold title="Swipe file" count={swipe.length}>
+          {swipe.length === 0 ? (
+            <Empty>No reference yet. Tell your agent when a piece of work is worth keeping.</Empty>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {swipe.map((item) => (
+                <li key={item.id}>
+                  <Card className="h-full py-4">
+                    <span className="text-body font-medium">{item.title}</span>
+                    <p className="mt-1 text-caption text-muted-foreground">{item.why}</p>
+                    <p className="mt-2 text-caption text-muted-foreground">
+                      {item.sourceUrl ? <OutLink href={item.sourceUrl}>{item.source}</OutLink> : item.source}
+                      {item.tags?.length ? ` · ${item.tags.join(", ")}` : ""}
+                    </p>
+                  </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Fold>
       </Section>
     </>
   );
 }
 
+/** A canon in a few words, for its closed row. */
+const written = (canon: { version: number; savedAt: string }) => (canon.version === 0 ? "nothing written yet" : `version ${canon.version}, ${when(canon.savedAt)}`);
+
 function Header() {
   return (
     <PageHeader
       title="Taste"
-      lead="What the studio has learned: your taste in plain words, the other rules it works by, what you picked and passed, and the work you saved. Agents read these before they write an idea, and no rule changes without your yes."
+      lead="What the studio has learned of your taste, and the rules every agent reads before it writes an idea."
     />
   );
 }

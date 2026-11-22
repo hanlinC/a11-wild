@@ -98,21 +98,26 @@ export function Step({ who, left, children }: { who: keyof typeof STEP_LABEL; le
   );
 }
 
-/** A part of a page that is kept out of the way: its name and its size are shown, the rest opens at a click. */
-export function Fold({ title, count, children }: { title: string; count?: number; children: ReactNode }) {
+/**
+ * A part of a page that is kept out of the way: its name and its size are shown, the rest opens at a click.
+ * `note` is a few words at the end of the row. With `keep`, what was opened stays as it was when the fold is closed again.
+ */
+export function Fold({ title, count, note, keep, children }: { title: string; count?: number; note?: ReactNode; keep?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState(false);
   const id = useId();
   return (
     <section className="mt-3 rounded-xl border border-border first:mt-0">
       <h2>
-        <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((was) => !was)} className="flex w-full items-center gap-2 rounded-xl px-5 py-3 text-left text-body text-muted-foreground transition-colors hover:text-foreground">
+        <button type="button" aria-expanded={open} aria-controls={id} onClick={() => (setOpened(true), setOpen((was) => !was))} className="flex w-full items-center gap-2 rounded-xl px-5 py-3 text-left text-body text-muted-foreground transition-colors hover:text-foreground">
           <ChevronRight aria-hidden className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
           <span className="font-medium">{title}</span>
           {count === undefined ? null : <span className="text-caption tabular-nums">{count}</span>}
+          {note ? <span className="ml-auto text-right text-caption">{note}</span> : null}
         </button>
       </h2>
-      {open ? (
-        <div id={id} className="border-t border-border p-3">
+      {open || (keep && opened) ? (
+        <div id={id} hidden={!open} className="border-t border-border p-3">
           {children}
         </div>
       ) : null}

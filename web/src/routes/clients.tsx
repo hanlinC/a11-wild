@@ -1,7 +1,7 @@
 import { CHANGE_STATUSES, type ChangeStatus, type OwnerClient, type OwnerClientPack, type PackComment, type UploadTable } from "@a11-wild/shared";
 import { useCallback, useState } from "react";
 import { Loading, OutLink } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { api, describeError } from "@/lib/api";
@@ -45,10 +45,13 @@ export function Clients() {
           <BannerTitle>{failure}</BannerTitle>
         </Banner>
       ) : null}
-      <Section title="Change requests that wait" count={waiting.length}>
-        {waiting.length === 0 ? (
-          <Empty>No change request waits for you.</Empty>
-        ) : (
+      <Step who={waiting.length > 0 ? "you" : "nobody"}>
+        {waiting.length > 0
+          ? `${waiting.length === 1 ? "1 change request waits" : `${waiting.length} change requests wait`} for you. Set each to In work, Done or Not done: your client sees that status on their page.`
+          : "No change request waits for you. One shows here when a client asks for a change on their page."}
+      </Step>
+      {waiting.length > 0 ? (
+        <Section title="Change requests that wait" count={waiting.length}>
           <ul className="space-y-3">
             {waiting.map(({ client, pack, comment }) => (
               <li key={comment.id}>
@@ -56,36 +59,55 @@ export function Clients() {
               </li>
             ))}
           </ul>
-        )}
-      </Section>
-      {clients.length === 0 ? (
-        <Section title="Clients">
-          <Empty>A brand appears here when it has a pack or a client link.</Empty>
         </Section>
       ) : null}
-      {clients.map((client) => (
-        <Section key={client.brand.id} title={client.brand.name}>
-          <Card className="space-y-6">
-            <Link client={client} />
-            {client.packs.length === 0 ? <p className="text-caption text-muted-foreground">No finished pack yet. The client's page is empty until there is one.</p> : null}
-            {client.packs.map((pack) => (
-              <div key={pack.packId} className="border-t border-border pt-5">
-                <h3 className="text-body font-medium">
-                  {pack.product} <span className="text-caption font-normal text-muted-foreground">version {pack.version}, {when(pack.at)}{pack.example ? " · example: it is on no client's page, and takes no comment and no file" : ""}</span>
-                </h3>
-                {pack.example ? null : (
-                  <>
-                    <CommentList pack={pack} onMark={(id, to) => void mark(pack.packId, id, to)} />
-                    <Files pack={pack} />
-                  </>
-                )}
+      <Section title="Clients" count={clients.length}>
+        {clients.length === 0 ? (
+          <Empty>A brand appears here when it has a pack or a client link.</Empty>
+        ) : (
+          clients.map((client) => (
+            // Kept when closed: a new link is shown once, and closing the row must not lose it.
+            <Fold key={client.brand.id} title={client.brand.name} note={noteOf(client)} keep>
+              <div className="space-y-6 px-2 py-1">
+                <Link client={client} />
+                {client.packs.length === 0 ? <p className="text-caption text-muted-foreground">No finished pack yet. The client's page is empty until there is one.</p> : null}
+                {client.packs.map((pack) => (
+                  <div key={pack.packId} className="border-t border-border pt-5">
+                    <h3 className="text-body font-medium">
+                      {pack.product} <span className="text-caption font-normal text-muted-foreground">version {pack.version}, {when(pack.at)}{pack.example ? " · example: it is on no client's page, and takes no comment and no file" : ""}</span>
+                    </h3>
+                    {pack.example ? null : (
+                      <>
+                        <CommentList pack={pack} onMark={(id, to) => void mark(pack.packId, id, to)} />
+                        <Files pack={pack} />
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-          </Card>
-        </Section>
-      ))}
+            </Fold>
+          ))
+        )}
+      </Section>
     </>
   );
+}
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** A client in a few words: what waits first, then what its packs hold. The link is not named here: its state can change inside the row. */
+function noteOf(client: OwnerClient): string {
+  const comments = client.packs.flatMap((pack) => pack.comments);
+  const waits = comments.filter(isOpen).length;
+  const files = client.packs.reduce((sum, pack) => sum + pack.uploads.length, 0);
+  return [
+    waits > 0 ? count(waits, "request waits", "requests wait") : undefined,
+    count(client.packs.length, "pack", "packs"),
+    comments.length > 0 ? count(comments.length, "comment", "comments") : undefined,
+    files > 0 ? count(files, "file", "files") : undefined,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function Request({ brand, pack, comment, onStatus }: { brand: string; pack: OwnerClientPack; comment: PackComment; onStatus: (status: ChangeStatus) => void }) {

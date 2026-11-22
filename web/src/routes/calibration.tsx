@@ -14,7 +14,7 @@ export function Calibration() {
     <>
       <PageHeader
         title="Calibration"
-        lead="Does the blind critic agree with you? It ranks each idea's drafts before you pick, and the board hides its order until you have chosen. This page counts how often you chose its first place."
+        lead="How often you chose the draft that the blind critic ranked first."
       />
       {page === undefined ? (
         <Loading error={error} />
@@ -29,7 +29,7 @@ export function Calibration() {
 
 function Picks({ picks }: { picks: CalibrationPage["picks"] }) {
   const { firstPlace, byPlace } = picks;
-  if (firstPlace.n === 0) return <Empty>No pick yet beside a rank. This fills as you pick drafts that the critic ranked first.</Empty>;
+  if (firstPlace.n === 0) return <Empty>No pick yet beside a rank. The critic ranks each idea's drafts before you pick, and the board hides its order until you have chosen. A count shows here after your first pick.</Empty>;
   return (
     <Card>
       <p className="text-body">
@@ -41,6 +41,7 @@ function Picks({ picks }: { picks: CalibrationPage["picks"] }) {
           .join(" · ")}
         {firstPlace.note ? ` · A ${firstPlace.note}.` : ""}
       </p>
+      <p className="mt-3 text-caption text-muted-foreground">The critic ranks each idea's drafts before you pick, and the board hides its order until you have chosen.</p>
     </Card>
   );
 }

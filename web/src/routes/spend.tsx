@@ -51,7 +51,7 @@ export function Spend() {
     <>
       <PageHeader
         title="Spend"
-        lead="What the studio paid Parallel and fal this month. Every paid call holds its price before it is sent, and a call that would pass a cap is refused."
+        lead="What the studio paid Parallel and fal this month, beside its caps."
       />
       {spend === undefined ? (
         <Loading error={error} />
@@ -65,6 +65,7 @@ export function Spend() {
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-(--tint)" role="progressbar" aria-label="Share of the monthly cap used" aria-valuemin={0} aria-valuemax={spend.monthCapUsd} aria-valuenow={spend.monthUsd}>
             <div className="h-full bg-foreground" style={{ width: `${Math.min(100, (spend.monthUsd / spend.monthCapUsd) * 100)}%` }} />
           </div>
+          <p className="mt-3 text-caption text-muted-foreground">Every paid call holds its price before it is sent, and a call that would pass a cap is refused.</p>
 
           <Section title="Outreach campaign">
             <Card className="grid gap-6 sm:grid-cols-3">

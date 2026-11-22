@@ -36,6 +36,9 @@ const clients: OwnerClient[] = [
 
 afterEach(() => vi.unstubAllGlobals());
 
+/** A client is one closed row until it is opened. */
+const openClient = async (user: ReturnType<typeof userEvent.setup>, name: string) => user.click(await screen.findByRole("button", { name: new RegExp(`^${name}`) }));
+
 describe("The owner's Clients page", () => {
   it("puts the change requests that wait first, and sets a status with one click", async () => {
     const sent: unknown[] = [];
@@ -56,8 +59,27 @@ describe("The owner's Clients page", () => {
     await user.click(within(waiting).getByRole("button", { name: /Set to In work: Make the price larger/ }));
     expect(sent).toEqual([{ status: "in_work" }]);
     expect(await within(waiting).findByText(/· In work/)).toBeInTheDocument();
+    // The requests come before the list of clients.
+    const list = screen.getByRole("heading", { name: /^Clients/, level: 2 });
+    expect(waiting.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // A client's words are text on the page, never markup.
+    await openClient(user, "Wongi");
     expect(screen.getByText("We love <b>these</b>.")).toBeInTheDocument();
+  });
+
+  it("keeps each client to one row that says what it holds, until it is opened", async () => {
+    stubApi({ "GET /api/portal": () => ({ body: { clients } }) });
+    const user = userEvent.setup();
+    renderSignedIn(<Clients />);
+    const wongi = await screen.findByRole("button", { name: /^Wongi/ });
+    expect(wongi).toHaveTextContent("1 request waits · 1 pack · 3 comments · 3 files");
+    expect(wongi).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /^Zest/ })).toHaveTextContent("0 packs");
+    expect(screen.queryByText("We love <b>these</b>.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Files the client sent")).not.toBeInTheDocument();
+    await user.click(wongi);
+    expect(wongi).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Files the client sent")).toBeInTheDocument();
   });
 
   it("hides a comment from the client's page", async () => {
@@ -71,6 +93,7 @@ describe("The owner's Clients page", () => {
     });
     const user = userEvent.setup();
     renderSignedIn(<Clients />);
+    await openClient(user, "Wongi");
     await user.click(await screen.findByRole("button", { name: /Hide: We love/ }));
     expect(sent).toEqual([{ hidden: true }]);
     expect(await screen.findByText(/hidden from the client's page/)).toBeInTheDocument();
@@ -84,6 +107,7 @@ describe("The owner's Clients page", () => {
     });
     const user = userEvent.setup();
     renderSignedIn(<Clients />);
+    await openClient(user, "Wongi");
     expect(await screen.findByRole("link", { name: "week-1.png" })).toHaveAttribute("href", "https://pictures.example/u1.png?signed=1");
     expect(screen.queryByRole("link", { name: "week-1.csv" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "invoice.png" })).not.toBeInTheDocument();
@@ -110,10 +134,17 @@ describe("The owner's Clients page", () => {
     });
     const user = userEvent.setup();
     renderSignedIn(<Clients />);
+    await openClient(user, "Wongi");
+    await openClient(user, "Zest");
     expect(await screen.findByText("This brand has no client link yet.")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Make the link" }));
     expect(await screen.findByText("https://studio.example.com/client/new-link")).toBeInTheDocument();
     expect(screen.getByText(/It is not shown again/)).toBeInTheDocument();
+    // The link is shown once: a row that is closed and opened again still has it.
+    await openClient(user, "Zest");
+    expect(screen.getByText("https://studio.example.com/client/new-link")).not.toBeVisible();
+    await openClient(user, "Zest");
+    expect(screen.getByText("https://studio.example.com/client/new-link")).toBeVisible();
     // Both brands have a link now. The first is Wongi's.
     await user.click(screen.getAllByRole("button", { name: "Turn the link off" })[0]!);
     await waitFor(() => expect(screen.getByText(/turned off: it opens nothing/)).toBeInTheDocument());
@@ -131,6 +162,7 @@ describe("The owner's Clients page", () => {
     });
     const user = userEvent.setup();
     renderSignedIn(<Clients />);
+    await openClient(user, "Wongi");
     await user.click(await screen.findByRole("button", { name: "Make a new link" }));
     expect(await screen.findByText("https://studio.example.com/client/again")).toBeInTheDocument();
     expect(sent).toEqual([{ action: "make" }]);
@@ -139,7 +171,8 @@ describe("The owner's Clients page", () => {
   it("says so when nothing waits and no brand has a pack", async () => {
     stubApi({ "GET /api/portal": () => ({ body: { clients: [] } }) });
     renderSignedIn(<Clients />);
-    expect(await screen.findByText("No change request waits for you.")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("No change request waits for you. One shows here when a client asks for a change on their page.");
+    expect(screen.queryByRole("heading", { name: /Change requests that wait/ })).not.toBeInTheDocument();
     expect(screen.getByText("A brand appears here when it has a pack or a client link.")).toBeInTheDocument();
   });
 });

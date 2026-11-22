@@ -1,5 +1,6 @@
 import type { PackSummary } from "@a11-wild/shared";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { renderSignedIn, stubApi } from "@/test-helpers";
 import { Packs } from "./packs";
@@ -35,7 +36,11 @@ describe("Packs page", () => {
     expect(await screen.findByRole("heading", { name: "Wongi · Salted egg fish skin" })).toBeInTheDocument();
     expect(screen.getByText("The link shows this")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "The ad a11_W47_wongi_b01_tof_c1_v2" })).toBeInTheDocument();
+    // An earlier version is folded: its row says how many there are, and a click shows them.
+    expect(screen.queryByText(/Version 1,/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^Earlier versions\s*1$/ }));
     expect(screen.getByText(/Version 1,/)).toHaveTextContent("a11_W47_wongi_b01_tof_c1_v1");
+    expect(screen.getByRole("status")).toHaveTextContent("This page is for reading.");
     expect(screen.getByRole("link", { name: "week-1.png" })).toHaveAttribute("href", pack.uploads[0]?.openUrl);
     // A file the studio deleted has no address to open.
     expect(screen.queryByRole("link", { name: "invoice.png" })).not.toBeInTheDocument();

@@ -1,6 +1,6 @@
 import type { ClientRecord } from "@a11-wild/shared";
 import { useCallback, useEffect, useState } from "react";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ export function Connections() {
     <>
       <PageHeader
         title="Connections"
-        lead="Programs that asked to use the studio on your behalf. A new one can do nothing until the owner approves it. Approve only a program you started yourself, and check where it sends you back to."
+        lead="Programs that asked to use the studio on your behalf."
       />
 
       {error ? (
@@ -146,23 +146,14 @@ export function Connections() {
         )
       ) : (
         <>
-          <Section title="Waiting for approval" count={pending.length}>
-            {pending.length === 0 ? (
-              <Empty>Nothing is waiting. A program appears here after it signs in for the first time.</Empty>
-            ) : (
+          <Step who={pending.length > 0 && isOwner ? "you" : "nobody"}>
+            {pending.length === 0
+              ? "No program waits for approval. One shows here after it signs in for the first time, and it can do nothing until the owner approves it."
+              : `${pending.length === 1 ? "1 program waits" : `${pending.length} programs wait`} for ${isOwner ? "your approval" : "the owner's approval"}, and can do nothing until then.${isOwner ? " Approve only a program you started yourself, and check where it sends you back to." : ""}`}
+          </Step>
+          {pending.length > 0 ? (
+            <Section title="Waiting for approval" count={pending.length}>
               <ul className="grid gap-3">{pending.map(row)}</ul>
-            )}
-          </Section>
-          <Section title="Approved" count={approved.length}>
-            {approved.length === 0 ? (
-              <Empty>No program is connected yet.</Empty>
-            ) : (
-              <ul className="grid gap-3">{approved.map(row)}</ul>
-            )}
-          </Section>
-          {revoked.length > 0 ? (
-            <Section title="Removed" count={revoked.length}>
-              <ul className="grid gap-3">{revoked.map(row)}</ul>
             </Section>
           ) : null}
         </>
@@ -171,7 +162,7 @@ export function Connections() {
       <Section title="Connect an agent">
         <Card>
           <p className="text-body text-muted-foreground">
-            Add this address as a remote MCP server in your agent. It is the only connection the agent needs. The agent signs you in, then waits above until the owner approves it.
+            Add this address as a remote MCP server in your agent. It is the only connection the agent needs. The agent signs you in, then waits here until the owner approves it.
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <code className="min-w-0 flex-1 truncate rounded-lg bg-(--tint) px-3 py-2 font-mono text-caption">{mcpAddress}</code>
@@ -181,6 +172,21 @@ export function Connections() {
           </div>
         </Card>
       </Section>
+
+      {clients === undefined ? null : (
+        <>
+          <Section title="Approved" count={approved.length}>
+            {approved.length === 0 ? <Empty>No program is connected yet. Connect one with the address above; it then waits for the owner's approval.</Empty> : <ul className="grid gap-3">{approved.map(row)}</ul>}
+          </Section>
+          {revoked.length > 0 ? (
+            <div className="mt-10">
+              <Fold title="Removed" count={revoked.length}>
+                <ul className="grid gap-3">{revoked.map(row)}</ul>
+              </Fold>
+            </div>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

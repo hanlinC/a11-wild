@@ -1,7 +1,7 @@
 import type { AdResult, PackSummary } from "@a11-wild/shared";
 import { Link } from "react-router";
 import { Loading, OutLink } from "@/components/loading";
-import { Card, Empty, PageHeader, Section } from "@/components/page";
+import { Card, Empty, Fold, PageHeader, Section, Step } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
@@ -25,14 +25,19 @@ export function Packs() {
     <>
       <PageHeader
         title="Packs"
-        lead="What each client received: the ads under their names, version by version, and the results they sent back. A pack's private link is shown once, when your agent publishes it; ask your agent for a new link to replace it."
+        lead="What each client received: the ads under their names, the files they sent back and the results typed in from them."
       />
       {packs === undefined ? (
         <Loading error={error} />
       ) : packs.length === 0 ? (
-        <Empty>No pack yet. A pack is made from a done batch, after you approve its Meta text.</Empty>
+        <Empty>No pack yet. Your agent makes one from a done batch, after you approve its Meta text.</Empty>
       ) : (
-        packs.map((pack) => <PackCard key={pack.pack.id} pack={pack} />)
+        <>
+          <Step who="nobody">This page is for reading. What a client asks for waits on the Clients page, and a client's link is made there.</Step>
+          {packs.map((pack) => (
+            <PackCard key={pack.pack.id} pack={pack} />
+          ))}
+        </>
       )}
     </>
   );
@@ -75,16 +80,15 @@ function PackCard({ pack }: { pack: PackSummary }) {
           </div>
         ) : null}
         {older.length > 0 ? (
-          <div>
-            <h3 className="mb-2 text-body font-medium">Earlier versions</h3>
-            <ul className="space-y-1 text-caption text-muted-foreground">
+          <Fold title="Earlier versions" count={older.length}>
+            <ul className="space-y-1 px-2 text-caption text-muted-foreground">
               {older.map((version) => (
                 <li key={version.version}>
                   Version {version.version}, {when(version.at)}: <span className="break-all font-mono">{version.ads.map((ad) => ad.adName).join(", ")}</span>
                 </li>
               ))}
             </ul>
-          </div>
+          </Fold>
         ) : null}
         <div>
           <h3 className="mb-2 text-body font-medium">Files the client sent</h3>
