@@ -1,6 +1,7 @@
-import { type MetaVariant, type PackView, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
-import { useCallback, useState } from "react";
+import { CHANGE_KINDS, COMMENT_MAX_CHARS, type ChangeKind, type ChangeRequest, type MetaVariant, type PackFormat, type PackView, type ShownComment, UPLOAD_MAX_BYTES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
+import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { useParams } from "react-router";
+import { FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
 import { Card, Section } from "@/components/page";
 import { Banner, BannerTitle } from "@/components/ui/banner";
@@ -10,18 +11,22 @@ import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
 
 const STAGES = { tof: "Top of funnel", mof: "Middle of funnel", bof: "Bottom of funnel" } as const;
+const COMMENT_MAX = COMMENT_MAX_CHARS;
 const ACCEPT = ".jpg,.jpeg,.png,.csv";
 const BY_ENDING: Record<string, UploadType> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", csv: "text/csv" };
 
 /** The type of a file by its ending: a browser names the type of a CSV in several ways, or not at all. */
 export const typeOf = (name: string): UploadType | undefined => BY_ENDING[name.split(".").at(-1)?.toLowerCase() ?? ""];
 
-/** A client's pack: the ads, the text for Meta, why each ad, the launch plan, and a place to send results. No sign-in. */
-export function Pack() {
-  const { token = "" } = useParams();
-  const load = useCallback(() => api.pack(token), [token]);
-  const { value: pack, error } = useLoad(load);
+export const CHANGE_KIND: Record<ChangeKind, string> = { words: "The words", picture: "The picture", offer: "The offer or price", other: "Something else" };
+/** Where a change request stands, as the client reads it. */
+export const changeStatus = (change: ChangeRequest): string =>
+  change.status === "received" ? "Received" : change.status === "in_work" ? "In work" : change.status === "declined" ? "Not done" : change.version ? `Done in version ${change.version}` : "Done";
+/** The address of the API for one pack behind a pack link. */
+export const packDoor = (token: string): string => `/api/pack/${encodeURIComponent(token)}`;
 
+/** The frame of a page a link opens: no sign-in, no menu, nothing of the studio but its name. */
+export function LinkPage({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh">
       <header className="border-b border-border">
@@ -29,45 +34,73 @@ export function Pack() {
           <span className="text-title font-semibold tracking-tight">a11 studio</span>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl px-5 py-10">
-        {pack === undefined ? <Loading error={error && "This link does not open a pack. Ask your contact at the studio for the current link."} /> : <PackBody pack={pack} token={token} />}
-      </main>
+      <main className="mx-auto max-w-4xl px-5 py-10">{children}</main>
     </div>
   );
 }
 
-function PackBody({ pack, token }: { pack: PackView; token: string }) {
+/** A client's pack: the ads, the text for Meta, why each ad, the launch plan, and a place to write and to send results. No sign-in. */
+export function Pack() {
+  const { token = "" } = useParams();
+  const load = useCallback(() => api.pack(token), [token]);
+  const { value: pack, error } = useLoad(load);
+
+  return (
+    <LinkPage>
+      {pack === undefined ? (
+        <Loading error={error && "This link does not open a pack. Ask your contact at the studio for the current link."} />
+      ) : (
+        <>
+          <header className="mb-8 max-w-2xl">
+            <h1 className="flex flex-wrap items-baseline gap-x-3 text-display font-semibold tracking-tight">
+              {pack.brand}
+              {pack.example ? <span className="text-caption font-normal tracking-normal text-muted-foreground">Example</span> : null}
+            </h1>
+            <PackLead pack={pack} />
+          </header>
+          <PackBody pack={pack} door={packDoor(token)} />
+        </>
+      )}
+    </LinkPage>
+  );
+}
+
+export function PackLead({ pack }: { pack: PackView }) {
+  return (
+    <p className="mt-2 text-body text-muted-foreground">
+      {pack.ads.length} {pack.ads.length === 1 ? "ad" : "ads"} for {pack.product}. Version {pack.version}, {when(pack.at)}.
+    </p>
+  );
+}
+
+type Shown = ShownComment & { at?: string };
+
+/**
+ * One pack as a link shows it. The ads come first. An example shows example comments and takes nothing:
+ * it has no box to write in and no place to send a file, and the server refuses both whatever a page sends.
+ */
+export function PackBody({ pack, door }: { pack: PackView; door: string }) {
+  const [added, setAdded] = useState<Shown[]>([]);
+  const example = pack.example;
+  const comments: Shown[] = example ? example.comments : [...(pack.comments ?? []), ...added];
+  const add = (comment: Shown) => setAdded((all) => [...all, comment]);
+
   return (
     <>
-      <header className="mb-8 max-w-2xl">
-        <h1 className="text-display font-semibold tracking-tight">{pack.brand}</h1>
-        <p className="mt-2 text-body text-muted-foreground">
-          {pack.ads.length} {pack.ads.length === 1 ? "ad" : "ads"} for {pack.product}. Version {pack.version}, {when(pack.at)}.
-        </p>
-      </header>
-      <Section title="Launch plan">
-        <Card>
-          <ol className="list-decimal space-y-1 pl-5 text-body">
-            {pack.launchPlan.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </Card>
-      </Section>
-      {pack.ads.map((ad) => (
+      {pack.ads.map((ad, index) => (
         <Section key={ad.adName} title={ad.stage ? STAGES[ad.stage] : "Ad"}>
           <Card className="grid gap-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
             <figure>
               <a href={ad.viewUrl} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">
                 <img src={ad.viewUrl} alt={`The ad ${ad.adName}`} referrerPolicy="no-referrer" className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
               </a>
-              <figcaption className="mt-2 text-caption text-muted-foreground">Open the picture to save it at full size.</figcaption>
+              <Downloads door={door} ad={index} adName={ad.adName} formats={ad.formats} />
             </figure>
             <div className="min-w-0 space-y-5">
               <Copyable label="Ad name" text={ad.adName} mono />
               <p className="text-body">{ad.why}</p>
-              {ad.meta.variants.map((variant, index) => (
-                <MetaText key={index === 0 ? "a" : "b"} name={index === 0 ? "Text A" : "Text B"} variant={variant} />
+              {ad.meta.variants.map((variant, variantIndex) => (
+                <MetaText key={variantIndex === 0 ? "a" : "b"} name={variantIndex === 0 ? "Text A" : "Text B"} variant={variant} />
               ))}
               {ad.claims.length > 0 ? (
                 <div>
@@ -83,14 +116,182 @@ function PackBody({ pack, token }: { pack: PackView; token: string }) {
                   </ul>
                 </div>
               ) : null}
+              <Changes requests={comments.filter((comment) => comment.adName === ad.adName && comment.change)} example={example !== undefined} />
+              {example ? null : <AskForChange door={door} adName={ad.adName} onSent={add} />}
             </div>
           </Card>
         </Section>
       ))}
-      <Section title="Send your results">
-        <Results token={token} />
+      {example ? <p className="mt-4 text-caption text-muted-foreground">{example.note}</p> : null}
+      <Section title="Launch plan">
+        <Card>
+          <ol className="list-decimal space-y-1 pl-5 text-body">
+            {pack.launchPlan.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </Card>
       </Section>
+      <Section title={example ? "Example comments" : "Comments"}>
+        <Comments comments={comments.filter((comment) => !comment.change)} {...(example ? {} : { door, onSent: add })} />
+      </Section>
+      {example ? null : (
+        <Section title="Send your results">
+          <Results door={door} />
+        </Section>
+      )}
     </>
+  );
+}
+
+/** One button for each format the ad comes in. The address is asked for at the click, so a page left open for a day still downloads. */
+function Downloads({ door, ad, adName, formats }: { door: string; ad: number; adName: string; formats: PackFormat[] }) {
+  const [failed, setFailed] = useState(false);
+  async function download(format: PackFormat) {
+    setFailed(false);
+    try {
+      window.location.assign(await api.packDownload(door, ad, format));
+    } catch {
+      setFailed(true);
+    }
+  }
+  return (
+    <figcaption className="mt-3 flex flex-wrap items-center gap-2">
+      {formats.map((format) => (
+        <Button key={format} variant="secondary" size="compact" onClick={() => void download(format)} aria-label={`Download ${adName} as ${format.toUpperCase()}`}>
+          Download {format.toUpperCase()}
+        </Button>
+      ))}
+      {failed ? <span className="text-caption text-muted-foreground">The download did not start. Try again in a moment.</span> : null}
+    </figcaption>
+  );
+}
+
+/** The change requests on one ad, each with where it stands. */
+function Changes({ requests, example }: { requests: Shown[]; example: boolean }) {
+  if (requests.length === 0) return null;
+  return (
+    <div>
+      <h3 className="mb-1 text-caption font-medium text-muted-foreground">{example ? "Example change request" : "Change requests"}</h3>
+      <ul className="space-y-2">
+        {requests.map((request, index) => (
+          <li key={`${request.at ?? "example"}-${index}`} className="rounded-lg border border-border p-3 text-caption">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-medium">{request.change ? CHANGE_KIND[request.change.what] : null}</span>
+              <span className="text-muted-foreground">{request.change ? changeStatus(request.change) : null}</span>
+            </div>
+            <p className="mt-1 whitespace-pre-wrap break-words text-body">{request.text}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AskForChange({ door, adName, onSent }: { door: string; adName: string; onSent: (comment: Shown) => void }) {
+  const [open, setOpen] = useState(false);
+  const [what, setWhat] = useState<ChangeKind>("words");
+  const [text, setText] = useState("");
+  const [state, setState] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  if (!open) {
+    return (
+      <Button variant="secondary" size="compact" onClick={() => setOpen(true)}>
+        Ask for a change
+      </Button>
+    );
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setState({ busy: true });
+    try {
+      onSent(await api.packComment(door, { text, adName, change: what }));
+      setText("");
+      setOpen(false);
+      setState({ busy: false });
+    } catch (cause) {
+      setState({ busy: false, error: describeError(cause) });
+    }
+  }
+  return (
+    <form onSubmit={(event) => void submit(event)} className="space-y-3 rounded-lg border border-border p-4">
+      <label className="block text-caption text-muted-foreground">
+        What should change
+        <select value={what} onChange={(event) => setWhat(event.target.value as ChangeKind)} className={`${FIELD} mt-1 text-foreground`}>
+          {CHANGE_KINDS.map((kind) => (
+            <option key={kind} value={kind}>
+              {CHANGE_KIND[kind]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-caption text-muted-foreground">
+        The change, in one or two sentences
+        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={COMMENT_MAX} required className={`${FIELD} mt-1 text-foreground`} />
+      </label>
+      {state.error ? (
+        <Banner status="error">
+          <BannerTitle>{state.error}</BannerTitle>
+        </Banner>
+      ) : null}
+      <div className="flex gap-2">
+        <Button type="submit" size="compact" disabled={state.busy || text.trim() === ""}>
+          Send the request
+        </Button>
+        <Button type="button" variant="secondary" size="compact" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** The comments on the pack. With no door it only shows them: that is the example. */
+function Comments({ comments, door, onSent }: { comments: Shown[]; door?: string; onSent?: (comment: Shown) => void }) {
+  const [text, setText] = useState("");
+  const [state, setState] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!door || !onSent) return;
+    setState({ busy: true });
+    try {
+      onSent(await api.packComment(door, { text }));
+      setText("");
+      setState({ busy: false });
+    } catch (cause) {
+      setState({ busy: false, error: describeError(cause) });
+    }
+  }
+  return (
+    <Card>
+      {comments.length === 0 ? (
+        <p className="text-caption text-muted-foreground">No comment yet.</p>
+      ) : (
+        <ul className="space-y-3">
+          {comments.map((comment, index) => (
+            <li key={`${comment.at ?? "example"}-${index}`}>
+              <p className="whitespace-pre-wrap break-words text-body">{comment.text}</p>
+              <p className="text-caption text-muted-foreground">{[comment.adName ? `On ${comment.adName}` : "On the pack", comment.at ? when(comment.at) : undefined].filter(Boolean).join(" · ")}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {door ? (
+        <form onSubmit={(event) => void submit(event)} className="mt-4 space-y-3">
+          <label className="block text-caption text-muted-foreground">
+            Write a comment to the studio
+            <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={COMMENT_MAX} required className={`${FIELD} mt-1 text-foreground`} />
+          </label>
+          {state.error ? (
+            <Banner status="error">
+              <BannerTitle>{state.error}</BannerTitle>
+            </Banner>
+          ) : null}
+          <Button type="submit" size="compact" disabled={state.busy || text.trim() === ""}>
+            Send the comment
+          </Button>
+        </form>
+      ) : null}
+    </Card>
   );
 }
 
@@ -135,7 +336,7 @@ function Copyable({ label, text, mono = false }: { label: string; text: string; 
 
 type Sent = { name: string; state: "sending" | "sent" | "failed"; message?: string };
 
-function Results({ token }: { token: string }) {
+function Results({ door }: { door: string }) {
   const [files, setFiles] = useState<Sent[]>([]);
 
   async function send(list: FileList | null) {
@@ -152,7 +353,7 @@ function Results({ token }: { token: string }) {
       }
       set({ name: file.name, state: "sending" });
       try {
-        await api.sendResult(token, file, type);
+        await api.sendResult(door, file, type);
         set({ name: file.name, state: "sent" });
       } catch (cause) {
         set({ name: file.name, state: "failed", message: describeError(cause) });

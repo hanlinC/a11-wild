@@ -12,6 +12,7 @@ import { Concepts } from "@/routes/concepts";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
 import { Outreach } from "@/routes/outreach";
+import { Client } from "@/routes/client";
 import { Pack } from "@/routes/pack";
 import { Packs } from "@/routes/packs";
 import { Prospect } from "@/routes/prospect";
@@ -28,6 +29,7 @@ export function App() {
   return (
     <Routes>
       <Route path="c/:token" element={<Pack />} />
+      <Route path="client/:token" element={<Client />} />
       <Route path="*" element={<Dashboard />} />
     </Routes>
   );

@@ -1,4 +1,4 @@
-import type { OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { ChangeKind, ChangeStatus, ClientLink, ClientView, OwnerClient, PackComment, PackFormat, ShownComment, UploadTable, OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -94,16 +94,30 @@ export const api = {
   packs: async () => (await request<{ packs: PackSummary[] }>("/api/packs")).packs,
   /** A client's pack, by the token of its private link. It needs no sign-in. */
   pack: (token: string) => request<PackView>(`/api/pack/${encodeURIComponent(token)}`),
-  /** Sends one results file: the studio signs a link for this file, and the file goes straight to the store. */
-  sendResult: async (token: string, file: File, type: string) => {
-    const { putUrl } = await request<{ putUrl: string }>(`/api/pack/${encodeURIComponent(token)}/uploads`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: file.name, type, bytes: file.size }),
-    });
+  /** Every pack of one client, by the token of the client's private link. It needs no sign-in. */
+  client: (token: string) => request<ClientView>(`/api/client/${encodeURIComponent(token)}`),
+  /** An address that downloads one ad, made at the click and good for a few minutes. */
+  packDownload: async (door: string, ad: number, format: PackFormat) => (await request<{ url: string }>(`${door}/download/${ad}?format=${format}`)).url,
+  packComment: async (door: string, comment: { text: string; adName?: string; change?: ChangeKind }) => (await send<{ comment: ShownComment & { at: string } }>(`${door}/comments`, comment)).comment,
+  /**
+   * Sends one results file: the studio signs an address for this file, the file goes straight to the store,
+   * and the studio then reads it and says whether it kept it.
+   */
+  sendResult: async (door: string, file: File, type: string) => {
+    const { putUrl, upload } = await send<{ putUrl: string; upload: { id: string } }>(`${door}/uploads`, { name: file.name, type, bytes: file.size });
     const sent = await fetch(putUrl, { method: "PUT", headers: { "content-type": type }, body: file, referrerPolicy: "no-referrer" });
     if (!sent.ok) throw new ApiError(sent.status, "upload_failed", "The file did not arrive. Try again in a moment.");
+    const { state } = await send<{ state: "checked" | "refused" | "waiting" }>(`${door}/uploads/${encodeURIComponent(upload.id)}/done`, {});
+    if (state === "refused") throw new ApiError(400, "refused", "This file is not the picture or the CSV its name says. Send a JPEG or PNG screenshot, or a CSV export.");
   },
+  /** The owner's page of clients: each brand with its link, its packs, and what its client wrote and sent. */
+  portal: async () => (await request<{ clients: OwnerClient[] }>("/api/portal")).clients,
+  /** Makes, replaces or turns off a client's link. A new link is in the answer once. */
+  clientLink: (brandId: string, action: "make" | "replace" | "off") => send<{ url?: string; link?: ClientLink }>(`/api/portal/${encodeURIComponent(brandId)}/link`, { action }),
+  markComment: async (packId: string, id: string, mark: { hidden: boolean } | { status: ChangeStatus }) =>
+    (await send<{ comment: PackComment }>(`/api/packs/${encodeURIComponent(packId)}/comments/${encodeURIComponent(id)}`, mark)).comment,
+  /** A client's CSV as a table of text. */
+  uploadTable: (packId: string, id: string) => request<UploadTable>(`/api/packs/${encodeURIComponent(packId)}/uploads/${encodeURIComponent(id)}/table`),
   logout: () => post<{ redirect: string }>("/auth/logout"),
 };
 

@@ -79,6 +79,7 @@ describe("A client's pack page", () => {
       const url = String(input);
       sent.push({ url, method: init?.method, type: new Headers(init?.headers).get("content-type") });
       if (url === put) return new Response(null, { status: 200 });
+      if (url.endsWith("/done")) return Response.json({ state: "checked" });
       if (init?.method === "POST") return Response.json({ upload: { id: "u", name: "week-1.csv" }, putUrl: put });
       return Response.json(view);
     });
@@ -90,9 +91,172 @@ describe("A client's pack page", () => {
     expect(sent.slice(1)).toEqual([
       { url: `/api/pack/${TOKEN}/uploads`, method: "POST", type: "application/json" },
       { url: put, method: "PUT", type: "text/csv" },
+      // The page tells the studio the file is sent, so the studio reads it at once.
+      { url: `/api/pack/${TOKEN}/uploads/u/done`, method: "POST", type: "application/json" },
     ]);
   });
 
+  it("says so when the studio did not keep a file", async () => {
+    stubApi({
+      [`GET /api/pack/${TOKEN}`]: () => ({ body: view }),
+      [`POST /api/pack/${TOKEN}/uploads`]: () => ({ body: { upload: { id: "u", name: "shot.png" }, putUrl: "/put" } }),
+      "PUT /put": () => ({ body: {} }),
+      [`POST /api/pack/${TOKEN}/uploads/u/done`]: () => ({ body: { state: "refused" } }),
+    });
+    const user = userEvent.setup();
+    open();
+    await user.upload(await screen.findByLabelText("Choose results files"), new File(["MZ"], "shot.png", { type: "image/png" }));
+    expect(await screen.findByText(/shot\.png: This file is not the picture or the CSV its name says/)).toBeInTheDocument();
+  });
+
+  it("downloads an ad through an address it asks for at the click", async () => {
+    const calls = stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }), [`GET /api/pack/${TOKEN}/download/0?format=png`]: () => ({ body: { url: "https://pictures.example/final-1.png?download=1" } }) });
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    const user = userEvent.setup();
+    open();
+    await user.click(await screen.findByRole("button", { name: "Download a11_W47_wongi_b01_tof_c1_v2 as PNG" }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://pictures.example/final-1.png?download=1"));
+    expect(calls).toHaveLength(2);
+  });
+
+  it("takes a comment on the pack and shows it, as text and never as markup", async () => {
+    const sent: unknown[] = [];
+    stubApi({
+      [`GET /api/pack/${TOKEN}`]: () => ({ body: { ...view, comments: [{ text: "<b>Earlier</b> comment", at: "2026-11-22T10:00:00.000Z" }] } }),
+      [`POST /api/pack/${TOKEN}/comments`]: (body) => {
+        sent.push(body);
+        return { body: { comment: { text: "We love these.", at: "2026-11-22T12:00:00.000Z" } } };
+      },
+    });
+    const user = userEvent.setup();
+    open();
+    expect(await screen.findByText("<b>Earlier</b> comment")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Write a comment to the studio"), "We love these.");
+    await user.click(screen.getByRole("button", { name: "Send the comment" }));
+    expect(await screen.findByText("We love these.")).toBeInTheDocument();
+    expect(sent).toEqual([{ text: "We love these." }]);
+    expect(screen.getByLabelText("Write a comment to the studio")).toHaveValue("");
+  });
+
+  it("asks for a change to one ad and shows where the request stands", async () => {
+    const sent: unknown[] = [];
+    const adName = view.ads[0]!.adName;
+    stubApi({
+      [`GET /api/pack/${TOKEN}`]: () => ({ body: { ...view, comments: [{ text: "A warmer photo, please.", adName, change: { what: "picture", status: "done", version: 2 }, at: "2026-11-21T10:00:00.000Z" }] } }),
+      [`POST /api/pack/${TOKEN}/comments`]: (body) => {
+        sent.push(body);
+        return { body: { comment: { text: "Make the price larger.", adName, change: { what: "offer", status: "received" }, at: "2026-11-22T12:00:00.000Z" } } };
+      },
+    });
+    const user = userEvent.setup();
+    open();
+    expect(await screen.findByText("Done in version 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ask for a change" }));
+    await user.selectOptions(screen.getByLabelText("What should change"), "The offer or price");
+    await user.type(screen.getByLabelText("The change, in one or two sentences"), "Make the price larger.");
+    await user.click(screen.getByRole("button", { name: "Send the request" }));
+    expect(await screen.findByText("Make the price larger.")).toBeInTheDocument();
+    expect(screen.getByText("Received")).toBeInTheDocument();
+    expect(sent).toEqual([{ text: "Make the price larger.", adName, change: "offer" }]);
+    // A request is not listed again among the comments on the pack.
+    expect(screen.getByText("No comment yet.")).toBeInTheDocument();
+  });
+
+  it("refuses to send and says why when the studio refuses a comment", async () => {
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }), [`POST /api/pack/${TOKEN}/comments`]: () => ({ status: 400, body: { error: "refused", message: "This pack holds 50 comments, which is its fill." } }) });
+    const user = userEvent.setup();
+    open();
+    await user.type(await screen.findByLabelText("Write a comment to the studio"), "One more.");
+    await user.click(screen.getByRole("button", { name: "Send the comment" }));
+    expect(await screen.findByText("This pack holds 50 comments, which is its fill.")).toBeInTheDocument();
+  });
+});
+
+describe("The example page", () => {
+  const example: PackView = {
+    ...view,
+    example: {
+      note: "Wongi is not a client of a11 studio. We used their product, as it is sold today, to show what a client receives.",
+      comments: [
+        { text: "These are exactly our tone." },
+        { text: "Could the price be larger?", adName: view.ads[0]!.adName, change: { what: "offer", status: "done", version: 2 } },
+      ],
+    },
+  };
+
+  it("shows the ads first, a quiet tag and line, and example comments", async () => {
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: example }) });
+    open();
+    expect(await screen.findByRole("heading", { level: 1, name: /Wongi\s*Example/ })).toBeInTheDocument();
+    // Nothing sits above the first ad except the title: the note comes after the pictures.
+    const picture = screen.getByRole("img", { name: /The ad/ });
+    const note = screen.getByText(/is not a client of a11 studio/);
+    expect(picture.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Example comments" })).toBeInTheDocument();
+    expect(screen.getByText("These are exactly our tone.")).toBeInTheDocument();
+    expect(screen.getByText("Example change request")).toBeInTheDocument();
+    expect(screen.getByText("Done in version 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download .* as PNG/ })).toBeInTheDocument();
+  });
+
+  it("has nothing to write in and nowhere to send a file", async () => {
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: example }) });
+    open();
+    await screen.findByRole("heading", { name: "Example comments" });
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ask for a change" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Send/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Choose results files")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Send your results" })).not.toBeInTheDocument();
+  });
+});
+
+describe("A client's page", () => {
+  const CLIENT = "k".repeat(43);
+  const openClient = () =>
+    render(
+      <MemoryRouter initialEntries={[`/client/${CLIENT}`]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+  it("shows every pack, newest first, and writes to the pack the comment is on", async () => {
+    const sent: unknown[] = [];
+    const calls = stubApi({
+      [`GET /api/client/${CLIENT}`]: () => ({ body: { brand: "Wongi", packs: [{ ...view, ref: "r".repeat(24), product: "Prawn crackers", comments: [] }, { ...view, ref: "s".repeat(24), version: 1, comments: [], ads: [{ ...view.ads[0]!, adName: "a11_W46_wongi_b01_tof_c1_v1" }] }] } }),
+      [`POST /api/client/${CLIENT}/packs/${"s".repeat(24)}/comments`]: (body) => {
+        sent.push(body);
+        return { body: { comment: { text: "Second pack.", at: "2026-11-22T12:00:00.000Z" } } };
+      },
+    });
+    const user = userEvent.setup();
+    openClient();
+    expect(await screen.findByRole("heading", { level: 1, name: "Wongi" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 2 }).slice(0, 1).map((heading) => heading.textContent)).toEqual(["Prawn crackers"]);
+    const boxes = screen.getAllByLabelText("Write a comment to the studio");
+    expect(boxes).toHaveLength(2);
+    await user.type(boxes[1]!, "Second pack.");
+    await user.click(screen.getAllByRole("button", { name: "Send the comment" })[1]!);
+    expect(await screen.findByText("Second pack.")).toBeInTheDocument();
+    expect(sent).toEqual([{ text: "Second pack." }]);
+    // The page never asks who is signed in.
+    expect(calls[0]).toBe(`GET /api/client/${CLIENT}`);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("is a page also before the first pack, and a wrong link opens nothing", async () => {
+    stubApi({ [`GET /api/client/${CLIENT}`]: () => ({ body: { brand: "Wongi", packs: [] } }) });
+    const { unmount } = openClient();
+    expect(await screen.findByText("Your first pack appears here when it is ready.")).toBeInTheDocument();
+    unmount();
+    stubApi({});
+    openClient();
+    expect(await screen.findByText(/This link does not open a page/)).toBeInTheDocument();
+  });
+});
+
+describe("A results file", () => {
   it("refuses a file of another kind before it sends anything", async () => {
     const calls = stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
     const user = userEvent.setup({ applyAccept: false });
