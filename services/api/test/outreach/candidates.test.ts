@@ -11,7 +11,14 @@ describe("why a draft cannot be sent, as the owner reads it", () => {
       "The pack is drawn 67% taller than in its photo. The limit is 2%.",
     );
     expect(plainReason({ tool: "pack_check", note: "Pack 2: render H/W 1.961 (708 x 361 px); packshot H/W 2.152; difference -8.8%; FAIL at 2%" })).toBe(
-      "Pack 2: The pack is drawn 9% wider than in its photo. The limit is 2%.",
+      "Pack 2: The pack is drawn 10% wider than in its photo. The limit is 2%.",
+    );
+  });
+
+  it("gives the width against the photo's width, not the fall of the tool's ratio", () => {
+    // Height over width 20% under the photo's is a pack a quarter wider at the same height.
+    expect(plainReason({ tool: "pack_check", note: "render H/W 0.800 (400 x 500 px); packshot H/W 1.000; difference -20.0%; FAIL at 2%" })).toBe(
+      "The pack is drawn 25% wider than in its photo. The limit is 2%.",
     );
   });
 

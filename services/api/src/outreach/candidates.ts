@@ -20,7 +20,7 @@ interface Deps {
   };
 }
 
-const percent = (value: string): string => `${Math.max(1, Math.round(Math.abs(Number(value))))}%`;
+const percent = (value: number): string => `${Math.max(1, Math.round(Math.abs(value)))}%`;
 
 /**
  * What a pixel tool measured, as the owner reads it. The tool's own line is for the agent: it holds pixels and ratios.
@@ -31,11 +31,13 @@ export function plainReason({ note, tool }: Pick<CheckItem, "note" | "tool">): s
   const pack = /^(Pack \d+: )?/.exec(note)?.[1] ?? "";
   const limit = /FAIL at (\d+(?:\.\d+)?)%/.exec(note)?.[1];
   const allowed = limit ? ` The limit is ${limit}%.` : "";
-  // Height over width: under the photo's, the pack is drawn too wide; over it, too tall.
-  const shape = /difference ([+-]\d+(?:\.\d+)?)%/.exec(note)?.[1];
-  if (tool === "pack_check" && shape) return `${pack}The pack is drawn ${percent(shape)} ${shape.startsWith("-") ? "wider" : "taller"} than in its photo.${allowed}`;
+  // The tool gives height over width against the photo's. Over it, the pack is that much too tall. Under it, the pack is too wide,
+  // and by more than the number says: 20% under is a quarter wider at the same height.
+  const shape = Number(/difference ([+-]\d+(?:\.\d+)?)%/.exec(note)?.[1]);
+  if (tool === "pack_check" && shape > 0) return `${pack}The pack is drawn ${percent(shape)} taller than in its photo.${allowed}`;
+  if (tool === "pack_check" && shape < 0 && shape > -100) return `${pack}The pack is drawn ${percent(100 / (1 + shape / 100) - 100)} wider than in its photo.${allowed}`;
   const cap = /cap centre [\d.]+ px (left|right) of the body centre \((\d+(?:\.\d+)?)%/.exec(note);
-  if (tool === "cap_check" && cap) return `${pack}The cap sits ${percent(cap[2]!)} to the ${cap[1]} of the middle of the pack.${allowed}`;
+  if (tool === "cap_check" && cap) return `${pack}The cap sits ${percent(Number(cap[2]))} to the ${cap[1]} of the middle of the pack.${allowed}`;
   return note;
 }
 
