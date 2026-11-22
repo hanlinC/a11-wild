@@ -172,6 +172,25 @@ describe("pack_update", () => {
     expect(kept.versions[0].ads[1].imageId).toBe("final-2");
   });
 
+  it("keeps a change request with its ad when the change gives the ad a new name", async () => {
+    const { link } = (await publish()).value;
+    const token = new URL(link).pathname.split("/").at(-1) as string;
+    const asked = await studio.app.request(`/api/pack/${token}/comments`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "A warmer photo, please.", adName: "a11_W47_wongi_b01_mof_c2_v1", change: "picture" }),
+    });
+    expect(asked.status).toBe(200);
+    delivered["idea-2"] = "final-2b";
+    await callTool(studio, "pack_update", { ...rules, batchId });
+    // The ad is now ..._c2_v2. The request is shown on it, and what is stored keeps the name the client saw.
+    expect((await json(await open(link))).comments).toMatchObject([{ text: "A warmer photo, please.", adName: "a11_W47_wongi_b01_mof_c2_v2", change: { what: "picture", status: "received" } }]);
+    expect((await studio.services.comments.all(batchId))[0]).toMatchObject({ adName: "a11_W47_wongi_b01_mof_c2_v1" });
+    // Back on version 1, the request is on the ad's first name again.
+    await callTool(studio, "pack_restore", { batchId, version: 1 });
+    expect((await json(await open(link))).comments).toMatchObject([{ adName: "a11_W47_wongi_b01_mof_c2_v1" }]);
+  });
+
   it("is undone by pack_restore, which deletes nothing", async () => {
     const { link } = (await publish()).value;
     delivered["idea-1"] = "final-1b";

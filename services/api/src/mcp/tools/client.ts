@@ -121,7 +121,7 @@ export function clientTools({ pack, packs, clients, comments, uploads, brands }:
               product: (await pack.viewOf(one, version)).product,
               version: version.version,
               ads: version.ads.map((ad) => ad.adName),
-              comments: await comments.all(one.id),
+              comments: await pack.onCurrentAds(one, version, await comments.all(one.id)),
               uploads: await Promise.all((await uploads.list(one.id)).map(async (file) => {
             const { key: _key, ...upload } = file;
             return { ...upload, ...(await uploads.forAgent(file)) };

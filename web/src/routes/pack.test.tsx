@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app";
 import { stubApi } from "@/test-helpers";
-import { typeOf } from "./pack";
+import { changeStatus, typeOf } from "./pack";
 
 const TOKEN = "t".repeat(43);
 const text = { primary: "The skin is the best part. Order yours today.", headline: "The skin, done right", description: "Order the fish skin", cta: "Order Now" as const };
@@ -137,6 +137,17 @@ describe("A client's pack page", () => {
     expect(await screen.findByText("We love these.")).toBeInTheDocument();
     expect(sent).toEqual([{ text: "We love these." }]);
     expect(screen.getByLabelText("Write a comment to the studio")).toHaveValue("");
+  });
+
+  it("still shows a change request whose ad is no longer in the pack", async () => {
+    stubApi({
+      [`GET /api/pack/${TOKEN}`]: () => ({ body: { ...view, comments: [{ text: "Drop the discount line.", adName: "a11_gone_ad_v1", change: { what: "offer", status: "declined" }, at: "2026-11-21T10:00:00.000Z" }] } }),
+    });
+    open();
+    expect(await screen.findByRole("heading", { name: "Earlier change requests" })).toBeInTheDocument();
+    expect(screen.getByText("Drop the discount line.")).toBeInTheDocument();
+    expect(screen.getByText("a11_gone_ad_v1")).toBeInTheDocument();
+    expect(screen.getByText(changeStatus({ what: "offer", status: "declined" }))).toBeInTheDocument();
   });
 
   it("asks for a change to one ad and shows where the request stands", async () => {

@@ -118,7 +118,7 @@ export function clientRoutes(
       all.map(async (one) => {
         const version = await pack.current(one);
         if (!version) return undefined;
-        const [brandId, view, written, sent] = await Promise.all([pack.brandOf(one), pack.viewOf(one, version), comments.all(one.id), uploads.list(one.id)]);
+        const [brandId, view, written, sent] = await Promise.all([pack.brandOf(one), pack.viewOf(one, version), comments.all(one.id).then((all) => pack.onCurrentAds(one, version, all)), uploads.list(one.id)]);
         return {
           brandId,
           createdAt: one.createdAt,
@@ -172,7 +172,8 @@ export function clientRoutes(
     if (!one) return notFound(c);
     try {
       const comment = "hidden" in body.data ? await comments.hide(one.id, c.req.param("id"), body.data.hidden) : await comments.setStatus(one, c.req.param("id"), body.data.status);
-      return c.json({ comment });
+      const version = await pack.current(one);
+      return c.json({ comment: version ? (await pack.onCurrentAds(one, version, [comment]))[0] : comment });
     } catch (error) {
       return refusal(c, error);
     }

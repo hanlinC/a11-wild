@@ -84,6 +84,8 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
   const example = pack.example;
   const comments: Shown[] = example ? example.comments : [...(pack.comments ?? []), ...added];
   const add = (comment: Shown) => setAdded((all) => [...all, comment]);
+  // A request stays with its ad when the ad changes. One whose ad left the pack is still shown, below the ads, so its status is never lost.
+  const earlier = comments.filter((comment) => comment.change && !pack.ads.some((ad) => ad.adName === comment.adName));
 
   return (
     <>
@@ -132,6 +134,13 @@ export function PackBody({ pack, door }: { pack: PackView; door: string }) {
           </ol>
         </Card>
       </Section>
+      {earlier.length > 0 ? (
+        <Section title="Earlier change requests">
+          <Card>
+            <Changes requests={earlier} example={false} earlier />
+          </Card>
+        </Section>
+      ) : null}
       <Section title={example ? "Example comments" : "Comments"}>
         <Comments comments={comments.filter((comment) => !comment.change)} {...(example ? {} : { door, onSent: add })} />
       </Section>
@@ -168,11 +177,11 @@ function Downloads({ door, ad, adName, formats }: { door: string; ad: number; ad
 }
 
 /** The change requests on one ad, each with where it stands. */
-function Changes({ requests, example }: { requests: Shown[]; example: boolean }) {
+function Changes({ requests, example, earlier = false }: { requests: Shown[]; example: boolean; earlier?: boolean }) {
   if (requests.length === 0) return null;
   return (
     <div>
-      <h3 className="mb-1 text-caption font-medium text-muted-foreground">{example ? "Example change request" : "Change requests"}</h3>
+      <h3 className="mb-1 text-caption font-medium text-muted-foreground">{earlier ? "On ads this pack no longer holds" : example ? "Example change request" : "Change requests"}</h3>
       <ul className="space-y-2">
         {requests.map((request, index) => (
           <li key={`${request.at ?? "example"}-${index}`} className="rounded-lg border border-border p-3 text-caption">
@@ -181,6 +190,7 @@ function Changes({ requests, example }: { requests: Shown[]; example: boolean })
               <span className="text-muted-foreground">{request.change ? changeStatus(request.change) : null}</span>
             </div>
             <p className="mt-1 whitespace-pre-wrap break-words text-body">{request.text}</p>
+            {earlier && request.adName ? <p className="mt-1 break-all font-mono text-muted-foreground">{request.adName}</p> : null}
           </li>
         ))}
       </ul>

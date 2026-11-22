@@ -31,7 +31,7 @@ import type { MetaStore } from "../meta/store.js";
 import { MAX_PICTURE_BYTES, type Pictures, pictureType } from "../pictures/store.js";
 import type { ResultStore } from "../results/store.js";
 import type { UploadService } from "../results/uploads.js";
-import { type CommentStore, exampleComment } from "./comments.js";
+import { type CommentStore, exampleComment, onCurrentAds } from "./comments.js";
 import { CARRIED, type PackStore } from "./store.js";
 
 /** How long a picture link of a pack page works. The page asks again when it is opened again. */
@@ -184,6 +184,12 @@ export class PackService {
     if (!(await packs.addVersion(batch.id, version))) throw new Refusal("Another change to this pack was saved at the same moment. Read it with pack_get and send the change again.");
     await packs.save({ ...pack, current: number });
     return version;
+  }
+
+  /** A pack's comments, each under the name its ad has in the version shown. */
+  async onCurrentAds<T extends { adName?: string }>(pack: Pack, version: PackVersion, comments: T[]): Promise<T[]> {
+    if (comments.every((comment) => comment.adName === undefined || version.ads.some((ad) => ad.adName === comment.adName))) return comments;
+    return onCurrentAds(comments, await this.deps.packs.versions(pack.id), version);
   }
 
   /** Makes the link show an earlier version again. Nothing is deleted. */
@@ -345,7 +351,7 @@ export class PackService {
         }),
       ),
       launchPlan: version.launchPlan,
-      ...(pack.example ? { example: pack.example } : { comments: await this.deps.comments.shown(pack.id) }),
+      ...(pack.example ? { example: pack.example } : { comments: await this.onCurrentAds(pack, version, await this.deps.comments.shown(pack.id)) }),
     };
   }
 

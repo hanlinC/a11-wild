@@ -139,6 +139,21 @@ export class CommentService {
   }
 }
 
+/**
+ * A changed ad gets a new name, and a comment keeps the name its ad had when it was written. This gives each comment
+ * the name its ad has now, so a change request stays with its ad in every version. An ad the pack no longer holds keeps its old name.
+ */
+export function onCurrentAds<T extends { adName?: string }>(comments: T[], versions: PackVersion[], current: PackVersion): T[] {
+  const now = new Set(current.ads.map((ad) => ad.adName));
+  const ideaOf = new Map(versions.flatMap((version) => version.ads).map((ad) => [ad.adName, ad.ideaId]));
+  return comments.map((comment) => {
+    if (comment.adName === undefined || now.has(comment.adName)) return comment;
+    const idea = ideaOf.get(comment.adName);
+    const ad = idea === undefined ? undefined : current.ads.find((entry) => entry.ideaId === idea);
+    return ad ? { ...comment, adName: ad.adName } : comment;
+  });
+}
+
 const shown = ({ id: _id, hidden: _hidden, ...comment }: PackComment): ShownComment & { at: string } => comment;
 
 /** Checks a comment the studio wrote for an example: the same shape a client's page shows. */
