@@ -1,7 +1,7 @@
-import type { Attention, AttentionCounts, AttentionKind, AttentionLine, BatchLine, PackComment, Role } from "@a11-wild/shared";
+import type { Attention, AttentionCounts, AttentionKind, AttentionLine, Batch, BatchLine, MetaText, PackComment, Role } from "@a11-wild/shared";
 import type { ClientApprovals } from "../auth/clients.js";
 import type { BatchStore } from "../batch/store.js";
-import { mayWaitForMeta, pageOf, waitOf } from "../batch/waits.js";
+import { type BatchFacts, mayWaitForMeta, mayWaitForPick, pageOf, spendStagesOf, waitOf } from "../batch/waits.js";
 import type { BrandStore } from "../brand/store.js";
 import type { MetaStore } from "../meta/store.js";
 import type { OutreachSequence } from "../outreach/sequence.js";
@@ -10,11 +10,15 @@ import { todayLists } from "../outreach/today.js";
 import type { CommentStore } from "../pack/comments.js";
 import type { PackService } from "../pack/service.js";
 import type { PackStore } from "../pack/store.js";
+import type { PickStore } from "../picks/store.js";
+import { type SpendGate, waitsForYes } from "../spend/gate.js";
 import type { ProposalStore } from "../taste/proposals.js";
 
 export interface AttentionDeps {
-  batches: Pick<BatchStore, "list">;
+  batches: Pick<BatchStore, "list" | "ideas">;
   brands: Pick<BrandStore, "brand" | "product">;
+  gate: Pick<SpendGate, "peek">;
+  picks: Pick<PickStore, "all">;
   meta: Pick<MetaStore, "all">;
   outreach: { store: OutreachStore; sequence: OutreachSequence };
   packs: Pick<PackStore, "all">;
@@ -64,7 +68,7 @@ export class AttentionService {
   }
 
   private async batches(): Promise<BatchLine[]> {
-    const { batches, brands, meta } = this.deps;
+    const { batches, brands } = this.deps;
     // One read for each brand and each product, however many batches share it.
     const brandOf = new Map<string, ReturnType<typeof brands.brand>>();
     const productOf = new Map<string, ReturnType<typeof brands.product>>();
@@ -75,21 +79,33 @@ export class AttentionService {
     };
     return Promise.all(
       (await batches.list()).map(async (batch): Promise<BatchLine> => {
-        const [brand, product, metaWaits] = await Promise.all([
+        const [brand, product, facts] = await Promise.all([
           once(brandOf, batch.brandId, (id) => brands.brand(id)),
           once(productOf, batch.productId, (id) => brands.product(id)),
-          mayWaitForMeta(batch) ? meta.all(batch.id).then(unapproved) : false,
+          this.facts(batch),
         ]);
         const { id, label, kind, state, test, purpose, createdAt } = batch;
         return {
           batch: { id, kind, state, createdAt, ...(label ? { label } : {}), ...(test ? { test } : {}), ...(purpose ? { purpose } : {}) },
           brand: { id: brand.id, name: brand.name },
           product: { id: product.id, name: product.name },
-          ...waitOf(batch, metaWaits),
+          ...waitOf(batch, facts),
           to: pageOf(batch),
         };
       }),
     );
+  }
+
+  /** What only the stores say of a batch. Nothing is read for a batch that cannot wait for the owner at its state. */
+  private async facts(batch: Batch): Promise<BatchFacts> {
+    const { batches, gate, picks, meta } = this.deps;
+    const [estimates, picksLeft, text] = await Promise.all([
+      Promise.all(spendStagesOf(batch).map(async (stage) => ({ stage, estimate: await gate.peek(batch.id, stage) }))),
+      mayWaitForPick(batch) ? Promise.all([batches.ideas(batch.id), picks.all(batch.id)]).then(([ideas, made]) => ideas.filter((idea) => !made.some((pick) => pick.ideaId === idea.id)).length) : 0,
+      mayWaitForMeta(batch) ? meta.all(batch.id).then(textWaits) : false,
+    ]);
+    const spend = estimates.find(({ estimate }) => estimate && waitsForYes(estimate))?.stage;
+    return { ...(spend ? { spend } : {}), picksLeft, meta: text };
   }
 
   private async lines(): Promise<AttentionLine[]> {
@@ -126,9 +142,15 @@ export class AttentionService {
   }
 }
 
-/** Whether an ad has Meta text and no version the owner approved. */
-function unapproved(texts: { ideaId: string; approved?: unknown }[]): boolean {
-  const ideas = new Map<string, boolean>();
-  for (const text of texts) ideas.set(text.ideaId, (ideas.get(text.ideaId) ?? false) || Boolean(text.approved));
-  return [...ideas.values()].some((approved) => !approved);
+/**
+ * Whether an ad has Meta text saved after the owner's last yes to that ad's text. The agent asks him about each version it saves,
+ * so a newer one waits though an older one has his yes. His yes to the older one again, after it, keeps the older one and ends the wait.
+ */
+function textWaits(texts: Pick<MetaText, "ideaId" | "at" | "approved">[]): boolean {
+  const ads = new Map<string, { saved: string; yes: string }>();
+  for (const text of texts) {
+    const ad = ads.get(text.ideaId) ?? { saved: "", yes: "" };
+    ads.set(text.ideaId, { saved: text.at > ad.saved ? text.at : ad.saved, yes: text.approved && text.approved.at > ad.yes ? text.approved.at : ad.yes });
+  }
+  return [...ads.values()].some((ad) => ad.yes < ad.saved);
 }

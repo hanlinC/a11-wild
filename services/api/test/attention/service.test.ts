@@ -1,4 +1,4 @@
-import type { Attention, BatchState, MetaVariant } from "@a11-wild/shared";
+import type { Attention, BatchState, Idea, MetaVariant } from "@a11-wild/shared";
 import { beforeEach, describe, expect, it } from "vitest";
 import { todayPage } from "../../src/outreach/today.js";
 import { savedProduct } from "../helpers/batch.js";
@@ -9,6 +9,8 @@ import { loadProspects, row } from "../outreach/helpers.js";
 const OWNER = "owner@example.com";
 const variant = (headline: string): MetaVariant => ({ primary: "One cake holds ten flavours. Order yours today.", headline, description: "Ten flavours in one cake", cta: "Order Now" });
 const AD = { batchId: "b", imageId: "i", kind: "v1" as const, key: "outreach/x/1.png", why: "The pack on its colour." };
+
+const IDEAS = [1, 2, 3].map((n) => ({ id: `idea-${n}`, title: `Idea ${n}` })) as Idea[];
 
 let studio: Studio;
 let of: Awaited<ReturnType<typeof savedProduct>>;
@@ -22,9 +24,15 @@ const step = () => {
 async function batchAt(state: BatchState, create: { kind?: "v1" | "v2" | "v3"; test?: true; purpose?: "outreach"; label?: string } = {}) {
   const made = await studio.services.batches.create({ kind: "v1", brandId: of.brand.id, productId: of.product.id, format: "static_4x5", createdBy: OWNER, ...create });
   await studio.table.put({ pk: "BATCH", sk: made.id, ...made, state });
+  await studio.services.batches.saveIdeas(made.id, IDEAS, OWNER);
   step();
   return made.id;
 }
+
+/** The first draft gave a price, so the stage has its estimate: three at this price each. */
+const priced = (id: string, stage: "drafts" | "finals", firstUsd: number) => studio.services.gate.price(id, stage, { firstUsd, count: 3 });
+const pick = (id: string, ideaId: string, imageId: string | null = `${ideaId}-d1`) => studio.services.picks.save(id, { ideaId, imageId, ownerSaid: "this one", by: OWNER });
+const first = async () => (await read()).batches[0];
 
 beforeEach(async () => {
   studio = await createStudio();
@@ -68,6 +76,69 @@ describe("what waits for the owner", () => {
 
     expect(batches.map((line) => line.who)).toEqual(["agent", "agent"]);
     expect(counts.studio).toBe(0);
+  });
+
+  it("asks for a pick only while an idea has none, also after the first final is started", async () => {
+    const id = await batchAt("waiting_pick");
+    await pick(id, "idea-1");
+    await pick(id, "idea-2", null);
+    expect(await first()).toMatchObject({ who: "owner", text: "Pick one draft for each idea." });
+
+    // The agent starts the final of the first idea: the batch goes on, and the third idea still has no pick.
+    await studio.table.put({ pk: "BATCH", sk: id, ...(await studio.services.batches.get(id)), state: "finals" });
+    expect(await first()).toMatchObject({ who: "owner", text: "Pick one draft for each idea." });
+
+    await pick(id, "idea-3");
+    expect(await first()).toMatchObject({ who: "agent", text: "The agent makes the finals." });
+    await studio.table.put({ pk: "BATCH", sk: id, ...(await studio.services.batches.get(id)), state: "waiting_pick" });
+    expect(await first()).toMatchObject({ who: "agent", text: "The agent makes the finals." });
+    expect((await read()).counts.studio).toBe(0);
+  });
+
+  it("asks for a yes to a cost of US$1 or more at the step it is asked at, until the owner gives it", async () => {
+    const id = await batchAt("priced", { kind: "v2" });
+    expect((await first())?.who).toBe("agent");
+
+    await priced(id, "drafts", 0.2);
+    expect((await first())?.who).toBe("agent");
+
+    await priced(id, "drafts", 0.4);
+    expect(await first()).toMatchObject({ who: "owner", text: "Say yes or no to the cost of the drafts.", chat: true });
+
+    await studio.services.gate.approve(id, "drafts", { email: OWNER, role: "owner" });
+    expect((await first())?.who).toBe("agent");
+  });
+
+  it("asks for a yes to the cost of the finals, and not for one of a stage the batch has left", async () => {
+    const id = await batchAt("finals");
+    for (const idea of IDEAS) await pick(id, idea.id);
+    await priced(id, "drafts", 0.4);
+    expect((await first())?.who).toBe("agent");
+
+    await priced(id, "finals", 0.5);
+    expect(await first()).toMatchObject({ who: "owner", text: "Say yes or no to the cost of the finals.", chat: true });
+  });
+
+  it("asks again when Meta text is saved after the owner's yes, until he says yes to it or to the older text again", async () => {
+    const id = await batchAt("done", { kind: "v2" });
+    const one = await studio.services.meta.save(id, { ideaId: "idea-1", variants: [variant("A"), variant("B")], by: "agent" });
+    step();
+    await studio.services.meta.approve(id, { ideaId: "idea-1", version: one.version, ownerSaid: "yes", by: OWNER });
+    step();
+    const two = await studio.services.meta.save(id, { ideaId: "idea-1", variants: [variant("C"), variant("D")], by: "agent" });
+    expect(await first()).toMatchObject({ who: "owner", text: "Say yes or no to the Meta text.", chat: true });
+
+    step();
+    await studio.services.meta.approve(id, { ideaId: "idea-1", version: one.version, ownerSaid: "keep the first", by: OWNER });
+    expect((await first())?.who).toBe("nobody");
+
+    step();
+    const three = await studio.services.meta.save(id, { ideaId: "idea-1", variants: [variant("E"), variant("F")], by: "agent" });
+    expect((await first())?.who).toBe("owner");
+    step();
+    await studio.services.meta.approve(id, { ideaId: "idea-1", version: three.version, ownerSaid: "yes", by: OWNER });
+    expect((await first())?.who).toBe("nobody");
+    expect(two.version).toBe(2);
   });
 
   it("waits for the owner's yes to Meta text until one version of each ad has it", async () => {
@@ -131,7 +202,7 @@ describe("what waits for the owner", () => {
   });
 
   it("tells a member nothing of a question the owner is asked in chat", async () => {
-    await batchAt("waiting_spend");
+    await priced(await batchAt("waiting_spend"), "drafts", 0.4);
     expect((await read("member")).batches[0]).not.toHaveProperty("chat");
     expect((await read()).batches[0]).toMatchObject({ who: "owner", chat: true });
   });

@@ -28,6 +28,9 @@ export interface GateState {
   approvedBy?: string;
 }
 
+/** Whether an estimate waits for the owner's yes. */
+export const waitsForYes = (state: GateState): boolean => state.needsYes && !state.approvedBy;
+
 const key = (batchId: string, stage: GateStage) => [`BATCH#${batchId}`, `GATE#${stage}`] as const;
 
 /**
@@ -138,7 +141,7 @@ export class SpendGate {
       }
     }
     const state = this.view(item);
-    if (state.needsYes && !state.approvedBy) {
+    if (waitsForYes(state)) {
       throw new GateError(
         `This batch waits for the owner's yes: ${item.count} ${stage} at about ${showUsd(item.estimateMicro)} in total. Show the owner the count and the estimate. Only the owner can approve.`,
       );
