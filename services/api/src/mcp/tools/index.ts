@@ -56,6 +56,7 @@ import { criticTools } from "./critic.js";
 import { factTools } from "./facts.js";
 import { importTools } from "./import.js";
 import { metaTools } from "./meta.js";
+import { clientTools } from "./client.js";
 import { packTools } from "./pack.js";
 import { pixelTools } from "./pixels.js";
 import { renderTools } from "./render.js";
@@ -152,6 +153,7 @@ export function studioTools(parts: StudioParts) {
     ...copyTools({ batches, brands, facts, copy }),
     ...metaTools({ batches, brands, facts, copy, picks, meta }),
     ...packTools({ batches, pack, packs }),
+    ...clientTools({ pack, packs, clients, comments, uploads, brands }),
     ...resultTools({ batches, packs, results, uploads }),
     ...criticTools({ critic, calibration }),
     ...renderTools({ render }),
