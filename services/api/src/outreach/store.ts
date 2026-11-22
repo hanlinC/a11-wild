@@ -18,6 +18,8 @@ const adKey = (id: string, n: number) => `P#${id}#AD#${String(n).padStart(2, "0"
 const eventKey = (id: string, at: string, eventId: string) => `P#${id}#E#${at}#${eventId}`;
 const sendKey = (id: string, step: OutreachStep) => `P#${id}#S#${step}`;
 const uploadKey = (id: string, uploadId: string) => `P#${id}#U#${uploadId}`;
+/** Longer than any one call can run. */
+const UPLOAD_HOLD_MS = 60_000;
 
 /** The id of a list row: its number, padded so that the table's order is the list's order. */
 export const prospectId = (n: number): string => String(n).padStart(5, "0");
@@ -85,9 +87,19 @@ export class OutreachStore {
     throw new Refusal(`Prospect ${id} has ${ADS_MAX} ads already.`);
   }
 
-  /** Takes an owner's upload for one call to work on. False when another call took it first, so one upload is one ad. */
+  /**
+   * Takes an owner's upload for one call to work on. False when another call holds it, so one upload is one ad.
+   * A call that was cut off (the server stops one after 29 seconds) cannot give its upload back, so a hold older than a minute is taken over.
+   */
   async claimUpload(id: string, uploadId: string): Promise<boolean> {
-    return this.table.put({ pk: PK, sk: uploadKey(id, uploadId), at: this.now().toISOString() }, { ifNotExists: true });
+    const sk = uploadKey(id, uploadId);
+    const take = () => this.table.put({ pk: PK, sk, at: this.now().toISOString() }, { ifNotExists: true });
+    if (await take()) return true;
+    const held = await this.table.get<Item & { at: string }>(PK, sk);
+    if (!held) return take();
+    if (this.now().getTime() - Date.parse(held.at) < UPLOAD_HOLD_MS) return false;
+    // Only one call removes the old hold: the others find its time changed or the hold gone.
+    return (await this.table.delete(PK, sk, { ifEquals: { attribute: "at", value: held.at } })) && take();
   }
 
   /** Gives an upload back when the call that took it could not attach it, so it can be confirmed again. */

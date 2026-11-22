@@ -396,6 +396,22 @@ describe("the owner's own picture", () => {
     expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
   });
 
+  it("takes over an upload whose confirmation was cut off, once a minute has passed", async () => {
+    const [id] = await loadProspects(studio);
+    const started = await json(await post(`/api/outreach/prospects/${id}/picture`, { type: "image/png", bytes: PNG.length }));
+    await studio.pictures.put(new URL(started.putUrl).pathname.slice(1), PNG, "image/png");
+    const door = `/api/outreach/prospects/${id}/picture/${started.uploadId}/done`;
+    // A confirmation that was stopped half way: it took the upload and never gave it back.
+    expect(await outreach().store.claimUpload(id!, started.uploadId)).toBe(true);
+    expect((await post(door)).status).toBe(400);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 59_000);
+    expect((await post(door)).status).toBe(400);
+    studio.clock.now = new Date(studio.clock.now.getTime() + 2_000);
+    const both = await Promise.all([post(door), post(door)]);
+    expect(both.map((response) => response.status).sort()).toEqual([200, 400]);
+    expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
+  });
+
   it("puts his picture after an agent's ad, and it is then the one the message carries", async () => {
     await ready();
     const { started, done } = await upload("00001", PNG);
