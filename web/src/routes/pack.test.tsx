@@ -1,5 +1,5 @@
 import type { PackView } from "@a11-wild/shared";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,14 +58,23 @@ describe("A client's pack page", () => {
   it("opens with no sign-in and shows the ad, its text for Meta, why, the fact check and the plan", async () => {
     const calls = stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
     open();
-    expect(await screen.findByRole("heading", { name: "Wongi" })).toBeInTheDocument();
-    expect(screen.getByText(/1 ad for Salted egg fish skin\. Version 2/)).toBeInTheDocument();
+    // The page starts with one small line, and the first ad is under it: no bar, no large title.
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Wongi Salted egg fish skin · Version 2");
+    expect(screen.queryByText("a11 studio")).not.toBeInTheDocument();
+    // The ad is known by the words on its picture, and its place in the funnel is a small tag.
+    expect(screen.getByRole("heading", { level: 2, name: "THE SKIN IS THE BEST PART." })).toBeInTheDocument();
+    expect(screen.getByText("Top of funnel")).toBeInTheDocument();
     expect(screen.getByText("a11_W47_wongi_b01_tof_c1_v2")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "The ad a11_W47_wongi_b01_tof_c1_v2" })).toHaveAttribute("src", view.ads[0]?.viewUrl);
-    expect(screen.getAllByText(text.primary)).toHaveLength(2);
+    // Two wordings that are the same are shown once, with no letter; two that differ are lettered.
+    expect(screen.getAllByText(text.primary)).toHaveLength(1);
+    expect(screen.getByText("Skin first").textContent).toBe("B. Skin first");
+    expect(screen.getByText("Button: Order Now")).toBeInTheDocument();
     expect(screen.getByText("Skin first")).toBeInTheDocument();
     expect(screen.getByText("Buyers come back for the skin.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "source" })).toHaveAttribute("href", "https://wongi.example/fish-skin");
+    // The fact check is one part of the page, under the plan, with the site named.
+    expect(screen.getByRole("heading", { level: 2, name: "Fact check" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "wongi.example" })).toHaveAttribute("href", "https://wongi.example/fish-skin");
     expect(screen.getByText("Keep the one with the best CTR.")).toBeInTheDocument();
     // The page asks for the pack only: it never asks who is signed in.
     expect(calls).toEqual([`GET /api/pack/${TOKEN}`]);
@@ -74,7 +83,7 @@ describe("A client's pack page", () => {
   it("is set in the reading size of a web page, not the smaller size of the dashboard", async () => {
     stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
     open();
-    expect((await screen.findByRole("heading", { name: "Wongi" })).closest(".reading")).not.toBeNull();
+    expect((await screen.findByRole("heading", { level: 1 })).closest(".reading")).not.toBeNull();
   });
 
   it("says plainly that a wrong link opens nothing, and shows no sign-in", async () => {
@@ -84,14 +93,29 @@ describe("A client's pack page", () => {
     expect(screen.queryByRole("button", { name: /sign in/i })).not.toBeInTheDocument();
   });
 
-  it("copies a line exactly as it is written", async () => {
+  it("has no button to copy with: every line is there to read, and the only buttons on an ad download it or ask for a change", async () => {
     stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }) });
-    const user = userEvent.setup();
-    const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
     open();
-    await user.click((await screen.findAllByRole("button", { name: "Copy the primary text" }))[0] as HTMLElement);
-    expect(writeText).toHaveBeenCalledWith(text.primary);
-    expect(await screen.findByText("Copied")).toBeInTheDocument();
+    const ad = within(await screen.findByRole("region", { name: "THE SKIN IS THE BEST PART." }));
+    expect(ad.getAllByRole("button").map((button) => button.textContent)).toEqual(["", "Download PNG", "Ask for a change"]);
+    expect(screen.queryByRole("button", { name: /copy/i })).not.toBeInTheDocument();
+  });
+
+  it("proves a claim two ads make once", async () => {
+    const two = { ...view, ads: [view.ads[0]!, { ...view.ads[0]!, adName: "a11_W47_wongi_b01_mof_c2_v2", stage: "mof" as const }] };
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: two }) });
+    open();
+    expect(await screen.findAllByRole("link", { name: "wongi.example" })).toHaveLength(1);
+  });
+
+  it("downloads the ad from the large view too", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: view }), [`GET /api/pack/${TOKEN}/download/0?format=png`]: () => ({ body: { url: "https://pictures.example/final-1.png?download=1" } }) });
+    open();
+    await userEvent.click(await screen.findByRole("img", { name: /The ad/ }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /Download .* as PNG, from the large view/ }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("https://pictures.example/final-1.png?download=1"));
   });
 
   it("sends a results file to the link the studio signed, with the type its ending names", async () => {
@@ -221,16 +245,17 @@ describe("The example page", () => {
   it("shows the ads first, a quiet tag and line, and example comments", async () => {
     stubApi({ [`GET /api/pack/${TOKEN}`]: () => ({ body: example }) });
     open();
-    expect(await screen.findByRole("heading", { level: 1, name: /Wongi\s*Example/ })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Wongi Salted egg fish skin · Version 2 · Example");
     // Nothing sits above the first ad except the title: the note comes after the pictures.
     const picture = screen.getByRole("img", { name: /The ad/ });
     const note = screen.getByText(/is not a client of a11 studio/);
     expect(picture.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Example comments" })).toBeInTheDocument();
     expect(screen.getByText("These are exactly our tone.")).toBeInTheDocument();
-    expect(screen.getByText("Example change request")).toBeInTheDocument();
-    expect(screen.getByText("Done in version 2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Download .* as PNG/ })).toBeInTheDocument();
+    // An example shows no change request, and no welcome that is said to a client.
+    expect(screen.queryByText("Could the price be larger?")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your ads are ready/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download .* as PNG$/ })).toBeInTheDocument();
   });
 
   it("has nothing to write in and nowhere to send a file", async () => {
@@ -265,7 +290,9 @@ describe("A client's page", () => {
     });
     const user = userEvent.setup();
     openClient();
-    expect(await screen.findByRole("heading", { level: 1, name: "Wongi" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Wongi Your ads from a11 studio, newest first.");
+    // The welcome is said once, under the newest pack.
+    expect(screen.getAllByText(/Your ads are ready/)).toHaveLength(1);
     expect(screen.getAllByRole("heading", { level: 2 }).slice(0, 1).map((heading) => heading.textContent)).toEqual(["Prawn crackers"]);
     const boxes = screen.getAllByLabelText("Write a comment to the studio");
     expect(boxes).toHaveLength(2);
