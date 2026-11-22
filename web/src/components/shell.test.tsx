@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderSignedIn } from "@/test-helpers";
+import { MEMBER, OWNER, renderSignedIn } from "@/test-helpers";
 import { Shell } from "./shell";
 
 describe("Shell", () => {
@@ -17,6 +17,15 @@ describe("Shell", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrollIntoView.mock.contexts[0]).toBe(screen.getByRole("link", { name: "Calibration" }));
     expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+  });
+
+  it("shows Outreach to the owner only", () => {
+    const { unmount } = renderSignedIn(<Shell />, OWNER);
+    expect(screen.getByRole("link", { name: "Outreach" })).toBeInTheDocument();
+    unmount();
+    renderSignedIn(<Shell />, MEMBER);
+    expect(screen.queryByRole("link", { name: "Outreach" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Packs" })).toBeInTheDocument();
   });
 
   it("scrolls nothing on a page that is no section", () => {

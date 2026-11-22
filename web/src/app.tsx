@@ -11,11 +11,15 @@ import { Calibration } from "@/routes/calibration";
 import { Concepts } from "@/routes/concepts";
 import { Connections } from "@/routes/connections";
 import { Home } from "@/routes/home";
+import { Outreach } from "@/routes/outreach";
 import { Pack } from "@/routes/pack";
 import { Packs } from "@/routes/packs";
+import { Prospect } from "@/routes/prospect";
+import { Prospects } from "@/routes/prospects";
 import { SignedOut } from "@/routes/signed-out";
 import { Spend } from "@/routes/spend";
 import { Taste } from "@/routes/taste";
+import { Templates } from "@/routes/templates";
 
 type Session = { state: "loading" } | { state: "signed-out"; failed: boolean } | { state: "signed-in"; me: Me };
 
@@ -56,6 +60,10 @@ function Dashboard() {
           <Route path="brands/:brandId" element={<Brand />} />
           <Route path="batches/:batchId" element={<Board />} />
           <Route path="batches/:batchId/concepts" element={<Concepts />} />
+          <Route path="outreach" element={<Outreach />} />
+          <Route path="outreach/prospects" element={<Prospects />} />
+          <Route path="outreach/prospects/:id" element={<Prospect />} />
+          <Route path="outreach/messages" element={<Templates />} />
           <Route path="taste" element={<Taste />} />
           <Route path="packs" element={<Packs />} />
           <Route path="calibration" element={<Calibration />} />

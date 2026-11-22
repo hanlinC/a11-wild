@@ -10,3 +10,10 @@ export function when(iso: string): string {
 }
 
 export const usd = (amount: number): string => `US$${amount.toFixed(amount !== 0 && Math.abs(amount) < 0.01 ? 3 : 2)}`;
+
+const DAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+/** A day given as YYYY-MM-DD, in words. */
+export function dayName(day: string): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? day : DAY.format(date);
+}

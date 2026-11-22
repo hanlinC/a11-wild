@@ -8,12 +8,13 @@ import { cn } from "@/lib/utils";
 const NAV = [
   { to: "/", label: "Studio" },
   { to: "/brands", label: "Brands" },
+  { to: "/outreach", label: "Outreach", ownerOnly: true },
   { to: "/packs", label: "Packs" },
   { to: "/taste", label: "Taste" },
   { to: "/calibration", label: "Calibration" },
   { to: "/spend", label: "Spend" },
   { to: "/connections", label: "Connections" },
-] as const;
+] as const satisfies readonly { to: string; label: string; ownerOnly?: true }[];
 
 /** The frame around every signed-in page: wordmark, the sections, who is signed in. */
 export function Shell() {
@@ -46,7 +47,7 @@ export function Shell() {
           </span>
           {/* On a phone the sections scroll sideways inside the bar; the page itself never does. */}
           <nav ref={nav} aria-label="Sections" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
-            {NAV.map((item) => (
+            {NAV.filter((item) => !("ownerOnly" in item) || me.role === "owner").map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}

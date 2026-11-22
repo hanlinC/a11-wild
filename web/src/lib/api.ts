@@ -1,4 +1,4 @@
-import type { BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
+import type { OutreachStage, OutreachStep, OutreachTemplates, OutreachTier, ProspectPage, ProspectsPage, TemplatesPage, TodayPage, BatchSummary, Board, BrandNote, BrandPage, CanonProposal, CanonScope, ConceptBoard, BrandSummary, CalibrationPage, CanonVersion, ClientRecord, DoneReport, Me, PackSummary, PackView, Pick, SpendSummary, TastePage } from "@a11-wild/shared";
 
 export class ApiError extends Error {
   constructor(
@@ -25,7 +25,38 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const post = <T>(path: string) => request<T>(path, { method: "POST" });
 const send = <T>(path: string, body: unknown) => request<T>(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+/** A write on one prospect, by the name of its route. The answer is the prospect as it now stands. */
+export type ProspectWrite =
+  | { action: "ad"; body: { ad: number; yes: boolean; ownerSaid?: string } }
+  | { action: "sent"; body: { step: OutreachStep; title: 0 | 1 } }
+  | { action: "unsent"; body: { step: OutreachStep } }
+  | { action: "reply"; body: { reply: "more" | "no" | "other"; text?: string } }
+  | { action: "stage"; body: { stage: "in_talks" | "client" | "lost" | "parked" | "auto"; reason?: string } }
+  | { action: "note"; body: { text: string } }
+  | { action: "channel"; body: { channel: "whatsapp" | "email" } }
+  | { action: "kind"; body: { kind: "product" | "service" } }
+  | { action: "answered" | "optout" | "choose"; body?: undefined };
+
+export interface ProspectFilter {
+  q?: string;
+  tier?: OutreachTier;
+  sector?: string;
+  stage?: OutreachStage;
+}
+
 export const api = {
+  outreachToday: () => request<TodayPage>("/api/outreach/today"),
+  prospects: (filter: ProspectFilter = {}) => {
+    const query = new URLSearchParams(Object.entries(filter).filter(([, value]) => value)).toString();
+    return request<ProspectsPage>(`/api/outreach/prospects${query ? `?${query}` : ""}`);
+  },
+  prospect: (id: string) => request<ProspectPage>(`/api/outreach/prospects/${encodeURIComponent(id)}`),
+  prospectWrite: (id: string, write: ProspectWrite) => send<ProspectPage>(`/api/outreach/prospects/${encodeURIComponent(id)}/${write.action}`, write.body ?? {}),
+  removeTestProspect: (id: string) => send<{ removed: boolean }>(`/api/outreach/prospects/${encodeURIComponent(id)}/remove`, {}),
+  makeTestProspect: (contact: { whatsapp?: string; email?: string }) => send<{ id: string }>("/api/outreach/test-prospect", contact),
+  outreachTemplates: () => request<TemplatesPage>("/api/outreach/templates"),
+  saveOutreachTemplates: (steps: OutreachTemplates["steps"]) => send<{ templates: OutreachTemplates }>("/api/outreach/templates", { steps }),
+  setOutreachDaily: (daily: number) => send<{ daily: number }>("/api/outreach/daily", { daily }),
   me: () => request<Me>("/api/me"),
   health: () => request<{ ok: boolean; buildId: string }>("/api/health"),
   clients: async () => (await request<{ clients: ClientRecord[] }>("/api/clients")).clients,
