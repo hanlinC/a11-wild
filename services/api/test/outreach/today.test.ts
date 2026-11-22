@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 describe("the Today page", () => {
   it("is empty with nothing to do, and names the day", async () => {
-    expect(await today()).toEqual({ day: "2026-11-23", sendingDay: true, nextSendingDay: "2026-11-24", daily: 5, firstsSent: 0, templates: true, owed: [], followUps: [], firsts: [], adsWaiting: [] });
+    expect(await today()).toEqual({ day: "2026-11-23", sendingDay: true, nextSendingDay: "2026-11-24", daily: 5, firstsSent: 0, templates: true, owed: [], followUps: [], firsts: [], adsWaiting: [], picks: [] });
   });
 
   it("shows an attached ad that waits for a yes or a no, with its picture, and no message", async () => {

@@ -19,7 +19,15 @@ async function render(ideaId: string, kind: "draft" | "final", fromId?: string):
   return (await callTool(studio, "render_status", { batchId, renderId: sent.value.id })).value.image.id;
 }
 const check = (imageId: string, items: object[] = []) => callTool(studio, "checks_save", { ...rules, batchId, imageId, items });
-const pick = (ideaId: string, imageId: string | null) => callTool(studio, "pick_save", { batchId, ideaId, imageId, ownerSaid: "the agent's choice for an outreach ad" });
+/** The agent's try to pick: the studio refuses it for an outreach batch. */
+const agentPick = (ideaId: string, imageId: string | null) => callTool(studio, "pick_save", { batchId, ideaId, imageId, ownerSaid: "the agent's choice for an outreach ad" });
+/** The owner's own pick on the prospect's page, after the agent has shown the drafts. */
+async function ownerPicks(imageId: string) {
+  await callTool(studio, "outreach_show", { batchId });
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+  await studio.services.outreach.picks.pick(PROSPECT, imageId, "owner@studio.example");
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+}
 const log = async () => (await callTool(studio, "taste_log", {})).value.entries as unknown[];
 
 async function batchAtBoard(create: object) {
@@ -34,16 +42,14 @@ async function batchAtBoard(create: object) {
       drafts[ideaId] ??= imageId;
     }
   }
-  await rankDrafts(studio, batchId);
+  if (!("prospectId" in create)) await rankDrafts(studio, batchId);
   await callTool(studio, "board_show", { batchId });
   studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
 }
 
 /** The picked draft of idea-1 as a final with its finish; the other two ideas passed on. */
 async function oneFinal(items: object[] = []) {
-  await pick("idea-1", drafts["idea-1"]!);
-  await pick("idea-2", null);
-  await pick("idea-3", null);
+  await ownerPicks(drafts["idea-1"]!);
   const imageId = await render("idea-1", "final", drafts["idea-1"]);
   await check(imageId, items);
   const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId });
@@ -66,11 +72,14 @@ describe("an outreach batch", () => {
     expect(both).toMatchObject({ ok: false, error: expect.stringMatching(/a test or an outreach batch, not both/) });
   });
 
-  it("keeps the agent's picks out of the taste log and out of the calibration", async () => {
+  it("refuses the agent's pick, and keeps the owner's pick out of the taste log and out of the calibration", async () => {
     await batchAtBoard({ prospectId: PROSPECT });
     const before = (await log()).length;
-    expect((await pick("idea-1", drafts["idea-1"]!)).value).toMatchObject({ pick: { ideaId: "idea-1" }, note: expect.stringMatching(/outreach batch.*not in the taste log and not in the calibration/) });
-    await pick("idea-2", null);
+    expect(await agentPick("idea-1", drafts["idea-1"]!)).toMatchObject({ ok: false, error: expect.stringMatching(/picked on the brand's page under Outreach/) });
+    expect(await callTool(studio, "render_submit", { ...rules, batchId, ideaId: "idea-1", kind: "final", scene: SCENE, fromId: drafts["idea-1"] })).toMatchObject({ ok: false });
+    await ownerPicks(drafts["idea-1"]!);
+    const board = (await callTool(studio, "board_show", { batchId })).value;
+    expect(board.ideas.map((entry: { pick: { imageId: string | null } }) => entry.pick.imageId)).toEqual([drafts["idea-1"], null, null]);
     expect((await log()).length).toBe(before);
     expect((await callTool(studio, "calibration_report", {})).value.picks).toMatchObject({ firstPlace: { n: 0 }, byPlace: {} });
   });
@@ -96,15 +105,6 @@ describe("an outreach batch", () => {
     await batchAtBoard({ prospectId: PROSPECT });
     await oneFinal([{ code: "D11", note: "The pouch is too tall." }]);
     expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: false });
-  });
-
-  it("is not done with two picked drafts: it makes one ad", async () => {
-    await batchAtBoard({ prospectId: PROSPECT });
-    await pick("idea-1", drafts["idea-1"]!);
-    await pick("idea-2", drafts["idea-2"]!);
-    await pick("idea-3", null);
-    const report = (await callTool(studio, "batch_done", { batchId })).value;
-    expect(report.conditions.find((entry: { name: string }) => entry.name === "picks")).toMatchObject({ passed: false, evidence: expect.stringMatching(/2 drafts are picked/) });
   });
 
   describe("the judgement of its ideas", () => {
@@ -140,21 +140,22 @@ describe("an outreach batch", () => {
       expect(await state()).toBe("ideas");
     });
 
-    it("owes drafts only to the idea the agent took: two kept ideas, one ad", async () => {
+    it("owes the drafts of every kept idea, and no rank of them", async () => {
       await withIdeas({ prospectId: PROSPECT });
       expect((await judge(["idea-3"])).value).toMatchObject({ state: "judged", kept: ["idea-1", "idea-2"] });
       drafts = {};
-      for (let n = 0; n < 3; n++) {
-        const imageId = await render("idea-2", "draft");
-        await check(imageId);
-        drafts["idea-2"] ??= imageId;
+      for (const ideaId of ["idea-1", "idea-2"]) {
+        for (let n = 0; n < 3; n++) {
+          // The drafts of one idea are not enough: the owner picks among the drafts of every kept idea.
+          expect(await state()).not.toBe("checked");
+          const imageId = await render(ideaId, "draft");
+          await check(imageId);
+          drafts[ideaId] ??= imageId;
+        }
       }
-      expect((await rankDrafts(studio, batchId)).ok).toBe(true);
-      await callTool(studio, "board_show", { batchId });
-      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
-      expect(await state()).toBe("waiting_pick");
-      await pick("idea-2", drafts["idea-2"]!);
-      await pick("idea-1", null);
+      // No critic ranks the drafts of an outreach batch: the owner judges them.
+      expect(await state()).toBe("checked");
+      await ownerPicks(drafts["idea-2"]!);
       const imageId = await render("idea-2", "final", drafts["idea-2"]);
       await check(imageId);
       const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId });
