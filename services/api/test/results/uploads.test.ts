@@ -25,6 +25,8 @@ beforeEach(async () => {
 
 /** A client asks for a place for a file and then sends these bytes there. */
 async function sent(name: string, type: string, body: Uint8Array | undefined) {
+  // Each file has its own second, so the list has one order.
+  studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
   const { upload } = await studio.services.pack.uploadTo(pack, { name, type, bytes: body?.length ?? 100 });
   const [kept] = (await studio.services.results.uploads(pack.id)).filter((entry) => entry.id === upload.id);
   if (!kept) throw new Error("no upload");
