@@ -190,16 +190,20 @@ export class BoardService implements FinalRule {
     return missing;
   }
 
-  /** What a picture with its words still needs: the agent's look at the words on it, with no D item and fewer than two F items. Setting the type again is free. */
-  private wordNeeds(on: BatchImage, set: BatchImage | undefined, found: Map<string, ImageChecks>, what: string, out = false): string[] {
+  /**
+   * What a picture with its words still needs: the agent's look at the words on it, with no D item and fewer than two F items. Setting the type again is free.
+   * In an outreach batch the look is still needed, and what it found is a note for the owner like every other item there: it rejects nothing.
+   */
+  private wordNeeds(batch: Batch, on: BatchImage, set: BatchImage | undefined, found: Map<string, ImageChecks>, what: string, out = false): string[] {
     if (!set) return [`type_set for picture ${on.id}: the approved words and the real logo on the ${what}`];
     const seen = found.get(set.id);
     if (!seen?.looked) return [`checks_save for picture ${set.id}: the ${what} of ${on.id} with its words`];
     // A picture its own checks reject is out already: no setting of the type mends it, so none is asked for.
     if (out) return [];
-    const defect = defectOf(seen);
+    const judged = judgedIn(batch, seen);
+    const defect = defectOf(judged);
     if (defect) return [`type_set again for picture ${on.id}: with its words it has ${defect.code} (${defect.note})`];
-    if (rejected(seen)) return [`type_set again for picture ${on.id}: with its words it has two F items or more`];
+    if (rejected(judged)) return [`type_set again for picture ${on.id}: with its words it has two F items or more`];
     return [];
   }
 
@@ -236,7 +240,10 @@ export class BoardService implements FinalRule {
       else {
         const finish = finishOf(final, all) as BatchImage;
         const set = hasWords(batch.kind) ? typesetOf(finish, all, approved.find((copy) => copy.ideaId === idea.id)) : undefined;
-        if (hasWords(batch.kind)) missing.push(...this.wordNeeds(final, set, found, "finished final"));
+        if (hasWords(batch.kind)) missing.push(...this.wordNeeds(batch, final, set, found, "finished final"));
+        // The owner sends the picture with its words, so what the agent saw on that one is his to read too.
+        const worded = set ? notesIn(batch, found.get(set.id)) : [];
+        if (worded.length > 0) entry.warns = [...warns, ...worded];
         // A concept ad is delivered only after the eight-point look at the picture the owner would send.
         if (missing.length === 0 && batch.kind === "v3" && set) {
           const seen = await this.deps.points.get(batch.id, set.id);
@@ -268,7 +275,7 @@ export class BoardService implements FinalRule {
           const counted = countedOf(image, all);
           missing.push(...(await this.needs(batch, counted, hasPack, found)));
           // The owner judges an ad, not a bare photo: each draft carries the approved words and the real logo before he sees it.
-          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft", rejected(judgedIn(batch, found.get(counted.id)))));
+          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(batch, counted, typesetOf(counted, all, words), found, "draft", rejected(judgedIn(batch, found.get(counted.id)))));
         }
         // A rank counts while it is of the pictures the owner sees now: a repair made after it, or words set after it, needs a new rank.
         const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
