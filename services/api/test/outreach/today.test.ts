@@ -20,7 +20,7 @@ const now = () => clock.now;
 const at = (singaporeTime: string) => {
   clock.now = new Date(`${singaporeTime}+08:00`);
 };
-const today = () => todayPage({ store, sequence, viewUrl: async (key) => `https://pictures.example/${key}?signed`, now });
+const today = () => todayPage({ store, sequence, pictures: { viewUrl: async (key) => `https://pictures.example/${key}?signed`, downloadUrl: async (key, name) => `https://pictures.example/${key}?save=${name}` }, now });
 const adOf = { batchId: "b", imageId: "i", kind: "v1" as const, key: "outreach/ad.png", why: "The pack on its colour." };
 async function ready(id: string) {
   const ad = await store.addAd(id, adOf);

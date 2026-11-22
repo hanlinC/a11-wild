@@ -4,6 +4,7 @@ import { messagesFor } from "./messages.js";
 import { chosen, nextStep, sameContact, type OutreachSequence } from "./sequence.js";
 import { adWaits, approvedAd, channelOf, newestAd, owedAnswer, stageOf, verdictOf } from "./stage.js";
 import type { OutreachStore } from "./store.js";
+import type { Pictures } from "../pictures/store.js";
 
 /** A prospect as a line of a list: no number and no address. */
 export function rowOf(file: ProspectFile, optOuts: ReadonlySet<string>, shared: ReadonlyMap<string, ProspectFile>): ProspectRow {
@@ -28,17 +29,22 @@ export function rowOf(file: ProspectFile, optOuts: ReadonlySet<string>, shared: 
   };
 }
 
-export async function adView(file: ProspectFile, ad: OutreachAd, viewUrl: (key: string) => Promise<string>): Promise<OutreachAdView> {
+/** The two links of a picture: one to look at, one to save as a file. */
+export type AdLinks = Pick<Pictures, "viewUrl" | "downloadUrl">;
+
+export async function adView(file: ProspectFile, ad: OutreachAd, pictures: AdLinks): Promise<OutreachAdView> {
   const verdict = verdictOf(file, ad)?.type;
-  return { ...ad, viewUrl: await viewUrl(ad.key), ...(verdict ? { verdict: verdict === "ad_yes" ? ("yes" as const) : ("no" as const) } : {}) };
+  const name = `${file.profile.brand}-ad-${ad.n}.${ad.key.split(".").at(-1) ?? "png"}`;
+  const [viewUrl, downloadUrl] = await Promise.all([pictures.viewUrl(ad.key), pictures.downloadUrl(ad.key, name)]);
+  return { ...ad, viewUrl, downloadUrl, ...(verdict ? { verdict: verdict === "ad_yes" ? ("yes" as const) : ("no" as const) } : {}) };
 }
 
 /**
  * What the owner does today, in his order: answers that are owed, follow-ups that are due, new first messages, and ads that wait for his look.
  * On a day with no sending only the owed answers and the waiting ads are shown.
  */
-export async function todayPage(deps: { store: OutreachStore; sequence: OutreachSequence; viewUrl: (key: string) => Promise<string>; now: () => Date }): Promise<TodayPage> {
-  const { store, sequence, viewUrl } = deps;
+export async function todayPage(deps: { store: OutreachStore; sequence: OutreachSequence; pictures: AdLinks; now: () => Date }): Promise<TodayPage> {
+  const { store, sequence, pictures } = deps;
   const day = singaporeDay(deps.now());
   const [files, optOuts, daily, firstsSent, templates] = await Promise.all([store.all(), store.optOuts(), sequence.daily(), store.placesTaken(day), sequence.templates()]);
   const shared = sameContact(files);
@@ -46,7 +52,7 @@ export async function todayPage(deps: { store: OutreachStore; sequence: Outreach
 
   const line = async (file: ProspectFile, step: OutreachStep | undefined, ad: OutreachAd | undefined, extra: Partial<TodayLine> = {}): Promise<TodayLine> => ({
     prospect: rowOf(file, optOuts, shared),
-    ...(ad ? { ad: await adView(file, ad, viewUrl) } : {}),
+    ...(ad ? { ad: await adView(file, ad, pictures) } : {}),
     ...(step !== undefined ? { step } : {}),
     ...(step !== undefined && templates ? { messages: messagesFor((templates as OutreachTemplates).steps[step], file.profile, channelOf(file)) } : {}),
     ...extra,

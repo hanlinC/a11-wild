@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { OUTREACH_TIERS, type OutreachTier, type Prospect } from "@a11-wild/shared";
+import { Refusal } from "../mcp/registry.js";
 import { type OutreachStore, prospectId } from "./store.js";
 
 /** One row of the owner's list, as plain text and numbers. The spreadsheet is read outside the server. */
@@ -150,12 +151,14 @@ export async function loadRows(store: OutreachStore, rows: LoadRow[], now: () =>
 
 /** A prospect made to try the pages. Its name says what it is. */
 export async function makeTestProspect(store: OutreachStore, input: { brand: string; whatsapp?: string | undefined; email?: string | undefined }, now: () => Date): Promise<Prospect> {
-  const profile: Prospect = {
-    ...profileOf({ n: 1, brand: input.brand, sector: "Test", liveAds: 0, tier: OUTREACH_TIERS[0], whatsapp: input.whatsapp, email: input.email }, now().toISOString()),
-    id: `T${randomUUID().replace(/-/g, "").slice(0, 8)}`,
-    n: 0,
-    test: true,
-  };
+  let checked: Prospect;
+  try {
+    checked = profileOf({ n: 1, brand: input.brand, sector: "Test", liveAds: 0, tier: OUTREACH_TIERS[0], whatsapp: input.whatsapp, email: input.email }, now().toISOString());
+  } catch (error) {
+    if (error instanceof RowError) throw new Refusal(`The test prospect was not made: ${error.message}.`);
+    throw error;
+  }
+  const profile: Prospect = { ...checked, id: `T${randomUUID().replace(/-/g, "").slice(0, 8)}`, n: 0, test: true };
   await store.saveProfile(profile);
   return profile;
 }

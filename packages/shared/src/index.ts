@@ -1117,6 +1117,8 @@ export interface ProspectRow {
 /** An outreach ad with a short-lived address of its picture. */
 export interface OutreachAdView extends OutreachAd {
   viewUrl: string;
+  /** The same picture as a file to save. */
+  downloadUrl: string;
   verdict?: "yes" | "no";
 }
 
@@ -1147,4 +1149,69 @@ export interface TodayPage {
   followUps: TodayLine[];
   firsts: TodayLine[];
   adsWaiting: TodayLine[];
+}
+
+/** A count of prospects, also by spend tier and by the channel of the brand. */
+export interface OutreachCount {
+  all: number;
+  byTier: Record<OutreachTier, number>;
+  byChannel: Record<OutreachChannel, number>;
+}
+
+/** The numbers of the campaign. A test prospect is in none of them. */
+export interface OutreachNumbers {
+  prospects: number;
+  sent: OutreachCount;
+  replied: OutreachCount;
+  saidMore: OutreachCount;
+  optedOut: OutreachCount;
+  clients: OutreachCount;
+}
+
+export interface ProspectsPage {
+  numbers: OutreachNumbers;
+  /** Every sector of the list, for the filter. */
+  sectors: string[];
+  /** The prospects the search and the filters leave, in list order. */
+  rows: ProspectRow[];
+}
+
+/** How to reach a prospect. Only the owner's pages get it. A link is there only when the value passed its check. */
+export interface ProspectContact {
+  whatsapp: { number: string; href?: string }[];
+  email?: { address: string; href?: string };
+  phone?: string;
+  instagram?: { name: string; href?: string };
+  decisionMaker?: string;
+  dmTitle?: string;
+  linkedin?: { text: string; href?: string };
+  bestRoute?: string;
+  secondRoute?: string;
+}
+
+/** One prospect with everything about it, for the owner. */
+export interface ProspectPage {
+  prospect: ProspectRow;
+  newestAd?: string;
+  sells?: "product" | "service";
+  contact: ProspectContact;
+  /** Newest first. */
+  ads: OutreachAdView[];
+  sends: OutreachSend[];
+  events: OutreachEvent[];
+  /** The Singapore day: a mark of today can be taken back. */
+  day: string;
+  /** The message that can be sent now, in both versions. */
+  message?: { step: OutreachStep; messages: [OutreachMessage, OutreachMessage] };
+  /** A reply that waits for the owner's answer. */
+  owed?: { text?: string; at: string };
+}
+
+export interface TemplatesPage {
+  templates?: OutreachTemplates;
+  daily: number;
+  dailyMin: number;
+  dailyMax: number;
+  /** The one placeholder a message may hold. */
+  placeholder: string;
 }

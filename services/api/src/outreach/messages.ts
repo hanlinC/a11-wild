@@ -65,7 +65,8 @@ export function profileLink(kind: "instagram" | "linkedin", value: string | unde
   if (kind === "instagram" && /^@?[A-Za-z0-9._]{1,30}$/.test(value)) return `https://www.instagram.com/${value.replace(/^@/, "")}/`;
   let url: URL;
   try {
-    url = new URL(value);
+    // The list gives LinkedIn pages without "https://".
+    url = new URL(/^(www\.|sg\.)?linkedin\.com\//.test(value) && kind === "linkedin" ? `https://${value}` : value);
   } catch {
     return undefined;
   }
