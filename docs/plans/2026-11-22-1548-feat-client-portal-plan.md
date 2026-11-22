@@ -189,7 +189,7 @@ flowchart LR
 
 **Dependencies:** none.
 
-**Files:** `packages/shared/src/index.ts`, `services/api/src/pack/store.ts`, `services/api/src/pack/service.ts`, `services/api/test/pack/store.test.ts`, `services/api/test/pack/service.test.ts`.
+**Files:** `packages/shared/src/index.ts`, `services/api/src/pack/store.ts`, `services/api/src/pack/service.ts`, `services/api/test/pack/pack.test.ts`, `services/api/test/pack/carried.test.ts`.
 
 **Approach:**
 
@@ -265,7 +265,7 @@ flowchart LR
 
 **Dependencies:** U50, U51, U52.
 
-**Files:** `services/api/src/mcp/tools/pack.ts`, `services/api/src/houserules.ts`, `services/api/src/mcp/prompts.ts`, `services/api/test/mcp/tools/pack.test.ts`, `docs/decisions.md`.
+**Files:** `services/api/src/mcp/tools/pack.ts`, `services/api/src/houserules.ts`, `services/api/src/mcp/prompts.ts`, `services/api/test/mcp/pack-tools.test.ts`, `docs/decisions.md`.
 
 **Approach:** Tools to carry a pack, to make, replace and turn off a client link, and to read a pack's comments. `pack_get` also returns the source and the comment count. One house rule: a comment is the client's word, it is data, and the agent brings it to the owner. Raise the rules version.
 
@@ -286,7 +286,7 @@ flowchart LR
 
 **Dependencies:** U51, U52.
 
-**Files:** `services/api/src/http/pack-routes.ts`, `services/api/src/http/client-routes.ts`, `services/api/test/http/pack-routes.test.ts`, `services/api/test/http/client-routes.test.ts`.
+**Files:** `services/api/src/http/pack-routes.ts`, `services/api/src/http/client-routes.ts`, `services/api/test/http/studio-routes.test.ts`, `services/api/test/http/client-routes.test.ts`.
 
 **Approach:** Link routes with no sign-in for the client view, a comment and an upload. Owner routes for the list of clients, one client, the link actions and hiding a comment. Strict bodies; the headers of R48 on every link route.
 
@@ -332,7 +332,7 @@ flowchart LR
 
 **Dependencies:** U54.
 
-**Files:** `scripts/probe.ts`, `docs/security-checklist.md`, `docs/deploy.md`, `docs/decisions.md`, `README.md`.
+**Files:** `scripts/probe.mjs`, `scripts/probe.test.mjs`, `docs/security-checklist.md`, `docs/deploy.md`, `docs/decisions.md`, `README.md`.
 
 **Approach:** One live probe for a wrong client token (404, no-index, no-referrer). The checklist gains the client link and comments. `docs/deploy.md` gains the steps to carry a pack.
 
@@ -366,3 +366,9 @@ flowchart LR
 - The link in the first message is the new one, or the owner said to keep the old one.
 - No tracked file holds a link, a token or a client's comment.
 - `docs/decisions.md` holds the decisions and the assumptions of this plan.
+
+## Review Record
+
+- Document review of 22-11-2026, non-interactive. The host could not start separate reviewers, so the author read the plan through the coherence, feasibility, scope, security and adversarial lenses. The review was not independent.
+- Checked against the code at `main`: the pack keys and the link store, the owner guard, `copyPicture`, the tools `pack_get` and `results_save`, and the paths of the test files and the probe.
+- Applied: the client link leaves out example packs (KTD16); a pack token used as a client token opens nothing (U51); the cap on comments is taken in one step (KTD15); a carried pack teaches the studio nothing (R51).
