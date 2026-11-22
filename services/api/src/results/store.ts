@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { type AdResult, type PackUpload, UPLOAD_MAX_FILES } from "@a11-wild/shared";
+import { packKey } from "../pack/store.js";
 import { type Item, record, type Table } from "../store/table.js";
 
-const pk = (batchId: string) => `BATCH#${batchId}`;
+/** A pack's id: its batch's id, or the id of a carried pack. */
+const pk = packKey;
 const COUNT = "UPLOADS";
 
 /** The results of a pack: the files its client sent, and the numbers typed in from them. */

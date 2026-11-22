@@ -20,6 +20,7 @@ const view: PackView = {
       adName: "a11_W47_wongi_b01_tof_c1_v2",
       stage: "tof",
       viewUrl: "https://pictures.example/final-1.png?signed=1",
+      formats: ["png"],
       words: { headline: "THE SKIN IS | THE BEST PART.", subline: "Fried until it curls." },
       meta: { version: 1, variants: [text, { ...text, headline: "Skin first" }] },
       why: "Buyers come back for the skin.",

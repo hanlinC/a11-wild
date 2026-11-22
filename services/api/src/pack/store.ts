@@ -2,54 +2,66 @@ import type { Pack, PackVersion } from "@a11-wild/shared";
 import { type Item, record, type Table } from "../store/table.js";
 
 const LINKS = "PACKLINK";
-const pk = (batchId: string) => `BATCH#${batchId}`;
+/** The start of a carried pack's id. A batch's id is a UUID, so it never starts with it. */
+export const CARRIED = "c_";
+/** Where a pack and all that hangs on it is kept: with its batch, or in a place of its own for a carried pack. */
+export const packKey = (id: string) => (id.startsWith(CARRIED) ? `CPACK#${id}` : `BATCH#${id}`);
+const pk = packKey;
 const PACK = "PACK";
+type Stored = Item & Omit<Pack, "id" | "source"> & Partial<Pick<Pack, "id" | "source">>;
+/** A pack saved before packs had a source is the pack of its batch. */
+const read = (item: Stored): Pack => {
+  const { id, source, ...rest } = record<Omit<Stored, keyof Item>>(item as never) as Omit<Pack, "id" | "source"> & Partial<Pick<Pack, "id" | "source">>;
+  return { ...rest, id: id ?? (rest.batchId as string), source: source ?? "batch" };
+};
+type Link = Item & { packId?: string; batchId?: string };
 const sk = (version: number) => `PACKV#${String(version).padStart(4, "0")}`;
 
-/** The pack of each batch, every version of its content, and the way from a link's token hash to its pack. */
+/** Each pack, every version of its content, and the way from a link's token hash to its pack. */
 export class PackStore {
   constructor(private readonly table: Table) {}
 
-  async get(batchId: string): Promise<Pack | undefined> {
-    const item = await this.table.get<Item & Pack>(pk(batchId), PACK);
-    return item && record<Pack>(item);
+  async get(id: string): Promise<Pack | undefined> {
+    const item = await this.table.get<Stored>(pk(id), PACK);
+    return item && read(item);
   }
 
   /** The pack behind a token hash, or nothing. A hash that was replaced opens nothing. */
   async byHash(tokenHash: string): Promise<Pack | undefined> {
-    const link = await this.table.get<Item & { batchId: string }>(LINKS, tokenHash);
-    const pack = link && (await this.get(link.batchId));
+    const link = await this.table.get<Link>(LINKS, tokenHash);
+    const id = link?.packId ?? link?.batchId;
+    const pack = id ? await this.get(id) : undefined;
     return pack && pack.tokenHash === tokenHash ? pack : undefined;
   }
 
   async all(): Promise<Pack[]> {
-    const links = await this.table.query<Item & { batchId: string }>(LINKS);
+    const links = await this.table.query<Link>(LINKS);
     const packs = await Promise.all(links.map((link) => this.byHash(link.sk)));
     return packs.filter((pack): pack is Pack => pack !== undefined);
   }
 
-  /** Makes the pack of a batch. False when the batch already has one. */
+  /** Makes a pack. False when a pack with this id is already there. */
   async create(pack: Pack): Promise<boolean> {
-    if (!(await this.table.put({ pk: pk(pack.batchId), sk: PACK, ...pack }, { ifNotExists: true }))) return false;
-    await this.table.put({ pk: LINKS, sk: pack.tokenHash, batchId: pack.batchId });
+    if (!(await this.table.put({ pk: pk(pack.id), sk: PACK, ...pack }, { ifNotExists: true }))) return false;
+    await this.table.put({ pk: LINKS, sk: pack.tokenHash, packId: pack.id });
     return true;
   }
 
   async save(pack: Pack): Promise<void> {
-    await this.table.put({ pk: pk(pack.batchId), sk: PACK, ...pack });
+    await this.table.put({ pk: pk(pack.id), sk: PACK, ...pack });
   }
 
   /** Gives the pack another token hash. The old one opens nothing from now on. */
   async relink(pack: Pack, tokenHash: string): Promise<Pack> {
     const next = { ...pack, tokenHash };
-    await this.table.put({ pk: LINKS, sk: tokenHash, batchId: pack.batchId });
+    await this.table.put({ pk: LINKS, sk: tokenHash, packId: pack.id });
     await this.save(next);
     await this.table.delete(LINKS, pack.tokenHash);
     return next;
   }
 
-  async versions(batchId: string): Promise<PackVersion[]> {
-    const items = await this.table.query<Item & PackVersion>(pk(batchId));
+  async versions(id: string): Promise<PackVersion[]> {
+    const items = await this.table.query<Item & PackVersion>(pk(id));
     return items
       .filter((item) => item.sk.startsWith("PACKV#"))
       .sort((a, b) => a.sk.localeCompare(b.sk))
@@ -57,7 +69,7 @@ export class PackStore {
   }
 
   /** Saves a new version. False when that version number is taken. */
-  async addVersion(batchId: string, version: PackVersion): Promise<boolean> {
-    return this.table.put({ pk: pk(batchId), sk: sk(version.version), ...version }, { ifNotExists: true });
+  async addVersion(id: string, version: PackVersion): Promise<boolean> {
+    return this.table.put({ pk: pk(id), sk: sk(version.version), ...version }, { ifNotExists: true });
   }
 }

@@ -72,7 +72,7 @@ describe("pack_publish", () => {
   });
 
   it("finishes a publish that stopped after the pack row and before its first version", async () => {
-    await studio.services.packs.create({ batchId, tokenHash: "0".repeat(64), current: 1, createdAt: "2026-11-21T12:00:00.000Z", by: "owner@example.com" });
+    await studio.services.packs.create({ id: batchId, source: "batch", batchId, tokenHash: "0".repeat(64), current: 1, createdAt: "2026-11-21T12:00:00.000Z", by: "owner@example.com" });
     const made = (await publish()).value;
     expect(made.version.version).toBe(1);
     expect((await open(made.link)).status).toBe(200);

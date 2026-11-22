@@ -51,7 +51,7 @@ export function packTools({ batches, pack, packs }: { batches: BatchStore; pack:
       writes: true,
       handler: async ({ batchId, version }, context) => {
         ownerOnly(context.user.role, "changes a pack");
-        const { tokenHash: _tokenHash, ...shown } = await pack.restore(await batches.get(batchId), version);
+        const { tokenHash: _tokenHash, ...shown } = await pack.restore((await batches.get(batchId)).id, version);
         return { pack: shown };
       },
     }),
@@ -62,7 +62,7 @@ export function packTools({ batches, pack, packs }: { batches: BatchStore; pack:
       writes: true,
       handler: async ({ batchId }, context) => {
         ownerOnly(context.user.role, "replaces a pack link");
-        return { ...(await pack.relink(await batches.get(batchId))), nextStep: "Give the new link to the owner now: it is not shown again." };
+        return { ...(await pack.relink((await batches.get(batchId)).id)), nextStep: "Give the new link to the owner now: it is not shown again." };
       },
     }),
     defineTool({

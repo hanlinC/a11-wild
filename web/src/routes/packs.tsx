@@ -25,7 +25,7 @@ export function Packs() {
       ) : packs.length === 0 ? (
         <Empty>No pack yet. A pack is made from a done batch, after you approve its Meta text.</Empty>
       ) : (
-        packs.map((pack) => <PackCard key={pack.pack.batchId} pack={pack} />)
+        packs.map((pack) => <PackCard key={pack.pack.id} pack={pack} />)
       )}
     </>
   );
@@ -38,9 +38,13 @@ function PackCard({ pack }: { pack: PackSummary }) {
     <Section title={`${pack.brand.name} · ${pack.product.name}`}>
       <Card className="space-y-6">
         <p className="text-caption text-muted-foreground">
-          <Link to={`/batches/${pack.pack.batchId}`} className="underline underline-offset-4 hover:text-foreground">
-            Its batch
-          </Link>{" "}
+          {pack.pack.batchId ? (
+            <Link to={`/batches/${pack.pack.batchId}`} className="underline underline-offset-4 hover:text-foreground">
+              Its batch
+            </Link>
+          ) : (
+            "Carried in from outside the studio"
+          )}{" "}
           · first published {when(pack.pack.createdAt)} by {pack.pack.by}
         </p>
         {current ? (

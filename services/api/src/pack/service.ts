@@ -1,5 +1,25 @@
-import { createHash, randomBytes } from "node:crypto";
-import { type Batch, type Pack, type PackAd, type PackSummary, type PackUpload, type PackVersion, type PackView, UPLOAD_MAX_BYTES, UPLOAD_MAX_FILES, UPLOAD_TYPES, type UploadType } from "@a11-wild/shared";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import {
+  type Batch,
+  COMMENT_MAX_CHARS,
+  EXAMPLE_COMMENTS_MAX,
+  type FunnelStage,
+  type MetaVariant,
+  PACK_PICTURE_TYPES,
+  type Pack,
+  type PackAd,
+  type PackExample,
+  type PackFormat,
+  type PackPictureType,
+  type PackSummary,
+  type PackUpload,
+  type PackVersion,
+  type PackView,
+  UPLOAD_MAX_BYTES,
+  UPLOAD_MAX_FILES,
+  UPLOAD_TYPES,
+  type UploadType,
+} from "@a11-wild/shared";
 import type { BatchStore } from "../batch/store.js";
 import type { BoardService } from "../board/service.js";
 import type { BrandStore } from "../brand/store.js";
@@ -9,9 +29,9 @@ import { Refusal } from "../mcp/registry.js";
 import { metaFaults } from "../meta/checks.js";
 import { adName } from "../meta/names.js";
 import type { MetaStore } from "../meta/store.js";
-import type { Pictures } from "../pictures/store.js";
+import { MAX_PICTURE_BYTES, type Pictures, pictureType } from "../pictures/store.js";
 import type { ResultStore } from "../results/store.js";
-import type { PackStore } from "./store.js";
+import { CARRIED, type PackStore } from "./store.js";
 
 /** How long a picture link of a pack page works. The page asks again when it is opened again. */
 const PICTURE_SECONDS = 3600;
@@ -33,6 +53,45 @@ interface Deps {
   now: () => Date;
 }
 
+const CARRY_ID = /^c_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const AD_NAME = /^[A-Za-z0-9_]{1,80}$/;
+/** The most pictures one carry takes: three ads, each with the picture the page shows and two download copies. */
+export const CARRY_MAX_PICTURES = 9;
+const carriedKey = (carryId: string, picture: number) => `carried/${carryId}/${picture}`;
+const isPackPicture = (type: string): type is PackPictureType => Object.hasOwn(PACK_PICTURE_TYPES, type);
+/** The formats an ad's download gives. A final of a batch is one picture, in the format its key ends with. */
+const downloadsOf = (ad: PackAd): { key: string; type: PackPictureType }[] => ad.downloads ?? [{ key: ad.key, type: ad.key.endsWith(".png") ? "image/png" : "image/jpeg" }];
+const formatsOf = (ad: PackAd): PackFormat[] => [...new Set(downloadsOf(ad).map((file) => PACK_PICTURE_TYPES[file.type]))];
+const isHttps = (url: string): boolean => {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+/** One ad made outside the studio, as the owner's agent hands it in. A picture is the number `pack_carry_start` gave it. */
+export interface CarriedAd {
+  adName: string;
+  stage?: FunnelStage;
+  picture: number;
+  /** The pictures a download gives, when they are not the picture the page shows. */
+  downloads?: number[];
+  words?: { headline: string; subline: string; footnote?: string };
+  variants: [MetaVariant, MetaVariant];
+  why: string;
+  claims: { claim: string; quote: string; url: string }[];
+}
+
+export interface CarryInput {
+  carryId: string;
+  brandId: string;
+  product: string;
+  ads: CarriedAd[];
+  launchPlan: string[];
+  example?: PackExample;
+}
+
 export interface PackContent {
   /** One line for each ad. An ad with no line keeps the line of the version before. */
   why?: { ideaId: string; why: string }[];
@@ -40,7 +99,7 @@ export interface PackContent {
   launchPlan?: string[];
 }
 
-/** The client pack of a batch: one private link, and every version of what it shows. */
+/** The client pack: one private link, and every version of what it shows. Its ads are the finals of a batch, or ads carried in from outside. */
 export class PackService {
   constructor(private readonly deps: Deps) {}
 
@@ -105,7 +164,7 @@ export class PackService {
     const version: PackVersion = { ...(await this.content(batch, input, undefined, 1)), at: now().toISOString(), by };
     const token = randomBytes(32).toString("base64url");
     if (begun) await packs.relink(begun, hashToken(token));
-    else if (!(await packs.create({ batchId: batch.id, tokenHash: hashToken(token), current: 1, createdAt: version.at, by }))) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update.");
+    else if (!(await packs.create({ id: batch.id, source: "batch", batchId: batch.id, brandId: batch.brandId, tokenHash: hashToken(token), current: 1, createdAt: version.at, by }))) throw new Refusal("This batch has a pack. Put a newer version into the same link with pack_update.");
     if (!(await packs.addVersion(batch.id, version))) throw new Refusal("Another publish of this pack was saved at the same moment. Read it with pack_get.");
     return { link: this.link(token), version };
   }
@@ -125,43 +184,171 @@ export class PackService {
   }
 
   /** Makes the link show an earlier version again. Nothing is deleted. */
-  async restore(batch: Batch, version: number): Promise<Pack> {
+  async restore(id: string, version: number): Promise<Pack> {
     const { packs } = this.deps;
-    const pack = await packs.get(batch.id);
-    if (!pack) throw new Refusal("This batch has no pack.");
-    if (!(await packs.versions(batch.id)).some((entry) => entry.version === version)) throw new Refusal(`This pack has no version ${version}. Read its versions with pack_get.`);
+    const pack = await packs.get(id);
+    if (!pack) throw new Refusal("There is no pack with this id.");
+    if (!(await packs.versions(id)).some((entry) => entry.version === version)) throw new Refusal(`This pack has no version ${version}. Read its versions with pack_get.`);
     const next = { ...pack, current: version };
     await packs.save(next);
     return next;
   }
 
   /** Gives the pack a new link. The old link opens nothing from now on. */
-  async relink(batch: Batch): Promise<{ link: string }> {
+  async relink(id: string): Promise<{ link: string }> {
     const { packs } = this.deps;
-    const pack = await packs.get(batch.id);
-    if (!pack) throw new Refusal("This batch has no pack.");
+    const pack = await packs.get(id);
+    if (!pack) throw new Refusal("There is no pack with this id.");
     const token = randomBytes(32).toString("base64url");
     await packs.relink(pack, hashToken(token));
     return { link: this.link(token) };
   }
 
-  /** What a link shows, or nothing when no pack has this token. */
-  async view(token: string): Promise<PackView | undefined> {
-    const { packs, batches, brands, pictures } = this.deps;
+  /**
+   * The first step of carrying in ads made outside the studio: one address for each picture, good for a few minutes and for exactly that type and size.
+   * Nothing is saved here. `carry` saves the pack once the pictures are there.
+   */
+  async carryStart(files: { type: string; bytes: number }[]): Promise<{ carryId: string; uploads: { picture: number; putUrl: string }[] }> {
+    const { pictures } = this.deps;
+    if (files.length < 1 || files.length > CARRY_MAX_PICTURES) throw new Refusal(`A carried pack has 1 to ${CARRY_MAX_PICTURES} pictures.`);
+    for (const file of files) {
+      if (!isPackPicture(file.type)) throw new Refusal("A carried picture is a JPEG or a PNG.");
+      if (!Number.isInteger(file.bytes) || file.bytes < 1 || file.bytes > MAX_PICTURE_BYTES) throw new Refusal("A carried picture can be up to 8 MB.");
+    }
+    const carryId = `${CARRIED}${randomUUID()}`;
+    return { carryId, uploads: await Promise.all(files.map(async (file, picture) => ({ picture, putUrl: await pictures.putUrl(carriedKey(carryId, picture), file.type, file.bytes) }))) };
+  }
+
+  /**
+   * Saves ads made outside the studio as a pack of a brand, with its own link. The link is returned here once.
+   * The studio reads each uploaded file itself and keeps only a PNG or a JPEG. A carried pack teaches the studio nothing: it has no batch, no pick and no check.
+   */
+  async carry(by: string, input: CarryInput): Promise<{ link: string; packId: string; version: PackVersion }> {
+    const { packs, brands, pictures, now } = this.deps;
+    if (!CARRY_ID.test(input.carryId)) throw new Refusal("This is not the id of a carry. Start one with pack_carry_start.");
+    const brand = await brands.brand(input.brandId);
+    if (input.ads.length < 1 || input.ads.length > 3) throw new Refusal("A carried pack has one to three ads.");
+    if (input.launchPlan.length < 1) throw new Refusal("Give the launch plan, one step in each line.");
+    if (new Set(input.ads.map((ad) => ad.adName)).size !== input.ads.length) throw new Refusal("Two ads of this pack have the same name. Results are matched by the name, so each ad needs its own.");
+    for (const ad of input.ads) {
+      if (!AD_NAME.test(ad.adName)) throw new Refusal(`"${ad.adName.slice(0, 80)}" is not an ad name: letters, digits and "_" only, 80 at most.`);
+      if (!ad.why.trim()) throw new Refusal(`Give one line of why for ${ad.adName}.`);
+      if (ad.variants.length !== 2 || ad.variants.some((variant) => !variant.primary.trim() || !variant.headline.trim())) throw new Refusal(`${ad.adName} needs two variants of Meta text, each with its primary text and headline.`);
+      const unsafe = ad.claims.find((claim) => !isHttps(claim.url));
+      if (unsafe) throw new Refusal(`The source of a claim of ${ad.adName} is not an https address.`);
+    }
+    if (input.example) {
+      const { note, comments } = input.example;
+      if (!note.trim()) throw new Refusal("An example needs its note: the line that says the brand shown is not a client.");
+      if (comments.length > EXAMPLE_COMMENTS_MAX) throw new Refusal(`An example shows ${EXAMPLE_COMMENTS_MAX} example comments at most.`);
+      for (const comment of comments) {
+        if (!comment.text.trim() || comment.text.length > COMMENT_MAX_CHARS) throw new Refusal(`An example comment has 1 to ${COMMENT_MAX_CHARS} characters.`);
+        if (comment.adName !== undefined && !input.ads.some((ad) => ad.adName === comment.adName)) throw new Refusal(`An example comment names the ad "${comment.adName.slice(0, 80)}", which is not in this pack.`);
+      }
+    }
+
+    // Each picture is read once, and told by its first bytes: what the sender called it does not count.
+    const read = new Map<number, { key: string; type: PackPictureType }>();
+    const picture = async (number: number) => {
+      const known = read.get(number);
+      if (known) return known;
+      if (!Number.isInteger(number) || number < 0 || number >= CARRY_MAX_PICTURES) throw new Refusal(`There is no picture ${number} in this carry.`);
+      const key = carriedKey(input.carryId, number);
+      const body = await pictures.read(key, MAX_PICTURE_BYTES);
+      if (!body) throw new Refusal(`Picture ${number} is not there, or it is over 8 MB. Send it to the address pack_carry_start gave, then call this again.`);
+      const kind = pictureType(body);
+      if (!kind || !isPackPicture(kind.type)) throw new Refusal(`Picture ${number} is not a JPEG or a PNG.`);
+      const found = { key, type: kind.type };
+      read.set(number, found);
+      return found;
+    };
+    const ads: PackAd[] = [];
+    for (const [index, ad] of input.ads.entries()) {
+      const shown = await picture(ad.picture);
+      const downloads = ad.downloads ? await Promise.all(ad.downloads.map(picture)) : undefined;
+      if (downloads && (downloads.length < 1 || new Set(downloads.map((file) => file.type)).size !== downloads.length)) throw new Refusal(`The downloads of ${ad.adName} are one picture of each format at most: a JPEG, a PNG, or both.`);
+      ads.push({
+        ideaId: `carried-${index + 1}`,
+        adName: ad.adName,
+        ...(ad.stage ? { stage: ad.stage } : {}),
+        imageId: `carried-${ad.picture}`,
+        key: shown.key,
+        ...(ad.words ? { words: ad.words } : {}),
+        meta: { version: 1, variants: ad.variants },
+        why: ad.why,
+        claims: ad.claims,
+        ...(downloads ? { downloads } : {}),
+      });
+    }
+
+    const begun = await packs.get(input.carryId);
+    if (begun && (await packs.versions(begun.id)).length > 0) throw new Refusal("This carry is saved already. Read its pack with pack_get.");
+    const version: PackVersion = { version: 1, ads, launchPlan: input.launchPlan, at: now().toISOString(), by };
+    const token = randomBytes(32).toString("base64url");
+    const pack: Pack = { id: input.carryId, source: "carried", brandId: brand.id, product: input.product, ...(input.example ? { example: input.example } : {}), tokenHash: hashToken(token), current: 1, createdAt: version.at, by };
+    if (begun) await packs.relink(begun, pack.tokenHash);
+    else if (!(await packs.create(pack))) throw new Refusal("This carry is saved already. Read its pack with pack_get.");
+    if (!(await packs.addVersion(pack.id, version))) throw new Refusal("Another save of this carry happened at the same moment. Read its pack with pack_get.");
+    return { link: this.link(token), packId: pack.id, version };
+  }
+
+  /** The brand and the product a pack is for: from its batch, or from the pack itself when it was carried in. */
+  private async names(pack: Pick<Pack, "source" | "batchId" | "brandId" | "product">): Promise<{ brand: { id: string; name: string }; product: { id?: string; name: string } }> {
+    const { batches, brands } = this.deps;
+    if (pack.source === "carried") {
+      const brand = await brands.brand(pack.brandId as string);
+      return { brand: { id: brand.id, name: brand.name }, product: { name: pack.product ?? "" } };
+    }
+    const batch = await batches.get(pack.batchId as string);
+    const [brand, product] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId)]);
+    return { brand: { id: brand.id, name: brand.name }, product: { id: product.id, name: product.name } };
+  }
+
+  /** The pack a token opens and the version it shows, or nothing. */
+  private async opened(token: string): Promise<{ pack: Pack; version: PackVersion } | undefined> {
+    const { packs } = this.deps;
     if (!TOKEN.test(token)) return undefined;
     const pack = await packs.byHash(hashToken(token));
-    const version = pack && (await packs.versions(pack.batchId)).find((entry) => entry.version === pack.current);
-    if (!pack || !version) return undefined;
-    const batch = await batches.get(pack.batchId);
-    const [brand, product] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId)]);
+    const version = pack && (await packs.versions(pack.id)).find((entry) => entry.version === pack.current);
+    return pack && version ? { pack, version } : undefined;
+  }
+
+  /** What a link shows, or nothing when no pack has this token. */
+  async view(token: string): Promise<PackView | undefined> {
+    const { pictures } = this.deps;
+    const found = await this.opened(token);
+    if (!found) return undefined;
+    const { pack, version } = found;
+    const { brand, product } = await this.names(pack);
     return {
       brand: brand.name,
       product: product.name,
       version: version.version,
       at: version.at,
-      ads: await Promise.all(version.ads.map(async ({ key, imageId: _imageId, ideaId: _ideaId, ...ad }) => ({ ...ad, viewUrl: await pictures.viewUrl(key, PICTURE_SECONDS) }))),
+      ads: await Promise.all(
+        version.ads.map(async (ad) => {
+          const { key, imageId: _imageId, ideaId: _ideaId, downloads: _downloads, ...shown } = ad;
+          return { ...shown, viewUrl: await pictures.viewUrl(key, PICTURE_SECONDS), formats: formatsOf(ad) };
+        }),
+      ),
       launchPlan: version.launchPlan,
+      ...(pack.example ? { example: pack.example } : {}),
     };
+  }
+
+  /**
+   * An address that downloads one ad of the pack a link shows, good for a few minutes, or nothing when the link or the ad is not there.
+   * It is made at the click, so a page that stayed open for a day still downloads. The file of an example says so in its name.
+   */
+  async download(token: string, ad: number, format?: string): Promise<string | undefined> {
+    const { pictures } = this.deps;
+    const found = await this.opened(token);
+    const chosen = found?.version.ads[ad];
+    if (!found || !chosen) return undefined;
+    const files = downloadsOf(chosen);
+    const file = format === undefined ? files[0] : files.find((entry) => PACK_PICTURE_TYPES[entry.type] === format);
+    if (!file) return undefined;
+    return pictures.downloadUrl(file.key, `${found.pack.example ? "example_" : ""}${chosen.adName}.${PACK_PICTURE_TYPES[file.type]}`);
   }
 
   /**
@@ -173,27 +360,28 @@ export class PackService {
     if (!TOKEN.test(token)) return undefined;
     const pack = await packs.byHash(hashToken(token));
     if (!pack) return undefined;
+    // The link of an example is held by many strangers. It takes nothing, whatever the page that asks looks like.
+    if (pack.example) throw new Refusal("This page is an example. It takes no file.");
     if (!Object.hasOwn(UPLOAD_TYPES, file.type)) throw new Refusal("Send a JPEG or PNG screenshot, or a CSV or XLSX export.");
     if (!Number.isInteger(file.bytes) || file.bytes < 1 || file.bytes > UPLOAD_MAX_BYTES) throw new Refusal("A file can be up to 10 MB.");
     const type = file.type as UploadType;
     // The name is shown to the owner: letters, digits and a few marks only, so it cannot carry a path or a script.
     const name = (file.name.split(/[\\/]/).at(-1) ?? "").replace(/[^\p{L}\p{N} ._()-]+/gu, "_").replace(/^\.+/, "").slice(0, 120) || "file";
-    const upload = await results.addUpload(pack.batchId, { name, type, bytes: file.bytes, packVersion: pack.current }, (id) => `quarantine/packs/${pack.batchId}/${id}.${UPLOAD_TYPES[type]}`);
+    const upload = await results.addUpload(pack.id, { name, type, bytes: file.bytes, packVersion: pack.current }, (id) => `quarantine/packs/${pack.id}/${id}.${UPLOAD_TYPES[type]}`);
     if (!upload) throw new Refusal(`This link has taken ${UPLOAD_MAX_FILES} files, which is the most it takes. Send the rest to your contact at the studio.`);
     return { upload: { id: upload.id, name: upload.name }, putUrl: await pictures.putUrl(upload.key, type, file.bytes) };
   }
 
   /** Every pack as the dashboard lists it, newest first. No link: the studio does not keep it. */
   async summaries(): Promise<PackSummary[]> {
-    const { packs, batches, brands, pictures, results } = this.deps;
+    const { packs, pictures, results } = this.deps;
     const list = await Promise.all(
       (await packs.all()).map(async ({ tokenHash: _tokenHash, ...pack }): Promise<PackSummary> => {
-        const batch = await batches.get(pack.batchId);
-        const [brand, product, versions, uploads, typed] = await Promise.all([brands.brand(batch.brandId), brands.product(batch.productId), packs.versions(pack.batchId), results.uploads(pack.batchId), results.results(pack.batchId)]);
+        const [{ brand, product }, versions, uploads, typed] = await Promise.all([this.names(pack), packs.versions(pack.id), results.uploads(pack.id), results.results(pack.id)]);
         return {
           pack,
-          brand: { id: brand.id, name: brand.name },
-          product: { id: product.id, name: product.name },
+          brand,
+          product,
           versions: await Promise.all(versions.map(async (version) => ({ ...version, ads: await Promise.all(version.ads.map(async (ad) => ({ ...ad, viewUrl: await pictures.viewUrl(ad.key) }))) }))),
           uploads: await Promise.all(uploads.map(async (upload) => ({ ...upload, downloadUrl: await pictures.downloadUrl(upload.key, upload.name) }))),
           results: typed,

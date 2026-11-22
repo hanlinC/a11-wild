@@ -17,7 +17,7 @@ const ad = (version: number) => ({
   claims: [],
 });
 const pack: PackSummary = {
-  pack: { batchId: "batch-1", current: 2, createdAt: "2026-11-21T12:00:00.000Z", by: "owner@example.com" },
+  pack: { id: "batch-1", source: "batch", batchId: "batch-1", current: 2, createdAt: "2026-11-21T12:00:00.000Z", by: "owner@example.com" },
   brand: { id: "brand-1", name: "Wongi" },
   product: { id: "product-1", name: "Salted egg fish skin" },
   versions: [1, 2].map((version) => ({ version, ads: [ad(version)], launchPlan: ["Run for 72 hours."], at: "2026-11-21T12:00:00.000Z", by: "owner@example.com" })),

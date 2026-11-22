@@ -564,6 +564,33 @@ export interface PackAd {
   why: string;
   /** The fact check: each claim of the ad with the page and the quote that prove it. */
   claims: { claim: string; quote: string; url: string }[];
+  /** The pictures a download gives, when they are not the picture the page shows: the marked copies of an example. */
+  downloads?: { key: string; type: PackPictureType }[];
+}
+
+/** The picture types a pack's download gives, with the ending of each. */
+export const PACK_PICTURE_TYPES = { "image/jpeg": "jpg", "image/png": "png" } as const;
+export type PackPictureType = keyof typeof PACK_PICTURE_TYPES;
+export type PackFormat = (typeof PACK_PICTURE_TYPES)[PackPictureType];
+
+/** Where a pack's content comes from: a done batch of this studio, or ads made outside it and carried in by the owner. */
+export type PackSource = "batch" | "carried";
+
+/** One line of the sample exchange an example shows in the place of the comment box. Nobody sends it: the studio wrote it. */
+export interface ExampleComment {
+  from: "client" | "studio";
+  text: string;
+  /** The ad it is about, by its name. Without it, it is about the pack. */
+  adName?: string;
+}
+export const EXAMPLE_COMMENTS_MAX = 6;
+export const COMMENT_MAX_CHARS = 1000;
+
+/** What makes a pack an example: a page of its own for cold outreach, which takes nothing from anyone. */
+export interface PackExample {
+  /** The line that says the brand shown is not a client. */
+  note: string;
+  comments: ExampleComment[];
 }
 
 /** One version of what a pack link shows. A version is never changed: a change is a new version, and an old one can be put back. */
@@ -578,7 +605,16 @@ export interface PackVersion {
 
 /** The private link of a batch's ads for the client. Only the SHA-256 of its token is kept. */
 export interface Pack {
-  batchId: string;
+  /** The batch's id for the pack of a batch, and the pack's own id for a carried pack. */
+  id: string;
+  source: PackSource;
+  /** The batch of a pack with source `batch`. */
+  batchId?: string;
+  /** The brand the pack belongs to. A pack saved before packs had a brand reads it from its batch. */
+  brandId?: string;
+  /** The product's name, for a carried pack: it has no product of this studio. */
+  product?: string;
+  example?: PackExample;
   tokenHash: string;
   /** The version the link shows now. */
   current: number;
@@ -592,15 +628,19 @@ export interface PackView {
   product: string;
   version: number;
   at: string;
-  ads: (Omit<PackAd, "key" | "imageId" | "ideaId"> & { viewUrl: string })[];
+  /** Each ad with the formats its download gives. A download is asked for at the click, so its address is always fresh. */
+  ads: (Omit<PackAd, "key" | "imageId" | "ideaId" | "downloads"> & { viewUrl: string; formats: PackFormat[] })[];
   launchPlan: string[];
+  /** Set on an example: its note and its sample exchange. An example takes no comment and no file. */
+  example?: PackExample;
 }
 
 /** A pack as the dashboard lists it. The link itself is shown once, when it is made. */
 export interface PackSummary {
   pack: Omit<Pack, "tokenHash">;
   brand: { id: string; name: string };
-  product: { id: string; name: string };
+  /** A carried pack has a product name and no product of this studio. */
+  product: { id?: string; name: string };
   versions: (Omit<PackVersion, "ads"> & { ads: (PackAd & { viewUrl: string })[] })[];
   uploads: (PackUpload & { downloadUrl: string })[];
   results: AdResult[];
