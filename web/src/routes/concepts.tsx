@@ -11,6 +11,7 @@ import { KIND_NAMES } from "@/lib/kinds";
 import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
+import { Zoom } from "@/components/viewer";
 
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-offset-2";
 const PICKED = 3;
@@ -200,9 +201,10 @@ function Concept({ entry, picked, chosen, full, onToggle }: { entry: Entry; pick
           <ul className="grid content-start gap-3">
             {roughs.map((rough, index) => (
               <li key={rough.imageId}>
-                <a href={rough.viewUrl} target="_blank" rel="noopener noreferrer">
-                  <img src={rough.viewUrl} alt={`${idea.title}, rough ${index + 1}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
-                </a>
+                <Zoom url={rough.viewUrl} alt={`${idea.title}, rough ${index + 1}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
+                  <p className="text-body font-medium">{idea.title}</p>
+                  <p className="text-caption text-muted-foreground">Rough {index + 1}</p>
+                </Zoom>
               </li>
             ))}
           </ul>

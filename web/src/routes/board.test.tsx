@@ -78,6 +78,17 @@ describe("Pick board", () => {
     expect(first.textContent).not.toMatch(/rank|score|best|recommended/i);
   });
 
+  it("opens a draft large over the page, not in a new tab, and closes back to the board", async () => {
+    show(board());
+    const first = (await screen.findByRole("heading", { name: "Idea 1: Rock 1" })).closest("section")!;
+    expect(within(first).queryByRole("link", { name: /draft/ })).not.toBeInTheDocument();
+    await userEvent.click(within(first).getByRole("button", { name: "Rock 1, draft 2" }));
+    const viewer = within(screen.getByRole("dialog", { name: "Picture, large" }));
+    expect(viewer.getByRole("img", { name: "Rock 1, draft 2" })).toBeInTheDocument();
+    await userEvent.click(viewer.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("names a D item on the draft that has it, and says when it was measured", async () => {
     show(board());
     const second = (await screen.findByAltText("Rock 1, draft 2")).closest("li")!;

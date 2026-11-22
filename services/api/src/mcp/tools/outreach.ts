@@ -91,7 +91,7 @@ export function outreachTools({ store, sequence, desk, picks, now }: OutreachToo
       name: "outreach_show",
       ownerOnly: true,
       description:
-        "Puts the drafts of an outreach batch on its prospect's page for the owner's pick. Free. Call it when every draft is made, checked and carries its words (the batch is at checked). The owner sees every draft there and picks the one to send; you pick none and make no final before that. A draft with a D item or two F items is shown to him greyed and cannot be picked. Call it again after you set other words he asked for. Then stop work on the brand: outreach_next names it under owed when he has chosen.",
+        "Puts the drafts of an outreach batch on its prospect's page for the owner's pick. Free. Call it when every draft is made, checked and carries its words (the batch is at checked). The owner sees every draft there and picks the one to send; you pick none and make no final before that. No check blocks a draft there: each D and F item and each measure you saved is shown to him beside the picture as a note, and he may pick any draft. Call it again after you set other words he asked for. Then stop work on the brand: outreach_next names it under owed when he has chosen.",
       input: { batchId: id },
       writes: true,
       handler: ({ batchId }) => picks.show(batchId),

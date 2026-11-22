@@ -58,7 +58,7 @@ const draftOf = (ideaId: string, number: number, words: { headline: string; subl
   ...overrides,
 });
 
-/** Two ideas with two drafts each; the second draft of the second idea failed a check. */
+/** Two ideas with two drafts each; the second draft of the second idea has no words yet, and the agent saw a fault in the one before it. */
 export const candidates = (overrides: Partial<OutreachCandidates> = {}): OutreachCandidates => {
   const crumbles = { headline: "One fork tap and it crumbles.", subline: "Baked this morning in Katong." };
   const gift = { headline: "Your visiting gift, baked fresh.", subline: "Twelve tarts in a box." };
@@ -68,7 +68,7 @@ export const candidates = (overrides: Partial<OutreachCandidates> = {}): Outreac
     waits: true,
     agentOwes: false,
     choosing: "open",
-    drafts: [draftOf("idea-1", 1, crumbles), draftOf("idea-1", 2, crumbles), draftOf("idea-2", 1, gift), draftOf("idea-2", 2, gift, { blocked: "The box is too tall." })],
+    drafts: [draftOf("idea-1", 1, crumbles), draftOf("idea-1", 2, crumbles), draftOf("idea-2", 1, gift, { warning: "The agent saw: The box is too tall." }), draftOf("idea-2", 2, gift, { blocked: "Its words are not set yet." })],
     ...overrides,
   };
 };

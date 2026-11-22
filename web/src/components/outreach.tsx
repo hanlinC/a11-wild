@@ -5,6 +5,7 @@ import { FIELD } from "@/components/canon-card";
 import { Badge } from "@/components/ui/badge";
 import { Banner, BannerTitle } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
+import { Zoom } from "@/components/viewer";
 import { api, describeError, type ProspectWrite } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -73,24 +74,30 @@ export function BrandLine({ prospect }: { prospect: ProspectRow }) {
 export function AdPicture({ ad, brand }: { ad: OutreachAdView; brand: string }) {
   return (
     <figure className="w-full max-w-64 shrink-0">
-      <a href={ad.viewUrl} target="_blank" rel="noopener noreferrer">
-        <img src={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className={`aspect-[4/5] w-full rounded-lg border border-border bg-muted ${ad.from === "owner" ? "object-contain" : "object-cover"}`} />
-      </a>
+      <Zoom url={ad.viewUrl} alt={`Ad ${ad.n} for ${brand}`} className={`aspect-[4/5] w-full rounded-lg border border-border bg-muted ${ad.from === "owner" ? "object-contain" : "object-cover"}`}>
+        <p className="text-body font-medium">Ad {ad.n}</p>
+        {ad.why ? <p className="text-body text-muted-foreground">{ad.why}</p> : null}
+        <CheckNote warning={ad.warning} />
+      </Zoom>
       <figcaption className="mt-1.5 text-caption text-muted-foreground">{ad.why}</figcaption>
     </figure>
   );
 }
 
-/** What the pack measure found in a picture the owner may still send: he looks at the pack himself. */
-export function PackWarning({ warning, before }: { warning: string | undefined; before?: string }) {
+/**
+ * What the checks found in a picture of an outreach brand. It blocks nothing: the owner reads it and decides.
+ * In a row of drafts it is cut to two lines; the picture opened large gives it in full.
+ */
+export function CheckNote({ warning, before, short }: { warning: string | undefined; before?: string; short?: boolean }) {
   if (!warning) return null;
   return (
     <p className="text-caption">
       <Badge variant="dot" color="amber">
-        Look at the pack
+        The checks found
       </Badge>
-      <span className="mt-1 block text-muted-foreground">
-        {warning} You judge it by eye{before ? ` ${before}` : ""}.
+      <span className={cn("mt-1 block text-muted-foreground", short && "line-clamp-2")} title={short ? warning : undefined}>
+        {warning}
+        {short ? null : ` It is your call${before ? ` ${before}` : ""}.`}
       </span>
     </p>
   );
@@ -225,7 +232,7 @@ export function MessageCard({
           ))}
         </fieldset>
         <p className="rounded-lg border border-border bg-background px-3 py-2 text-body break-words whitespace-pre-wrap">{message.text}</p>
-        <PackWarning warning={ad?.warning} before="before you send" />
+        <CheckNote warning={ad?.warning} before="before you send" />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="secondary" className={TAP} onClick={copy}>
             {copied ? "Copied" : "Copy the text"}

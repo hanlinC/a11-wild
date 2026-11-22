@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
+import { Zoom } from "@/components/viewer";
 
 const percent = (share: number) => `${(share * 100).toFixed(2)}%`;
 const size = (bytes: number) => (bytes < 1_000_000 ? `${Math.max(1, Math.round(bytes / 1000))} KB` : `${(bytes / 1_000_000).toFixed(1)} MB`);
@@ -62,9 +63,10 @@ function PackCard({ pack }: { pack: PackSummary }) {
             <ul className="grid gap-4 sm:grid-cols-3">
               {current.ads.map((ad) => (
                 <li key={ad.adName}>
-                  <a href={ad.viewUrl} target="_blank" rel="noopener noreferrer">
-                    <img src={ad.viewUrl} alt={`The ad ${ad.adName}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
-                  </a>
+                  <Zoom url={ad.viewUrl} alt={`The ad ${ad.adName}`} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
+                    <p className="break-all font-mono text-caption">{ad.adName}</p>
+                    <p className="text-caption text-muted-foreground">{ad.why}</p>
+                  </Zoom>
                   <p className="mt-2 break-all font-mono text-caption">{ad.adName}</p>
                   <p className="mt-1 text-caption text-muted-foreground">{ad.why}</p>
                 </li>

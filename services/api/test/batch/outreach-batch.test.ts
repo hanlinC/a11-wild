@@ -102,7 +102,7 @@ describe("an outreach batch", () => {
     expect(pack).toMatchObject({ ok: false, error: expect.stringMatching(/outreach batch.*no client pack/) });
   });
 
-  describe("the pack measure", () => {
+  describe("what the checks found", () => {
     const WIDER = { code: "D11" as const, note: "render H/W 0.955 (486 x 509 px); packshot H/W 1.000; difference -4.5%; FAIL at 2%" };
     const measure = (imageId: string) => studio.services.checks.measure(batchId, imageId, PACK_CHECK, WIDER);
     const view = async () => (await studio.services.outreach.picks.view((await studio.services.outreach.store.all()).find((file) => file.profile.id === PROSPECT)!, new Set()))!;
@@ -122,12 +122,12 @@ describe("an outreach batch", () => {
       studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
       const final = await render("idea-1", "final", picked);
       await measure(final);
-      expect((await check(final)).value.note).toMatch(/warns the owner and does not reject/);
+      expect((await check(final)).value.note).toMatch(/a check rejects nothing: the owner reads what you saved/);
       const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });
       await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
       const report = (await callTool(studio, "batch_done", { batchId })).value;
       expect(report).toMatchObject({ done: true });
-      expect(JSON.stringify(report)).toMatch(/pack_check failed: the owner is warned/);
+      expect(JSON.stringify(report)).toMatch(/the owner is warned of what its checks found/);
       const attached = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value;
       expect(attached.ad).toMatchObject({ picked: true, warning: "The pack is drawn 5% wider than in its photo. The limit is 2%." });
     });
@@ -139,15 +139,33 @@ describe("an outreach batch", () => {
       expect((await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value.ad.warning).toBeUndefined();
     });
 
-    it("still blocks a draft the agent marked, with the pack measure beside it or without", async () => {
+    it("blocks no draft for what the agent saw: the owner reads it, picks the draft, and its final is made", async () => {
       await batchAtBoard({ prospectId: PROSPECT });
       const picked = drafts["idea-1"]!;
       await measure(picked);
       await check(picked, [{ code: "D4", note: "Invented leaves at the left edge." }]);
-      const draft = (await view()).drafts.find((entry) => entry.imageId === picked)!;
-      expect(draft).toMatchObject({ blocked: "Invented leaves at the left edge." });
-      expect(draft.warning).toBeUndefined();
-      await expect(studio.services.outreach.picks.pick(PROSPECT, picked, "owner@studio.example")).rejects.toThrow(/cannot be sent/);
+      await callTool(studio, "outreach_show", { batchId });
+      const shown = await view();
+      expect(shown.drafts.filter((entry) => entry.blocked)).toHaveLength(0);
+      const draft = shown.drafts.find((entry) => entry.imageId === picked)!;
+      expect(draft.warning).toBe("The pack is drawn 5% wider than in its photo. The limit is 2%. The agent saw: Invented leaves at the left edge.");
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      await studio.services.outreach.picks.pick(PROSPECT, picked, "owner@studio.example");
+      studio.clock.now = new Date(studio.clock.now.getTime() + 1000);
+      const final = await render("idea-1", "final", picked);
+      await check(final, [{ code: "D4", note: "Invented leaves at the left edge." }]);
+      const job = await callTool(studio, "photo_finish", { ...rules, batchId, imageId: final });
+      await callTool(studio, "pixel_status", { batchId, jobId: job.value.id });
+      expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: true });
+      const attached = (await callTool(studio, "outreach_attach", { batchId, why: "The pouch on its rock." })).value;
+      expect(attached.ad).toMatchObject({ picked: true, warning: "The agent saw: Invented leaves at the left edge." });
+    });
+
+    it("still needs each final looked at before it is done", async () => {
+      await batchAtBoard({ prospectId: PROSPECT });
+      await ownerPicks(drafts["idea-1"]!);
+      await render("idea-1", "final", drafts["idea-1"]);
+      expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: false });
     });
 
     it("still rejects in a batch made for a client: no final from that draft, and the owner's pick is told so", async () => {
@@ -158,12 +176,6 @@ describe("an outreach batch", () => {
       expect(saved.value.note).toMatch(/no final can be made from it/);
       expect(await callTool(studio, "render_submit", { ...rules, batchId, ideaId: "idea-1", kind: "final", prompt: SCENE, fromId: picked })).toMatchObject({ ok: false, error: expect.stringMatching(/R35/) });
     });
-  });
-
-  it("is not done when its final has a D item", async () => {
-    await batchAtBoard({ prospectId: PROSPECT });
-    await oneFinal([{ code: "D11", note: "The pouch is too tall." }]);
-    expect((await callTool(studio, "batch_done", { batchId })).value).toMatchObject({ done: false });
   });
 
   describe("the judgement of its ideas", () => {

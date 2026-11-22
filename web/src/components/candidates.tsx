@@ -1,10 +1,11 @@
 import type { OutreachCandidate, OutreachCandidates, ProspectPage } from "@a11-wild/shared";
 import { type FormEvent, useState } from "react";
 import { FIELD } from "@/components/canon-card";
-import { Failure, PackWarning, TAP, useWrite } from "@/components/outreach";
+import { CheckNote, Failure, TAP, useWrite } from "@/components/outreach";
 import { Card } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Viewer, ZOOM } from "@/components/viewer";
 
 /** What the section says first: what is asked of the owner now, or who acts next. */
 function lead({ choosing, picked, wordsAsked, agentOwes }: OutreachCandidates): string {
@@ -12,18 +13,20 @@ function lead({ choosing, picked, wordsAsked, agentOwes }: OutreachCandidates): 
   if (wordsAsked) return `Waits for the agent: it sets the other words you asked for ("${wordsAsked.ownerSaid}"). The drafts come back for your pick after that.`;
   if (picked && agentOwes) return "You picked. Waits for the agent: it makes the full-size version of your pick, and the message is then ready. You can still pick another.";
   if (picked) return "Your pick is under Ads. Pick another draft here if you want a different ad for the next message.";
-  return "Every draft the studio made for this brand. Pick the one to send: the agent then makes it full size. Nothing is sent by a pick.";
+  return "Every draft the studio made for this brand. Click one to look at it large, or to ask for other words on it. Pick the one to send: the agent then makes it full size. Nothing is sent by a pick.";
 }
 
 /**
  * Every draft the studio made for a brand, by idea, for the owner's own pick.
- * A draft that failed a check is shown greyed with what is wrong, and cannot be picked. A pick sends nothing.
+ * No check blocks a draft: what a check found is a note beside it, and the pick is his. A click opens a draft large over the page.
+ * A pick sends nothing.
  */
 export function Candidates({ id, brand, candidates, done }: { id: string; brand: string; candidates: OutreachCandidates; done: (page: ProspectPage) => void }) {
   const { write, busy, error } = useWrite(id, done);
   const [words, setWords] = useState<string>();
   const [none, setNone] = useState(false);
   const [said, setSaid] = useState("");
+  const [large, setLarge] = useState<number>();
   const open = candidates.choosing === "open";
   const ideas = [...new Set(candidates.drafts.map((draft) => draft.ideaId))].map((ideaId) => candidates.drafts.filter((draft) => draft.ideaId === ideaId));
 
@@ -39,7 +42,8 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
     <form onSubmit={onSubmit} className="grid gap-3">
       <label className="grid gap-1.5 text-caption text-muted-foreground">
         {label}
-        <input value={said} onChange={(event) => setSaid(event.target.value)} className={`${FIELD} text-foreground`} required maxLength={500} />
+        {/* The form opens where he asked for it, or under the drafts he came from: the focus brings it into view. */}
+        <input value={said} onChange={(event) => setSaid(event.target.value)} className={`${FIELD} text-foreground`} required maxLength={500} autoFocus />
       </label>
       <div className="flex flex-wrap gap-2">
         <Button type="submit" className={TAP} loading={busy === name}>
@@ -52,51 +56,56 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
     </form>
   );
 
-  const draftCard = (draft: OutreachCandidate) => {
-    const mine = candidates.picked?.imageId === draft.imageId;
-    return (
-      <li key={draft.imageId} className="grid content-start gap-2">
-        <a href={draft.viewUrl} target="_blank" rel="noopener noreferrer" title="Open large">
-          <img
-            src={draft.viewUrl}
-            alt={`Draft ${draft.number} of "${draft.headline ?? draft.title}" for ${brand}`}
-            className={`aspect-[4/5] w-full rounded-lg border bg-muted object-cover ${mine ? "border-foreground ring-2 ring-foreground" : "border-border"} ${draft.blocked ? "opacity-40 grayscale" : ""}`}
-          />
-        </a>
-        <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
-          Draft {draft.number}
-          {mine ? <Badge color="green">Your pick</Badge> : null}
-        </p>
-        <PackWarning warning={draft.warning} />
-        {draft.blocked ? (
-          <p className="text-caption text-muted-foreground">Cannot be sent: {draft.blocked}</p>
-        ) : open ? (
-          <div className="grid gap-2">
-            {mine && candidates.agentOwes ? null : (
-              <Button type="button" className={TAP} loading={busy === "pick"} onClick={() => write({ action: "pick", body: { imageId: draft.imageId } })}>
-                Pick this one
-              </Button>
-            )}
-            {candidates.words ? (
-              <Button
-                type="button"
-                variant="ghost"
-                className={TAP}
-                onClick={() => {
-                  setNone(false);
-                  setSaid("");
-                  setWords(draft.imageId);
-                }}
-              >
-                Other words
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </li>
-    );
+  const altOf = (draft: OutreachCandidate) => `Draft ${draft.number} of "${draft.headline ?? draft.title}" for ${brand}`;
+  const isMine = (draft: OutreachCandidate) => candidates.picked?.imageId === draft.imageId;
+  const otherWords = (draft: OutreachCandidate) => {
+    setLarge(undefined);
+    setNone(false);
+    setSaid("");
+    setWords(draft.imageId);
   };
+  /** What the owner can do with one draft: the same under the small picture and beside the large one. */
+  const actions = (draft: OutreachCandidate, large?: () => void) =>
+    draft.blocked ? (
+      <p className="text-caption text-muted-foreground">Not ready to pick: {draft.blocked}</p>
+    ) : open ? (
+      <div className="grid gap-2">
+        {isMine(draft) && candidates.agentOwes ? null : (
+          <Button
+            type="button"
+            className={TAP}
+            loading={busy === "pick"}
+            onClick={async () => {
+              if (await write({ action: "pick", body: { imageId: draft.imageId } })) large?.();
+            }}
+          >
+            Pick this one
+          </Button>
+        )}
+        {/* The row of drafts keeps to one action each; other words are asked for beside the large picture. */}
+        {candidates.words && large ? (
+          <Button type="button" variant="ghost" className={TAP} onClick={() => otherWords(draft)}>
+            Other words
+          </Button>
+        ) : null}
+      </div>
+    ) : null;
 
+  const draftCard = (draft: OutreachCandidate) => (
+    <li key={draft.imageId} className="grid content-start gap-2">
+      <button type="button" onClick={() => setLarge(candidates.drafts.indexOf(draft))} title="Look at it large" className={ZOOM}>
+        <img src={draft.viewUrl} alt={altOf(draft)} className={`aspect-[4/5] w-full rounded-lg border bg-muted object-cover ${isMine(draft) ? "border-foreground ring-2 ring-foreground" : "border-border"}`} />
+      </button>
+      <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+        Draft {draft.number}
+        {isMine(draft) ? <Badge color="green">Your pick</Badge> : null}
+      </p>
+      {actions(draft)}
+      <CheckNote warning={draft.warning} short />
+    </li>
+  );
+
+  const shown = large === undefined ? undefined : candidates.drafts[large];
   const asked = words === undefined ? undefined : candidates.drafts.find((draft) => draft.imageId === words);
 
   return (
@@ -151,6 +160,21 @@ export function Candidates({ id, brand, candidates, done }: { id: string; brand:
         )
       ) : null}
       <Failure error={error} />
+      {shown && large !== undefined ? (
+        <Viewer shots={candidates.drafts.map((draft) => ({ url: draft.viewUrl, alt: altOf(draft) }))} at={large} onAt={setLarge} onClose={() => setLarge(undefined)}>
+          <div>
+            <p className="text-body font-medium">{shown.headline ?? shown.title}</p>
+            {shown.subline ? <p className="text-body text-muted-foreground">{shown.subline}</p> : null}
+          </div>
+          <p className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+            Draft {shown.number}
+            {isMine(shown) ? <Badge color="green">Your pick</Badge> : null}
+          </p>
+          <CheckNote warning={shown.warning} />
+          {actions(shown, () => setLarge(undefined))}
+          <Failure error={error} />
+        </Viewer>
+      ) : null}
     </div>
   );
 }

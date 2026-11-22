@@ -13,6 +13,7 @@ import { KIND_NAMES } from "@/lib/kinds";
 import { useMe } from "@/lib/session";
 import { useLoad } from "@/lib/use-load";
 import { when } from "@/lib/when";
+import { Zoom } from "@/components/viewer";
 
 const FIELD = "w-full rounded-lg border border-border bg-background px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-offset-2";
 type Entry = BoardData["ideas"][number];
@@ -238,9 +239,14 @@ function Draft({ draft, label, alt, picked }: { draft: BoardDraft; label: string
   const items = [...(draft.checks?.items ?? []), ...(draft.words?.checks?.items ?? [])];
   return (
     <figure>
-      <a href={url} target="_blank" rel="noopener noreferrer">
-        <img src={url} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover" />
-      </a>
+      <Zoom url={url} alt={alt} className="aspect-[4/5] w-full rounded-lg bg-(--tint) object-cover">
+        <p className="text-body font-medium">{label}</p>
+        {items.map((item, index) => (
+          <p key={`${item.code}-${item.tool ?? "seen"}-${index}`} className="text-caption text-muted-foreground">
+            {item.code}: {item.note}
+          </p>
+        ))}
+      </Zoom>
       <figcaption className="mt-2 flex flex-wrap items-center gap-2 text-caption">
         <span className="font-medium">{label}</span>
         {picked ? <Badge color="green">Your pick</Badge> : null}

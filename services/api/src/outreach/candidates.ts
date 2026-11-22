@@ -1,7 +1,7 @@
 import type { Batch, Board, BoardDraft, CheckItem, OutreachCandidate, OutreachCandidates, ProspectFile } from "@a11-wild/shared";
 import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
-import { defectOf, judgedIn, packWarnings, rejected } from "../checks/store.js";
+import { notesIn } from "../checks/store.js";
 import { Refusal } from "../mcp/registry.js";
 import { candidatesWait, owedByAgent, owedNow, refusedDrafts, stageOf, TAKES_NO_AD } from "./stage.js";
 import type { OutreachStore } from "./store.js";
@@ -43,25 +43,18 @@ export function plainReason({ note, tool }: Pick<CheckItem, "note" | "tool">): s
 
 const OUTREACH = { purpose: "outreach" } as const;
 
-/**
- * Why a draft cannot go to a person: a D item, or two F items, in the picture or in the picture with its words.
- * The pack measure is not among them: the owner judges the pack's shape by eye, and `warningOf` says what was measured.
- */
-export function blockedBy(draft: Pick<BoardDraft, "checks" | "words">): string | undefined {
-  for (const checks of [draft.checks ?? undefined, draft.words?.checks ?? undefined]) {
-    const judged = judgedIn(OUTREACH, checks);
-    const defect = defectOf(judged);
-    if (defect) return plainReason(defect);
-    if (rejected(judged)) return "It has two or more faults.";
-  }
-  return undefined;
-}
+/** One finding as the owner reads it: what a tool measured in plain words, and what the agent saw marked as the agent's. */
+const noteOf = (item: CheckItem): string => {
+  const text = (item.tool ? plainReason(item) : `The agent saw: ${item.note.trim()}`).trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+};
 
-/** What the pack measure found, in the owner's words: he may pick the draft, and he looks at its pack first. */
-export const packWarning = (items: CheckItem[]): string | undefined => (items.length > 0 ? items.map(plainReason).join(" ") : undefined);
+/** What the checks found, in the owner's words: it blocks nothing, and he reads it before he picks or sends. */
+export const noteText = (items: CheckItem[]): string | undefined => (items.length > 0 ? [...new Set(items.map(noteOf))].join(" ") : undefined);
 
-/** The pack measure's warning on a draft, or nothing. */
-export const warningOf = (draft: Pick<BoardDraft, "checks">): string | undefined => packWarning(packWarnings(OUTREACH, draft.checks ?? undefined));
+/** What the checks found in a draft, in the bare picture and in the picture with its words. */
+export const warningOf = (draft: Pick<BoardDraft, "checks" | "words">): string | undefined =>
+  noteText([draft.checks ?? undefined, draft.words?.checks ?? undefined].flatMap((checks) => notesIn(OUTREACH, checks)));
 
 /** The owner's own choice of the ad for a prospect: he sees every draft the studio made and picks one. */
 export class OutreachPicks {
@@ -88,12 +81,12 @@ export class OutreachPicks {
     const refused = refusedDrafts(file, batch.id);
     const drafts: OutreachCandidate[] = board.ideas.flatMap(({ idea, copy, drafts: made }) =>
       made.map((draft) => {
+        // A check blocks nothing: only a draft that is not an ad yet, or one whose full-size version he refused, cannot be picked.
         const blocked =
-          blockedBy(draft) ??
           (hasWords(batch.kind) && !draft.words ? "Its words are not set yet." : undefined) ??
           (draft.words && !draft.words.checks?.looked ? "Its words are not checked yet." : undefined) ??
           (refused.has(draft.image.id) ? "You said no to its full-size version." : undefined);
-        const warning = blocked ? undefined : warningOf(draft);
+        const warning = warningOf(draft);
         return {
           ideaId: idea.id,
           title: idea.title,
@@ -147,7 +140,7 @@ export class OutreachPicks {
       }
     }
     const canBePicked = view.drafts.filter((draft) => !draft.blocked).length;
-    if (canBePicked === 0) throw new Refusal("No draft of this batch can be sent: each has a D item, two F items or no words. Repair them with one more round of pictures at most, or park the brand with outreach_mark.");
+    if (canBePicked === 0) throw new Refusal("No draft of this batch can be shown yet: each waits for its words, or the owner refused its full-size version. Set the words (type_set) and look at each (checks_save), or park the brand with the reason.");
     const counts = { drafts: view.drafts.length, canBePicked };
     const note = "The drafts wait for the owner's pick on the prospect's page. Stop work on this brand: pick nothing and make no final. outreach_next names it again when he has chosen.";
     const waiting = candidatesWait(file);
@@ -166,7 +159,7 @@ export class OutreachPicks {
     if (view.choosing === "agent") throw new Refusal("The agent is setting the other words you asked for. The drafts come back for your pick after that.");
     const draft = imageId ? view.drafts.find((entry) => entry.imageId === imageId) : undefined;
     if (imageId && !draft) throw new Refusal("That picture is not one of this brand's drafts.");
-    if (draft?.blocked) throw new Refusal(`This draft cannot be sent: ${draft.blocked}`);
+    if (draft?.blocked) throw new Refusal(`This draft cannot be picked yet: ${draft.blocked}`);
     return { file, view, draft };
   }
 

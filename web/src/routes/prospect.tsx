@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import { Candidates } from "@/components/candidates";
 import { FIELD } from "@/components/canon-card";
 import { Loading, OutLink } from "@/components/loading";
-import { AdPicture, AdVerdict, BrandLine, CHANNELS, Failure, MessageCard, OutreachTabs, PackWarning, STAGES, STEPS, TAP, useWrite } from "@/components/outreach";
+import { AdPicture, AdVerdict, BrandLine, CHANNELS, Failure, MessageCard, OutreachTabs, CheckNote, STAGES, STEPS, TAP, useWrite } from "@/components/outreach";
 import { Card, Empty, PageHeader, Section } from "@/components/page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,7 +101,7 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
                       {ad.from === "owner" ? <Badge color="blue">Your upload</Badge> : null}
                       {ad.verdict ? <Badge color={ad.verdict === "yes" ? "green" : "gray"}>{ad.verdict === "no" ? "You said no" : ad.picked ? "Your pick, full size" : "You said yes"}</Badge> : null}
                     </p>
-                    <PackWarning warning={ad.warning} />
+                    <CheckNote warning={ad.warning} />
                     {!ad.verdict && ad.n === newest?.n && !out ? <AdVerdict prospect={prospect} ad={ad} done={done} /> : null}
                     {ad.picked && ad.verdict === "yes" && ad.n === newest?.n && !out && !sends.some((send) => send.at >= ad.at) ? <AdVerdict prospect={prospect} ad={ad} done={done} takeBack /> : null}
                     <a href={ad.downloadUrl} className="text-body underline underline-offset-4">

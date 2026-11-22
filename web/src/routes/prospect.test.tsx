@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Routes } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -156,38 +156,81 @@ describe("Prospect page", () => {
 describe("the owner's pick on the prospect page", () => {
   const waiting = (overrides = {}) => prospectPage({ prospect: prospectRow({ stage: "pick_waits" }), ads: [], candidates: candidates(overrides) });
 
-  it("shows every draft under its headline before anything else, and a failed one with its reason and no button", async () => {
+  it("shows every draft under its headline before anything else, in colour, with what the checks found as a note", async () => {
     stubApi({ [GET]: () => ({ body: waiting() }) });
     open();
     expect(await screen.findByRole("heading", { name: /Pick the ad to send/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "One fork tap and it crumbles." })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Your visiting gift, baked fresh." })).toBeInTheDocument();
     expect(screen.getByText("Twelve tarts in a box.")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: /^Draft \d of/ })).toHaveLength(4);
+    const pictures = screen.getAllByRole("img", { name: /^Draft \d of/ });
+    expect(pictures).toHaveLength(4);
+    // No check greys a draft or takes its button away: the draft the agent faulted can be picked like the others.
+    for (const picture of pictures) expect(picture.className).not.toMatch(/grayscale|opacity/);
     expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
-    expect(screen.getByText("Cannot be sent: The box is too tall.")).toBeInTheDocument();
+    expect(screen.getByText("The agent saw: The box is too tall.")).toBeInTheDocument();
+    expect(screen.getAllByText("The checks found")).toHaveLength(1);
+    // Only a draft that is not an ad yet has no button.
+    expect(screen.getByText("Not ready to pick: Its words are not set yet.")).toBeInTheDocument();
     expect(screen.getByText(/Nothing is sent by a pick/)).toBeInTheDocument();
-    // A picture opens large in a new tab: a click on it picks nothing.
-    expect(screen.getAllByRole("link", { name: /^Draft \d of/ })[0]).toHaveAttribute("target", "_blank");
+    expect(screen.queryByRole("link", { name: /^Draft \d of/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark as sent" })).not.toBeInTheDocument();
   });
 
-  it("warns of a failed pack measure on a draft he may pick, and on the full-size ad of that pick", async () => {
-    const page = waiting();
-    const [first, ...rest] = page.candidates!.drafts;
+  it("opens a draft large over the page, steps through every draft, and closes back to the page", async () => {
+    stubApi({ [GET]: () => ({ body: waiting() }) });
+    open();
+    const [first] = await screen.findAllByRole("button", { name: /^Draft \d of/ });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await userEvent.click(first!);
+    const viewer = within(screen.getByRole("dialog", { name: "Picture, large" }));
+    expect(viewer.getByText("1 of 4")).toBeInTheDocument();
+    expect(viewer.getByRole("img", { name: 'Draft 1 of "One fork tap and it crumbles." for Koi Tea' })).toHaveAttribute("src", "https://pictures.example/idea-1-1.jpg");
+    expect(viewer.getByText("Baked this morning in Katong.")).toBeInTheDocument();
+    await userEvent.keyboard("{ArrowRight}{ArrowRight}");
+    expect(viewer.getByText("3 of 4")).toBeInTheDocument();
+    // Large, the note is given in full, with whose call it is.
+    expect(viewer.getByText("The agent saw: The box is too tall. It is your call.")).toBeInTheDocument();
+    expect(viewer.getByRole("button", { name: "Pick this one" })).toBeInTheDocument();
+    await userEvent.click(viewer.getByRole("button", { name: "Next picture" }));
+    expect(viewer.getByText("Not ready to pick: Its words are not set yet.")).toBeInTheDocument();
+    await userEvent.click(viewer.getByRole("button", { name: "Next picture" }));
+    expect(viewer.getByText("1 of 4")).toBeInTheDocument();
+    await userEvent.keyboard("{ArrowLeft}");
+    expect(viewer.getByText("4 of 4")).toBeInTheDocument();
+    await userEvent.click(viewer.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: /^Draft \d of/ })).toHaveLength(4);
+  });
+
+  it("takes the pick from the large picture and closes it", async () => {
+    const sent: unknown[] = [];
+    stubApi({
+      [GET]: () => ({ body: waiting() }),
+      "POST /api/outreach/prospects/00001/pick": (body) => (
+        sent.push(body),
+        { body: prospectPage({ prospect: prospectRow({ stage: "pick_made" }), ads: [], candidates: candidates({ waits: false, agentOwes: true, picked: { ideaId: "idea-2", imageId: "idea-2-draft-1" } }) }) }
+      ),
+    });
+    open();
+    await userEvent.click((await screen.findAllByRole("button", { name: /^Draft \d of/ }))[2]!);
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Pick this one" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(sent).toEqual([{ imageId: "idea-2-draft-1" }]);
+    expect(await screen.findByText(/You picked. Waits for the agent/)).toBeInTheDocument();
+  });
+
+  it("gives what the checks found on the full-size ad of his pick, beside Mark as sent, and opens the ad large", async () => {
     const warning = "The pack is drawn 5% wider than in its photo. The limit is 2%.";
-    stubApi({ [GET]: () => ({ body: { ...page, candidates: { ...page.candidates!, drafts: [{ ...first!, warning }, ...rest] } } }) });
-    const { unmount } = open();
-    expect(await screen.findByText(`${warning} You judge it by eye.`)).toBeInTheDocument();
-    expect(screen.getAllByText("Look at the pack")).toHaveLength(1);
-    // The warning takes no button away: the count of drafts he may pick is as before.
-    expect(screen.getAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
-    unmount();
     stubApi({ [GET]: () => ({ body: prospectPage({ ads: [{ ...adView({ verdict: "yes", picked: true }), warning }], message: { step: 0, messages: messages() } }) }) });
     open();
     // Beside "Mark as sent", where he decides, and again in the list of ads.
-    expect(await screen.findByText(`${warning} You judge it by eye before you send.`)).toBeInTheDocument();
-    expect(screen.getByText(`${warning} You judge it by eye.`)).toBeInTheDocument();
+    expect(await screen.findByText(`${warning} It is your call before you send.`)).toBeInTheDocument();
+    expect(screen.getByText(`${warning} It is your call.`)).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole("button", { name: /^Ad 1 for/ })[0]!);
+    const viewer = within(screen.getByRole("dialog"));
+    expect(viewer.getByRole("img", { name: /^Ad 1 for/ })).toBeInTheDocument();
+    expect(viewer.queryByRole("button", { name: "Next picture" })).not.toBeInTheDocument();
   });
 
   it("saves the pick of one draft, and then says that the agent makes it full size", async () => {
@@ -228,7 +271,13 @@ describe("the owner's pick on the prospect page", () => {
     await waitFor(() => expect(sent).toEqual([{ ownerSaid: "The headlines say nothing." }]));
     first.unmount();
     open();
-    await user.click((await screen.findAllByRole("button", { name: "Other words" }))[1]!);
+    // The row keeps to one action for each draft; other words are asked for beside the large picture, which then closes.
+    expect(await screen.findAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: "Other words" })).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /^Draft \d of/ })[1]!);
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Other words" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Draft 2 with other words/)).toHaveFocus();
     await user.type(screen.getByLabelText(/Draft 2 with other words/), "Say the price.");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText(/it sets the other words you asked for \("Say the price\."\)/)).toBeInTheDocument();
@@ -240,6 +289,8 @@ describe("the owner's pick on the prospect page", () => {
     stubApi({ [GET]: () => ({ body: waiting({ words: false }) }) });
     const first = open();
     expect(await screen.findAllByRole("button", { name: "Pick this one" })).toHaveLength(3);
+    await userEvent.click(screen.getAllByRole("button", { name: /^Draft \d of/ })[0]!);
+    expect(within(screen.getByRole("dialog")).getByRole("button", { name: "Pick this one" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Other words" })).not.toBeInTheDocument();
     first.unmount();
     stubApi({ [GET]: () => ({ body: prospectPage({ prospect: prospectRow({ stage: "opted_out" }), ads: [], candidates: candidates({ choosing: "closed", waits: false }) }) }) });

@@ -313,15 +313,16 @@ describe("an outreach batch and outreach_attach", () => {
     expect((await outreach().store.all())[0]!.ads).toHaveLength(1);
   });
 
-  it("is refused for a batch that is not outreach, not done, or whose final failed a check", async () => {
+  it("is refused for a batch that is not outreach or not done, and attaches a final the checks faulted with what they found", async () => {
     await loadProspects(studio, [row(1), row(2)]);
     const plain = (await batchAtTruth(studio)).batchId;
     expect(await callTool(studio, "outreach_attach", { batchId: plain, why: "w" })).toMatchObject({ ok: false, error: expect.stringMatching(/not an outreach batch/) });
     const open = await outreachBatch(studio, "00001", { done: false });
     expect(await callTool(studio, "outreach_attach", { batchId: open, why: "w" })).toMatchObject({ ok: false, error: expect.stringMatching(/Only the final of a done batch/) });
-    const failed = await outreachBatch(studio, "00002", { items: [{ code: "D11", note: "The pouch is too tall." }] });
-    expect(await callTool(studio, "outreach_attach", { batchId: failed, why: "w" })).toMatchObject({ ok: false });
     expect((await outreach().store.all()).flatMap((file) => file.ads)).toEqual([]);
+    // The owner picked the draft himself: a check rejects nothing in an outreach batch, and he reads what it found beside the ad.
+    const faulted = await outreachBatch(studio, "00002", { items: [{ code: "D11", note: "The pouch is too tall." }] });
+    expect((await callTool(studio, "outreach_attach", { batchId: faulted, why: "w" })).value.ad).toMatchObject({ picked: true, warning: "The agent saw: The pouch is too tall." });
   });
 
   it("goes back to the drafts after the owner's no to the full-size ad, and makes the final of his next pick in the same batch", async () => {
@@ -341,7 +342,7 @@ describe("an outreach batch and outreach_attach", () => {
     const view = (await picks.view((await store.all())[0]!, new Set()))!;
     const [first, second] = view.drafts;
     expect(first).toMatchObject({ blocked: "You said no to its full-size version." });
-    await expect(picks.pick(id!, first!.imageId, "owner@studio.example")).rejects.toThrow(/cannot be sent/);
+    await expect(picks.pick(id!, first!.imageId, "owner@studio.example")).rejects.toThrow(/cannot be picked yet/);
     await picks.pick(id!, second!.imageId, "owner@studio.example");
     tick();
     expect(await stages()).toMatchObject({ pick_made: 1 });

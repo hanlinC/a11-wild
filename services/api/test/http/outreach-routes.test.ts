@@ -477,7 +477,7 @@ describe("the owner's pick of the ad", () => {
   const page = async (id = "00001") => json(await get(`/api/outreach/prospects/${id}`));
   const attention = async () => (await json(await get("/api/attention"))).lines as { kind: string; count: number; to: string }[];
 
-  /** One brand whose nine drafts are shown; the second draft of the first idea has a pack that is too tall. */
+  /** One brand whose nine drafts are shown; the agent saw a pack that is too tall in the second draft of the first idea. */
   async function shown() {
     await loadProspects(studio);
     await outreach().sequence.saveTemplates(TEMPLATES as never);
@@ -490,7 +490,7 @@ describe("the owner's pick of the ad", () => {
     return { batchId, bad };
   }
 
-  it("shows every draft of every idea, a failed one with its reason, and counts the brand as waiting for him", async () => {
+  it("shows every draft of every idea, blocks none for a check, and counts the brand as waiting for him", async () => {
     const { batchId, bad } = await shown();
     const { prospect, candidates } = await page();
     expect(prospect).toMatchObject({ stage: "pick_waits" });
@@ -498,19 +498,24 @@ describe("the owner's pick of the ad", () => {
     expect(candidates.picked).toBeUndefined();
     expect(candidates.drafts).toHaveLength(9);
     expect(new Set(candidates.drafts.map((draft: { ideaId: string }) => draft.ideaId))).toEqual(new Set(["idea-1", "idea-2", "idea-3"]));
-    expect(candidates.drafts.filter((draft: { blocked?: string }) => draft.blocked)).toEqual([expect.objectContaining({ imageId: bad, blocked: "The pouch is too tall." })]);
+    expect(candidates.drafts.filter((draft: { blocked?: string }) => draft.blocked)).toEqual([]);
+    expect(candidates.drafts.filter((draft: { warning?: string }) => draft.warning)).toEqual([expect.objectContaining({ imageId: bad, warning: "The agent saw: The pouch is too tall." })]);
     for (const draft of candidates.drafts) expect(draft.viewUrl).toMatch(/^https:\/\//);
     const today = await json(await get("/api/outreach/today"));
-    expect(today.picks).toMatchObject([{ prospect: { id: "00001", brand: "Brand 1", stage: "pick_waits" }, drafts: 8 }]);
+    expect(today.picks).toMatchObject([{ prospect: { id: "00001", brand: "Brand 1", stage: "pick_waits" }, drafts: 9 }]);
     expect(today.firsts).toEqual([]);
     expect(await attention()).toContainEqual(expect.objectContaining({ kind: "ad_picks", count: 1, to: "/outreach" }));
   });
 
-  it("refuses a failed draft, a picture that is no draft of the brand, and words where the ad has none", async () => {
+  it("takes his pick of a draft the checks faulted: it is his to judge", async () => {
     const { bad } = await shown();
-    const failed = await on("00001", "pick", { imageId: bad });
-    expect(failed.status).toBe(400);
-    expect((await json(failed)).message).toMatch(/cannot be sent: The pouch is too tall/);
+    const picked = await on("00001", "pick", { imageId: bad });
+    expect(picked.status).toBe(200);
+    expect(await json(picked)).toMatchObject({ prospect: { stage: "pick_made" }, candidates: { picked: { imageId: bad } } });
+  });
+
+  it("refuses a picture that is no draft of the brand, and words where the ad has none", async () => {
+    await shown();
     expect((await json(await on("00001", "pick", { imageId: "no-such-picture" }))).message).toMatch(/not one of this brand's drafts/);
     const { candidates } = await page();
     const good = candidates.drafts.find((draft: { blocked?: string }) => !draft.blocked).imageId;

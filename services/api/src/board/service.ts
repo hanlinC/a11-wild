@@ -3,7 +3,7 @@ import { hasWords } from "../batch/state.js";
 import type { BatchStore } from "../batch/store.js";
 import type { BrandStore } from "../brand/store.js";
 import { failedPoints, type PointStore } from "../checks/points.js";
-import { type CheckStore, defectOf, judgedIn, PACK_CHECK, packWarnings, rejected } from "../checks/store.js";
+import { type CheckStore, defectOf, judgedIn, PACK_CHECK, notesIn, rejected } from "../checks/store.js";
 import type { CopyStore } from "../copy/store.js";
 import type { CriticStore } from "../critic/store.js";
 import type { DirectionStore } from "../direction/store.js";
@@ -68,7 +68,7 @@ export interface IdeaFinal {
   missing: string[];
   /** The picture that is delivered, once the final lacks nothing: the finished final, and in an ad with words that picture with its words. */
   delivered?: BatchImage;
-  /** What the pack measure found in the final of an outreach batch. It rejects nothing there: the owner is warned of it. */
+  /** What the checks found in the final of an outreach batch. They reject nothing there: the owner reads each item beside the ad. */
   warns?: CheckItem[];
 }
 
@@ -227,7 +227,7 @@ export class BoardService implements FinalRule {
       const final = countedOf(newest, all);
       missing.push(...(await this.needs(batch, final, hasPack, found)));
       const judged = judgedIn(batch, found.get(final.id));
-      const warns = packWarnings(batch, found.get(final.id));
+      const warns = notesIn(batch, found.get(final.id));
       if (warns.length > 0) entry.warns = warns;
       const defect = defectOf(judged);
       if (defect) missing.push(`a final of ${idea.id} with no D item (the newest has ${defect.code})`);
@@ -302,14 +302,14 @@ export class BoardService implements FinalRule {
     const saved = await checks.save(batchId, imageId, items);
     const { batch: after, missing } = await this.progress(batch);
     const defect = defectOf(judgedIn(batch, saved));
-    const warned = packWarnings(batch, saved).length > 0;
+    const warned = notesIn(batch, saved).length > 0;
     return {
       checks: saved,
       state: after.state,
       ...(defect
         ? { note: `This picture has ${defect.code}, so it cannot become a final. It stays on the board, named with its item.` }
         : warned
-          ? { note: "The pack measure failed. In an outreach batch that warns the owner and does not reject the picture: he judges the pack's shape by eye." }
+          ? { note: "In an outreach batch a check rejects nothing: the owner reads what you saved beside the picture and decides himself." }
           : {}),
       ...(missing.length > 0 ? { stillMissing: missing } : {}),
     };
@@ -438,7 +438,7 @@ export class BoardService implements FinalRule {
 
   /**
    * Why the checks reject a draft as it stands now (its repair stands for it), or nothing when they do not.
-   * It answers whether a draft may be made again, so a failed pack measure counts here in an outreach batch too: a pass is still the aim.
+   * It answers whether a draft may be made again, so every item counts here in an outreach batch too: there the owner may pick a faulted draft, and a pass is still the aim.
    */
   async rejection(batchId: string, imageId: string): Promise<string | undefined> {
     const { batches, images, checks, copy } = this.deps;

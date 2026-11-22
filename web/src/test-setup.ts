@@ -10,6 +10,16 @@ class ResizeObserverStub {
   disconnect() {}
 }
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+// jsdom does not open or close a dialog; the browser does, and it puts the focus on the first control inside.
+HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+  this.setAttribute("open", "");
+  this.querySelector("button")?.focus();
+};
+HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+  if (!this.hasAttribute("open")) return;
+  this.removeAttribute("open");
+  this.dispatchEvent(new Event("close"));
+};
 windowIs("wide");
 
 afterEach(() => {
