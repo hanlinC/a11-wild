@@ -62,7 +62,10 @@ describe("who a batch waits for", () => {
       }
       expect(mayWaitForPick(batch("v1", "waiting_pick", extra))).toBe(false);
     }
-    expect(waitOf(batch("v1", "waiting_pick", { purpose: "outreach" }), {}).text).toBe("The agent chooses in your place.");
+    expect(waitOf(batch("v2", "judged", { purpose: "outreach" }), {}).text).toBe("The agent chooses in your place.");
+    // The draft of an outreach ad is the owner's own pick, on the brand's page.
+    expect(waitOf(batch("v1", "waiting_pick", { purpose: "outreach" }), {})).toEqual({ who: "nobody", text: "Its drafts are on the brand's page in Outreach. You pick there." });
+    expect(waitOf(batch("v1", "finals", { purpose: "outreach" }), {}).who).toBe("agent");
     expect(waitOf(batch("v1", "waiting_pick", { test: true }), {}).text).toBe("A test: the tester chooses in your place.");
   });
 

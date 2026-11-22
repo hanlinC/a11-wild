@@ -110,6 +110,8 @@ export function waitOf(batch: Of, facts: BatchFacts): BatchWait {
   const asked = teachesNothing(batch) ? undefined : ownerStep(batch, facts);
   if (asked) return asked;
   if (batch.state === "done") return { who: "nobody", text: AGENT.done };
+  // The draft of an outreach ad is the owner's own pick, on the brand's page: Outreach counts it, so the batch asks nothing here.
+  if (batch.purpose === "outreach" && batch.state === "waiting_pick") return { who: "nobody", text: "Its drafts are on the brand's page in Outreach. You pick there." };
   if (teachesNothing(batch) && choiceAt(batch)) return { who: "agent", text: batch.test ? "A test: the tester chooses in your place." : "The agent chooses in your place." };
   return { who: "agent", text: agentStep(batch.kind, batch.state) };
 }

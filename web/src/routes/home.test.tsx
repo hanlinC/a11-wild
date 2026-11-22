@@ -83,7 +83,7 @@ describe("the start page", () => {
     show({
       batches: [
         line("done", { who: "nobody", text: "Done.", batch: { state: "done" } }),
-        line("cold", { batch: { purpose: "outreach", state: "waiting_pick" }, text: "The agent chooses in your place." }),
+        line("cold", { batch: { purpose: "outreach", state: "waiting_pick" }, text: "Its drafts are on the brand's page in Outreach. You pick there.", who: "nobody" }),
         line("try", { batch: { test: true } }),
       ],
     });
