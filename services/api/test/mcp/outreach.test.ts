@@ -50,6 +50,24 @@ describe("outreach_load", () => {
     expect(await callTool(studio, "outreach_load", { rows: [{ ...row(1), notes: "x" }] })).toMatchObject({ ok: false });
   });
 
+  it("refuses every outreach tool and an outreach batch to a member", async () => {
+    const [id] = await loadProspects(studio);
+    const member = { sub: "sub-member" };
+    for (const [name, args] of [
+      ["outreach_next", {}],
+      ["outreach_state", {}],
+      ["outreach_mark", { prospectId: id, mark: "service" }],
+      ["outreach_attach", { batchId: "none", why: "x" }],
+    ] as const) {
+      const answer = await callTool(studio, name, args, member);
+      expect(answer, name).toMatchObject({ ok: false });
+      expect(answer, name).toMatchObject({ error: `Only the owner's session can call ${name}.` });
+    }
+    const batch = await callTool(studio, "batch_create", { kind: "v1", brandId: "none", productId: "none", prospectId: id }, member);
+    expect(batch).toMatchObject({ ok: false, error: "Only the owner's session makes an outreach batch." });
+    expect((await outreach().store.all())[0]!.events).toEqual([]);
+  });
+
   it("puts no argument of the call in a log line", async () => {
     const lines: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
@@ -79,7 +97,7 @@ describe("no outreach tool returns a contact", () => {
       expect(reply.ok).toBe(true);
       expect(JSON.stringify(reply)).not.toMatch(LEAKS);
     }
-    expect(replies[0]!.value.brands[0]).toEqual({ id: "00001", n: 1, brand: "Brand 1", sector: "F&B", liveAds: 24, tier: "20+", newestAd: "2026-11-01", why: "first" });
+    expect(replies[0]!.value.brands[0]).toEqual({ id: "00001", n: 1, brand: "Brand 1", sector: "F&B", liveAds: 24, tier: "20+", newestAd: "2026-11-01", why: "first", doneBatchId: batchId });
   });
 
   it("lists no tool that sends, says yes to an ad, logs a reply or reads a contact", async () => {
@@ -132,6 +150,18 @@ describe("outreach_next", () => {
     await loadProspects(studio);
     const open = await outreachBatch(studio, "00001", { done: false });
     expect((await callTool(studio, "outreach_next", {})).value.brands).toMatchObject([{ brand: "Brand 1", openBatchId: open }]);
+  });
+
+  it("names a done batch whose ad is on no page yet, and no longer once it is attached", async () => {
+    const [id] = await loadProspects(studio);
+    const batchId = await outreachBatch(studio, id!);
+    const brand = async () => (await callTool(studio, "outreach_next", {})).value.brands[0];
+    expect(await brand()).toMatchObject({ id, why: "first", doneBatchId: batchId });
+    expect(await brand()).not.toHaveProperty("openBatchId");
+    await callTool(studio, "outreach_attach", { batchId, why: "The pack on its own colour." });
+    await outreach().sequence.verdict(id!, { ad: 1, yes: false, ownerSaid: "the pack is too small" });
+    expect(await brand()).toMatchObject({ id, why: "again" });
+    expect(await brand()).not.toHaveProperty("doneBatchId");
   });
 
   it("returns a brand name that reads like an instruction as plain data", async () => {

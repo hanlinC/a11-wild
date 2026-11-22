@@ -15,6 +15,8 @@ export interface ToolDefinition<Shape extends z.ZodRawShape = z.ZodRawShape> {
   writes?: boolean;
   /** The tool can spend money. Only the owner may call it. */
   paid?: boolean;
+  /** The tool reads or changes what is the owner's alone. Only the owner may call it. */
+  ownerOnly?: boolean;
   /** The caller must pass the current house-rules version, which proves it read the rules. */
   needsRules?: boolean;
   handler: (args: z.infer<z.ZodObject<Shape>>, context: ToolContext) => Promise<unknown> | unknown;
@@ -72,6 +74,8 @@ export class ToolRegistry {
     if (tool.paid && context.user.role !== "owner") {
       return failure(`Only the owner can call ${name}, because it can spend money.`);
     }
+
+    if (tool.ownerOnly && context.user.role !== "owner") return failure(`Only the owner's session can call ${name}.`);
 
     // Checked before the rest of the input, so that a caller who skipped the rules learns that first.
     const sentVersion = (rawArgs as { rulesVersion?: unknown } | null | undefined)?.rulesVersion;

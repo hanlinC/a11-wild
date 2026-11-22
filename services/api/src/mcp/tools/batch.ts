@@ -98,6 +98,8 @@ export function batchTools({ batches, brands, facts, truth, reads, critic, done,
       },
       writes: true,
       handler: async ({ kind, brandId, productId, format, formatNote, label, test, prospectId }, context) => {
+        // Asked first, so a member learns nothing of the list from the answers below.
+        if (prospectId && context.user.role !== "owner") throw new Refusal("Only the owner's session makes an outreach batch.");
         if (test && prospectId) throw new Refusal("A batch is a test or an outreach batch, not both.");
         if (prospectId && format === "other") throw new Refusal("An outreach ad is a static 4:5 picture.");
         if (kind === "v3" && format === "other") throw new Refusal("A concept ad (v3) is a static 4:5 picture. For another format, start a v1 or v2 batch: it ends with a text spec.");

@@ -19,6 +19,8 @@ export interface NextBrand extends ProspectBrief {
   sells?: "product";
   /** An outreach batch of this brand that is not done: resume it before you start a new one. */
   openBatchId?: string;
+  /** A done outreach batch of this brand whose ad is not on its page yet: attach it before you start a new one. */
+  doneBatchId?: string;
 }
 
 interface Deps {
@@ -45,14 +47,25 @@ export class OutreachDesk {
     const [files, optOuts, all] = await Promise.all([store.all(), store.optOuts(), batches.list()]);
     // Newest first, so the first one found for a prospect is its newest.
     const open = new Map<string, string>();
-    for (const batch of all) if (batch.purpose === "outreach" && batch.prospectId && batch.state !== "done" && !open.has(batch.prospectId)) open.set(batch.prospectId, batch.id);
+    const newest = new Map<string, Batch>();
+    for (const batch of all) {
+      if (batch.purpose !== "outreach" || !batch.prospectId) continue;
+      if (!newest.has(batch.prospectId)) newest.set(batch.prospectId, batch);
+      if (batch.state !== "done" && !open.has(batch.prospectId)) open.set(batch.prospectId, batch.id);
+    }
+    // A session that stopped between batch_done and outreach_attach left a paid ad that is on no page.
+    const done = new Map<string, string>();
+    for (const file of files) {
+      const batch = newest.get(file.profile.id);
+      if (batch?.state === "done" && !file.ads.some((ad) => ad.batchId === batch.id)) done.set(file.profile.id, batch.id);
+    }
     const started = files.filter((file) => inCampaign(file) && file.ads.length > 0).length;
-    return { files, optOuts, open, started, shared: sameContact(files) };
+    return { files, optOuts, open, done, started, shared: sameContact(files) };
   }
 
   /** The brands that need an ad now: a "more" reply first, then the list's order. */
   async next(limit: number): Promise<{ brands: NextBrand[]; brandsWithAnAd: number; brandsLimit: number }> {
-    const { files, optOuts, open, started, shared } = await this.read();
+    const { files, optOuts, open, done, started, shared } = await this.read();
     const more: { at: string; brand: NextBrand }[] = [];
     const others: NextBrand[] = [];
     let firsts = Math.max(0, CAMPAIGN.brands - started);
@@ -61,7 +74,8 @@ export class OutreachDesk {
       const want = wantsAd(file, optOuts);
       if (!want) continue;
       const openBatchId = open.get(file.profile.id);
-      const brand: NextBrand = { ...briefOf(file), why: want.why, ...(want.ownerSaid ? { ownerSaid: want.ownerSaid } : {}), ...(kindOf(file) === "product" ? { sells: "product" as const } : {}), ...(openBatchId ? { openBatchId } : {}) };
+      const doneBatchId = openBatchId ? undefined : done.get(file.profile.id);
+      const brand: NextBrand = { ...briefOf(file), why: want.why, ...(want.ownerSaid ? { ownerSaid: want.ownerSaid } : {}), ...(kindOf(file) === "product" ? { sells: "product" as const } : {}), ...(openBatchId ? { openBatchId } : {}), ...(doneBatchId ? { doneBatchId } : {}) };
       if (want.why === "more") {
         const asked = file.events.filter((event) => event.type === "reply" && event.reply === "more").at(-1);
         more.push({ at: asked?.at ?? "", brand });
