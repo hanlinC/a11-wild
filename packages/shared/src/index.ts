@@ -1203,6 +1203,8 @@ export interface ProspectPage {
   day: string;
   /** The message that can be sent now, in both versions. */
   message?: { step: OutreachStep; messages: [OutreachMessage, OutreachMessage] };
+  /** Today is not a sending day and a message waits: the next sending day, when it can be sent. */
+  messageFrom?: string;
   /** A reply that waits for the owner's answer. */
   owed?: { text?: string; at: string };
 }

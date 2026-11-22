@@ -68,6 +68,12 @@ function Body({ page, done }: { page: ProspectPage; done: (page: ProspectPage) =
         </Section>
       ) : null}
 
+      {page.messageFrom && !out ? (
+        <p className="text-body">
+          <span className="font-medium">No sending today.</span> The message of this brand is here on {dayName(page.messageFrom)}, the next sending day.
+        </p>
+      ) : null}
+
       {page.message && !out ? (
         <Section title="The message to send now">
           <Card>

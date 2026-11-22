@@ -138,6 +138,11 @@ describe("the owner's day", () => {
     const page = await json(await get("/api/outreach/prospects/00001"));
     expect(page.prospect.stage).toBe("ready");
     expect(page).not.toHaveProperty("message");
+    // The page says when the message comes back: Monday.
+    expect(page.messageFrom).toBe("2026-11-30");
+    studio.clock.now = new Date("2026-11-30T02:00:00Z");
+    cookie = await sessionCookie(studio);
+    expect(await json(await get("/api/outreach/prospects/00001"))).not.toHaveProperty("messageFrom");
   });
 
   it("marks a message as sent once, with the title he used, and takes it back on the same day only", async () => {
