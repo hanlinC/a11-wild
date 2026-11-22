@@ -229,6 +229,19 @@ describe("a draft that its checks reject", () => {
     expect(redo.value).toMatchObject({ fromId: "s1" });
   });
 
+  it("is not asked for its type again when the bare picture is the fault", async () => {
+    // Found live (IRVINS concept ads, 22-11-2026): a pouch drawn too tall kept the board asking for type_set again.
+    const first = await made("idea-2", 1);
+    const words = (await studio.services.copy.list(batchId)).find((entry) => entry.ideaId === "idea-2")!;
+    await studio.services.images.add({ id: "t1", batchId, kind: "typeset", key: `batches/${batchId}/typeset/t1.png`, ideaId: "idea-2", fromId: first, rootId: first, wordsVersion: words.version });
+    const missing = async () => (await studio.services.board.progress({ ...(await studio.services.batches.get(batchId)), state: "drafting" })).missing.join(" | ");
+    await look(first, []);
+    await look("t1", [{ code: "D11", note: "The pouch is too tall." }]);
+    expect(await missing()).toContain(`type_set again for picture ${first}: with its words it has D11`);
+    await look(first, [{ code: "D11", note: "The pouch is too tall." }]);
+    expect(await missing()).not.toMatch(/type_set again/);
+  });
+
   it("is not made a third time", async () => {
     const first = await made("idea-2", 1);
     await look(first, [{ code: "F1", note: "The pouch is as big as the hand." }, { code: "F6", note: "Seven things in the frame." }]);

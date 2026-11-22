@@ -188,10 +188,12 @@ export class BoardService implements FinalRule {
   }
 
   /** What a picture with its words still needs: the agent's look at the words on it, with no D item and fewer than two F items. Setting the type again is free. */
-  private wordNeeds(on: BatchImage, set: BatchImage | undefined, found: Map<string, ImageChecks>, what: string): string[] {
+  private wordNeeds(on: BatchImage, set: BatchImage | undefined, found: Map<string, ImageChecks>, what: string, out = false): string[] {
     if (!set) return [`type_set for picture ${on.id}: the approved words and the real logo on the ${what}`];
     const seen = found.get(set.id);
     if (!seen?.looked) return [`checks_save for picture ${set.id}: the ${what} of ${on.id} with its words`];
+    // A picture its own checks reject is out already: no setting of the type mends it, so none is asked for.
+    if (out) return [];
     const defect = defectOf(seen);
     if (defect) return [`type_set again for picture ${on.id}: with its words it has ${defect.code} (${defect.note})`];
     if (rejected(seen)) return [`type_set again for picture ${on.id}: with its words it has two F items or more`];
@@ -258,7 +260,7 @@ export class BoardService implements FinalRule {
           const counted = countedOf(image, all);
           missing.push(...(await this.needs(batch, counted, hasPack, found)));
           // The owner judges an ad, not a bare photo: each draft carries the approved words and the real logo before he sees it.
-          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft"));
+          if (hasWords(batch.kind)) missing.push(...this.wordNeeds(counted, typesetOf(counted, all, words), found, "draft", defectOf(found.get(counted.id)) !== undefined || rejected(found.get(counted.id))));
         }
         // A rank counts while it is of the pictures the owner sees now: a repair made after it, or words set after it, needs a new rank.
         const judged = new Map(ranks.get(idea.id)?.order.map((place) => [place.imageId, place.shownId]));
