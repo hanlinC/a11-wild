@@ -5,6 +5,14 @@
 import { pathToFileURL } from "node:url";
 
 /** Each probe returns undefined when it passes, or a short reason when it fails. */
+export const OUTREACH_READS = ["/api/outreach/today", "/api/outreach/prospects", "/api/outreach/prospects/00001", "/api/outreach/templates"];
+export const OUTREACH_WRITES = [
+  ...["ad", "sent", "unsent", "reply", "answered", "optout", "stage", "note", "channel", "kind", "choose", "remove"].map((action) => `/api/outreach/prospects/00001/${action}`),
+  "/api/outreach/templates",
+  "/api/outreach/daily",
+  "/api/outreach/test-prospect",
+];
+
 export const PROBES = [
   {
     name: "health answers",
@@ -46,6 +54,20 @@ export const PROBES = [
       for (const path of ["/api/me", "/api/clients", "/api/brands", "/api/spend", "/api/taste", "/api/calibration", "/api/packs", "/api/batches/none/board", "/api/batches/none/done"]) {
         const response = await fetchFn(`${origin}${path}`);
         if (response.status !== 401) return `${path} status ${response.status}`;
+      }
+    },
+  },
+  {
+    name: "the outreach pages and their writes are refused without a session",
+    async run(origin, fetchFn) {
+      for (const path of OUTREACH_READS) {
+        const response = await fetchFn(`${origin}${path}`);
+        if (response.status !== 401) return `${path} status ${response.status}`;
+      }
+      for (const path of OUTREACH_WRITES) {
+        // Sent from the studio's own origin, so the answer shows the session check and not the origin check.
+        const response = await fetchFn(`${origin}${path}`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" });
+        if (response.status !== 401) return `POST ${path} status ${response.status}`;
       }
     },
   },

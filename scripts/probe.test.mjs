@@ -1,5 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { PROBES, runProbes } from "./probe.mjs";
+import { OUTREACH_READS, OUTREACH_WRITES, PROBES, runProbes } from "./probe.mjs";
 
 const ORIGIN = "https://studio.example.com";
 const SECURITY_HEADERS = {
@@ -8,6 +9,8 @@ const SECURITY_HEADERS = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
 };
+
+const signedOut = () => Response.json({ error: "signed_out" }, { status: 401 });
 
 /** A studio that answers every probe correctly, with room to break one answer. */
 function healthyStudio(overrides = {}) {
@@ -39,6 +42,8 @@ function healthyStudio(overrides = {}) {
     "GET /api/batches/none/done": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "POST /api/clients/probe/approve": () => Response.json({ error: "signed_out" }, { status: 401 }),
     "GET /api/no-such-path": () => Response.json({ error: "not_found" }, { status: 404 }),
+    ...Object.fromEntries(OUTREACH_READS.map((path) => [`GET ${path}`, signedOut])),
+    ...Object.fromEntries(OUTREACH_WRITES.map((path) => [`POST ${path}`, signedOut])),
     ...overrides,
   };
   return async (url, init = {}) => {
@@ -79,6 +84,30 @@ describe("live probe", () => {
     expect(await failedNames({ "GET /api/clients": () => Response.json({ clients: [] }) })).toEqual([
       "dashboard API without a session is refused",
     ]);
+  });
+
+  it("fails when an outreach page answers without a session", async () => {
+    expect(await failedNames({ "GET /api/outreach/prospects/00001": () => Response.json({ prospect: {} }) })).toEqual([
+      "the outreach pages and their writes are refused without a session",
+    ]);
+  });
+
+  it("fails when an outreach write is not refused as signed out", async () => {
+    for (const status of [200, 403]) {
+      expect(await failedNames({ "POST /api/outreach/prospects/00001/optout": () => Response.json({}, { status }) })).toEqual([
+        "the outreach pages and their writes are refused without a session",
+      ]);
+    }
+  });
+
+  it("probes every outreach route the server has", async () => {
+    const source = await readFile(new URL("../services/api/src/http/outreach-routes.ts", import.meta.url), "utf8");
+    const literal = [...source.matchAll(/routes\.(get|post)\("([^"]+)"/g)].map(([, method, path]) => `${method} ${path.replace(":id", "00001")}`);
+    const actions = [...source.matchAll(/^\s*write\("([a-z]+)"/gm)].map(([, action]) => `post /api/outreach/prospects/00001/${action}`);
+    const served = [...literal, ...actions];
+    const probed = [...OUTREACH_READS.map((path) => `get ${path}`), ...OUTREACH_WRITES.map((path) => `post ${path}`)];
+    expect(served.length).toBeGreaterThan(0);
+    expect(served.sort()).toEqual(probed.sort());
   });
 
   it("fails when a cross-site write is accepted", async () => {

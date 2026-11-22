@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 const EXAMPLE_EMAIL_DOMAINS = new Set(["example.com", "example.org", "example.net"]);
+/** Top-level names that RFC 2606 keeps for examples and tests: no real address can end in one. */
+const RESERVED_TLD = /\.(?:example|test|invalid)$/i;
 
 export const RULES = [
   { id: "aws-account-id", pattern: /arn:aws[a-z-]*:[a-z0-9-]*:[a-z0-9-]*:\d{12}:/g },
@@ -20,10 +22,24 @@ export const RULES = [
     pattern: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b/g,
     allow: (match) => {
       const [local, domain] = match.split("@");
-      return EXAMPLE_EMAIL_DOMAINS.has(domain.toLowerCase()) || (local === "git" && domain === "github.com");
+      return EXAMPLE_EMAIL_DOMAINS.has(domain.toLowerCase()) || RESERVED_TLD.test(domain) || (local === "git" && domain === "github.com");
     },
   },
+  {
+    // A Singapore number with its country code, as the prospect list holds it.
+    id: "phone-number",
+    pattern: /(?<![\w+])(?:\+65[ -]?|65)[689]\d{3}[ -]?\d{4}(?!\d)/g,
+    allow: (match) => inventedNumber(match.replace(/\D/g, "").slice(2)),
+  },
 ];
+
+/** A number a test may hold: it is plainly made up (few different digits, or a run such as 1234 567). */
+function inventedNumber(national) {
+  return new Set(national).size <= 3 || national.endsWith("1234567");
+}
+
+/** A file a public repository must not hold at all, whatever is in it: the prospect list is a spreadsheet. */
+export const FORBIDDEN_FILE = /\.(?:xlsx|xlsm|xls|ods|numbers|csv)$/i;
 
 /** Returns one finding per forbidden match in `text`. */
 export function scan(text) {
@@ -51,6 +67,11 @@ function main() {
   let failed = false;
   for (const file of trackedFiles()) {
     if (file.endsWith("package-lock.json")) continue;
+    if (FORBIDDEN_FILE.test(file)) {
+      failed = true;
+      console.error(`${file}: spreadsheet-file`);
+      continue;
+    }
     let content;
     try {
       content = readFileSync(file);

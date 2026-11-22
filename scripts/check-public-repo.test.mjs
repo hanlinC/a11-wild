@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { scan } from "./check-public-repo.mjs";
+import { FORBIDDEN_FILE, scan } from "./check-public-repo.mjs";
 
 // Fixtures are joined at run time so that this file itself stays clean.
 const accountId = "1234" + "5678" + "9012";
@@ -55,5 +55,27 @@ describe("public-repo check", () => {
 
   it("passes a clean text", () => {
     expect(scan("# a11-wild\n\nA private ad studio on AWS.\n")).toEqual([]);
+  });
+
+  it("flags a Singapore number with its country code, written three ways", () => {
+    const number = "9" + "387" + " " + "2" + "615";
+    expect(rules(`call +65 ${number}`)).toEqual(["phone-number"]);
+    expect(rules(`call +65${number.replace(" ", "")}`)).toEqual(["phone-number"]);
+    expect(rules(`https://wa.me/65${number.replace(" ", "")}?text=hi`)).toEqual(["phone-number"]);
+  });
+
+  it("lets a made-up number and a longer run of digits pass", () => {
+    expect(rules("+65 8000 0001, +65 8999 0000, +65 6123 4567, 6581234567, wa.me/6580000004")).toEqual([]);
+    expect(rules("id 16593872615 and 659387261544")).toEqual([]);
+  });
+
+  it("refuses a spreadsheet by its name, and no other file", () => {
+    expect(["list.xlsx", "docs/Prospects.XLSX", "a/b.csv", "old.xls", "x.numbers"].every((file) => FORBIDDEN_FILE.test(file))).toBe(true);
+    expect(["README.md", "src/xlsx.ts", "csv-parser.test.ts"].some((file) => FORBIDDEN_FILE.test(file))).toBe(false);
+  });
+
+  it("lets an address under a reserved test name pass, and no look-alike", () => {
+    expect(rules("hello@brand.example, a@b.test, x@y.invalid")).toEqual([]);
+    expect(rules("hello@example" + ".co, a@brand.example" + ".sg")).toEqual(["email-address", "email-address"]);
   });
 });

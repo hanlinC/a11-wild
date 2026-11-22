@@ -52,6 +52,15 @@ The public address is the `PublicOrigin` output of the stack.
 
 Inviting or stopping a person needs the owner's yes.
 
+## The outreach list
+
+The owner's list of prospects is private. It is never a file of this repository, and `npm run check:public` refuses a spreadsheet.
+
+1. The owner gives the list to his agent in a private session. The agent reads it there and sends the rows with the tool `outreach_load`, at most 200 in one call, with the three messages in the first call. The tool answers with counts only.
+2. A second load changes the list's own fields and keeps each brand's history, its ads and the owner's message text.
+3. After the load, compare the Prospects page with the list: the count of brands, and the counts by sector and by tier.
+4. To try the pages, make a test prospect on the Prospects page and remove it on its own page after. A brand of the list cannot be removed.
+
 ## Provider keys
 
 The Parallel and fal keys are SecureString parameters in Parameter Store, at `/a11-wild/keys/parallel` and `/a11-wild/keys/fal`. Only the API function may read them. Until a key is there, each tool that needs it refuses and says so. The owner gives each one through a secure form at the step that first needs it. They are never in the repository, a workflow or a log.

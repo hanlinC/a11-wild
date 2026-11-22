@@ -23,11 +23,12 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | Workflow action | Each `uses:` names a full commit SHA with the release tag as a comment. `scripts/workflows.test.mjs` checks the form. |
 | Money | A paid call goes through the spend ledger and its caps. |
 | Pictures | A tool takes a picture by its id, never by a key or an address. The role of the pixel function allows the picture bucket only, with no table and no key; only the API may start it. A picture from fal is read from fal's own hosts only, and the fal key goes to the queue host only. |
+| Personal data | A prospect's number, address and person are read only by the owner, in a dashboard session. No MCP tool, refusal, log line or agent answer holds one. An opt-out takes the contact off every list, for every brand that shares it. No message is sent by the studio. The prospect list is in no file of the repository: `npm run check:public` refuses a spreadsheet and a real-looking Singapore number. |
 | Tests | A test shows the bad input is refused. Remove the fix and check that the test fails. |
 
 ## 2. After every deploy
 
-`npm run probe -- <public address>` runs the first seven. The deploy workflow runs it too.
+`npm run probe -- <public address>` runs every line down to the unknown path. The deploy workflow runs it too.
 
 | Probe | Expected |
 |---|---|
@@ -35,6 +36,7 @@ Answer each line under "Security check" in the pull request body. Write "none" w
 | `POST /mcp` with no token | 401, with `resource_metadata` in `WWW-Authenticate` |
 | `GET /.well-known/oauth-protected-resource/mcp` | 200, names this server and one authorization server |
 | `GET /api/me`, `/api/clients`, `/api/brands`, `/api/spend`, `/api/taste`, `/api/calibration`, `/api/batches/<id>/board`, `/api/batches/<id>/done` with no session | 401 each |
+| Each outreach page and each outreach write (`/api/outreach/...`) with no session | 401 each |
 | `POST /api/clients/<id>/approve` from another origin | 401 or 403 |
 | `GET /` and `GET /api/health` | HSTS, CSP with `frame-ancestors 'none'`, `nosniff`, `X-Frame-Options: DENY` |
 | `GET /api/<unknown>` | 404 as JSON, not the dashboard page |
@@ -50,4 +52,6 @@ A change is not done when it is safe but broken.
 | Owner | Sign in to the dashboard | The sign-in page opens, sign-in returns to the dashboard, and the owner's address shows in the header. |
 | Owner | Approve an agent | A new client shows under "Waiting for approval". Approve moves it to "Approved". |
 | Agent | Use the studio | After approval, `tools/list` returns the tools and `rules_get` returns the current rules. |
+| Owner | Work his day in Outreach | Today opens with its four groups. On a test prospect: yes to the ad, copy, open WhatsApp or mail, mark as sent, take back, log a reply, opt out. Remove the test prospect after, and check that the count of prospects is as before. |
+| Member | Stay out of Outreach | The shell shows no Outreach entry, and each outreach address answers "Only the owner can do that." |
 | Owner | Remove an agent | Revoke removes it, and its next call is refused. |

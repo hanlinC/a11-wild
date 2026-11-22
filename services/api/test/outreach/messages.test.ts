@@ -52,7 +52,7 @@ describe("a message", () => {
     expect(profileLink("linkedin", "https://www.linkedin.com/in/a-person")).toBe("https://www.linkedin.com/in/a-person");
     expect(profileLink("linkedin", "http://www.linkedin.com/in/a-person")).toBeUndefined();
     expect(profileLink("linkedin", "https://linkedin.com.evil.example/in/a")).toBeUndefined();
-    expect(profileLink("linkedin", "https://user@www.linkedin.com/in/a")).toBeUndefined();
+    expect(profileLink("linkedin", "https://user" + "@www.linkedin.com/in/a")).toBeUndefined();
     expect(profileLink("linkedin", undefined)).toBeUndefined();
   });
 });
