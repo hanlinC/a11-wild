@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadRows, makeTestProspect } from "../../src/outreach/load.js";
-import { OutreachSequence } from "../../src/outreach/sequence.js";
+import { nextStep, OutreachSequence } from "../../src/outreach/sequence.js";
 import { stageOf } from "../../src/outreach/stage.js";
 import { OutreachStore } from "../../src/outreach/store.js";
 import { MemoryTable } from "../helpers/memory-table.js";
@@ -86,7 +86,7 @@ describe("marking a message as sent", () => {
     at("2026-11-26T10:00:00");
     for (const id of ["00002", "00003", "00004", "00005", "00006"]) await sequence.send(id, { step: 0, title: 0 });
     await ready("00007");
-    await expect(sequence.send("00007", { step: 0, title: 0 })).rejects.toThrow(/Today's 5 first messages are sent\. The next sending day is 2026-11-27/);
+    await expect(sequence.send("00007", { step: 0, title: 0 })).rejects.toThrow(/Today's 5 first messages are sent\. More can go tomorrow, or raise the daily number\./);
     expect((await sequence.send("00001", { step: 1, title: 0 })).send).toMatchObject({ step: 1, day: "2026-11-26" });
   });
 
@@ -106,12 +106,14 @@ describe("marking a message as sent", () => {
     await expect(sequence.send("00001", { step: 0, title: 0 })).rejects.toThrow(/"ad_waits"/);
   });
 
-  it("refuses a send on a Saturday and on a public holiday, with the next sending day", async () => {
-    await ready("00001");
+  it("records a send on a Saturday and on a public holiday: the weekdays are the plan, and the owner sends when he chooses", async () => {
+    for (const id of ["00001", "00002"]) await ready(id);
     at("2026-11-28T10:00:00");
-    await expect(sequence.send("00001", { step: 0, title: 0 })).rejects.toThrow(/No sending today: 2026-11-28 is not a sending day\. The next one is 2026-11-30/);
+    expect((await sequence.send("00001", { step: 0, title: 0 })).send).toMatchObject({ step: 0, day: "2026-11-28" });
+    // The follow-up of a Saturday send is still due on a weekday: three days later is Tuesday.
+    expect(nextStep((await store.all()).find((file) => file.profile.id === "00001")!)).toEqual({ step: 1, due: "2026-12-01" });
     at("2026-12-25T10:00:00");
-    await expect(sequence.send("00001", { step: 0, title: 0 })).rejects.toThrow(/The next one is 2026-12-28/);
+    expect((await sequence.send("00002", { step: 0, title: 0 })).send).toMatchObject({ step: 0, day: "2026-12-25" });
   });
 
   it("refuses a follow-up before its day, follow-up 2 without follow-up 1, and a fourth message", async () => {

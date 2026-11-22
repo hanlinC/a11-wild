@@ -1138,6 +1138,7 @@ export interface TodayLine {
 export interface TodayPage {
   /** The Singapore day, as YYYY-MM-DD. */
   day: string;
+  /** Whether today is a planned sending day: a weekday that is no public holiday. The owner can send on any day. */
   sendingDay: boolean;
   nextSendingDay: string;
   /** The daily number of first messages, and how many are marked as sent today. */
@@ -1203,8 +1204,6 @@ export interface ProspectPage {
   day: string;
   /** The message that can be sent now, in both versions. */
   message?: { step: OutreachStep; messages: [OutreachMessage, OutreachMessage] };
-  /** Today is not a sending day and a message waits: the next sending day, when it can be sent. */
-  messageFrom?: string;
   /** A reply that waits for the owner's answer. */
   owed?: { text?: string; at: string };
 }

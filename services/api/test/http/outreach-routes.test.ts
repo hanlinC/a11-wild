@@ -129,20 +129,17 @@ describe("the owner's day", () => {
     });
   });
 
-  it("offers the message on the brand's own page on a sending day only: a mark on a Saturday would be refused", async () => {
+  it("offers the message on the brand's own page on a Saturday too, and takes the mark", async () => {
     await ready();
-    expect((await json(await get("/api/outreach/prospects/00001"))).message).toMatchObject({ step: 0 });
     // Saturday 28 November 2026, 10:00 in Singapore.
     studio.clock.now = new Date("2026-11-28T02:00:00Z");
     cookie = await sessionCookie(studio);
     const page = await json(await get("/api/outreach/prospects/00001"));
     expect(page.prospect.stage).toBe("ready");
-    expect(page).not.toHaveProperty("message");
-    // The page says when the message comes back: Monday.
-    expect(page.messageFrom).toBe("2026-11-30");
-    studio.clock.now = new Date("2026-11-30T02:00:00Z");
-    cookie = await sessionCookie(studio);
-    expect(await json(await get("/api/outreach/prospects/00001"))).not.toHaveProperty("messageFrom");
+    expect(page.message).toMatchObject({ step: 0 });
+    const marked = await post("/api/outreach/prospects/00001/sent", { step: 0, title: 0 });
+    expect(marked.status).toBe(200);
+    expect((await json(await get("/api/outreach/prospects/00001"))).prospect.stage).toBe("contacted");
   });
 
   it("marks a message as sent once, with the title he used, and takes it back on the same day only", async () => {

@@ -136,16 +136,20 @@ describe("the Today page", () => {
     expect(page.adsWaiting).toEqual([]);
   });
 
-  it("says no sending on a Saturday, with the next sending day, and still shows the owed answers and the waiting ads", async () => {
-    for (const id of ["00001", "00002"]) await ready(id);
+  it("says that a Saturday is not a planned day, with the next one, and shows the same lists: the owner can send on any day", async () => {
+    for (const id of ["00001", "00002", "00004"]) await ready(id);
     await sequence.send("00001", { step: 0, title: 0 });
     await sequence.reply("00001", { reply: "more" });
+    await sequence.send("00004", { step: 0, title: 0 });
     await store.addAd("00003", adOf);
     at("2026-11-28T10:00:00");
     const page = await today();
-    expect(page).toMatchObject({ day: "2026-11-28", sendingDay: false, nextSendingDay: "2026-11-30", firsts: [], followUps: [] });
+    expect(page).toMatchObject({ day: "2026-11-28", sendingDay: false, nextSendingDay: "2026-11-30", firstsSent: 0 });
     expect(brands(page.owed)).toEqual(["Brand 1"]);
     expect(brands(page.adsWaiting)).toEqual(["Brand 3"]);
+    // The follow-up that was due on Thursday is still due, and the brand that is ready can get its first message.
+    expect(brands(page.followUps)).toEqual(["Brand 4"]);
+    expect(brands(page.firsts)).toEqual(["Brand 2"]);
   });
 
   it("offers a test prospect without taking a place of the day", async () => {

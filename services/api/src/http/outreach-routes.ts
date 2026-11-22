@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Deps } from "../app.js";
 import { log } from "../log.js";
 import { Refusal } from "../mcp/registry.js";
-import { isSendingDay, nextSendingDay, singaporeDay } from "../outreach/days.js";
+import { singaporeDay } from "../outreach/days.js";
 import { makeTestProspect } from "../outreach/load.js";
 import { BRAND, mailLink, messagesFor, profileLink } from "../outreach/messages.js";
 import { filtered, filterOf, numbersOf } from "../outreach/numbers.js";
@@ -80,12 +80,9 @@ export function outreachRoutes(
     const stage = stageOf(file, optOuts);
     const sells = kindOf(file);
     const reply = owedAnswer(file);
-    // The message that can be sent now: on a sending day, the first one for a brand that is ready, or a follow-up that is due.
+    // The message that can be sent now, on any day: the first one for a brand that is ready, or a follow-up that is due.
     const due = stage === "contacted" ? nextStep(file) : undefined;
-    const ready = stage === "ready" ? 0 : due && due.due <= day ? due.step : undefined;
-    const sending = isSendingDay(day);
-    const step = sending ? ready : undefined;
-    const waits = !sending && ready !== undefined && templates !== undefined && approvedAd(file) !== undefined;
+    const step = stage === "ready" ? 0 : due && due.due <= day ? due.step : undefined;
     const ads = await Promise.all([...file.ads].sort((a, b) => b.n - a.n).map((ad: OutreachAd) => adView(file, ad, deps.pictures)));
     return {
       prospect: rowOf(file, optOuts, sameContact(files)),
@@ -97,7 +94,6 @@ export function outreachRoutes(
       events: [...file.events].sort((a, b) => b.at.localeCompare(a.at)),
       day,
       ...(step !== undefined && templates && approvedAd(file) ? { message: { step, messages: messagesFor(templates.steps[step], file.profile, channelOf(file)) } } : {}),
-      ...(waits ? { messageFrom: nextSendingDay(day) } : {}),
       ...(reply && (stage === "replied" || stage === "in_talks") ? { owed: { ...(reply.text ? { text: reply.text } : {}), at: reply.at } } : {}),
     };
   }

@@ -1,6 +1,6 @@
 import type { OutreachChannel, OutreachEvent, OutreachSend, OutreachStep, OutreachTemplates, ProspectFile } from "@a11-wild/shared";
 import { Refusal } from "../mcp/registry.js";
-import { dueDay, isSendingDay, nextSendingDay, singaporeDay } from "./days.js";
+import { dueDay, singaporeDay } from "./days.js";
 import { checkTemplate, fill } from "./messages.js";
 import { channelOf, newestAd, optedOut, stageOf, verdictOf } from "./stage.js";
 import { contactKeys, type OutreachStore } from "./store.js";
@@ -85,7 +85,6 @@ export class OutreachSequence {
     if (before) return { send: before, already: true };
     if (optedOut(file, optOuts)) throw new Refusal("This contact opted out. No message to it is recorded, and none should be sent.");
     const day = singaporeDay(this.now());
-    if (!isSendingDay(day)) throw new Refusal(`No sending today: ${day} is not a sending day. The next one is ${nextSendingDay(day)}.`);
     const stage = stageOf(file, optOuts);
     if (step === 0) {
       if (stage !== "ready") throw new Refusal(`The first message goes only to a brand whose ad you said yes to. This one is at "${stage}".`);
@@ -105,7 +104,7 @@ export class OutreachSequence {
     // The place in the day's count is taken first, so two marks at once cannot pass the day's number.
     if (counted) {
       const daily = await this.daily();
-      if (!(await this.store.takePlace(day, daily))) throw new Refusal(`Today's ${daily} first messages are sent. The next sending day is ${nextSendingDay(day)}.`);
+      if (!(await this.store.takePlace(day, daily))) throw new Refusal(`Today's ${daily} first messages are sent. More can go tomorrow, or raise the daily number.`);
     }
     const send: OutreachSend = { step, day, channel, ...fill(templates.steps[step], file.profile.brand, input.title), at: this.now().toISOString() };
     let put = false;

@@ -19,13 +19,14 @@ describe("Today page", () => {
     expect(section("Ads that wait").getByText("No ad waits for you.")).toBeInTheDocument();
   });
 
-  it("says so on a day with no sending, names the next sending day, and still shows a reply that is owed", async () => {
+  it("says that a Saturday is not a planned day, names the next one, and still offers the messages to send", async () => {
     const owed = { prospect: prospectRow({ stage: "replied" }), reply: { text: "Show me another.", at: "2026-11-20T03:00:00.000Z" } };
-    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ day: "2026-11-21", sendingDay: false, nextSendingDay: "2026-11-23", owed: [owed] }) }) });
+    stubApi({ "GET /api/outreach/today": () => ({ body: todayPage({ day: "2026-11-21", sendingDay: false, nextSendingDay: "2026-11-23", owed: [owed], firsts: [firstLine()] }) }) });
     renderSignedIn(<Outreach />);
-    expect(await screen.findByRole("status")).toHaveTextContent("No sending today, Sat, 21 Nov 2026. The next sending day is Mon, 23 Nov 2026.");
+    expect(await screen.findByRole("status")).toHaveTextContent("3 of 5 first messages sent today, Sat, 21 Nov 2026. Not a planned sending day: the next one is Mon, 23 Nov 2026. You can still send today.");
     expect(section("Replies").getByText("Show me another.")).toBeInTheDocument();
-    expect(section("New first").getByText("First messages wait for the next sending day.")).toBeInTheDocument();
+    expect(section("New first").getByRole("button", { name: "Mark as sent" })).toBeInTheDocument();
+    expect(section("Follow-ups").getByText("No follow-up is due today.")).toBeInTheDocument();
   });
 
   it("gives a first message its ad, both titles and the four actions, and marks it as sent with the title he chose", async () => {
@@ -52,7 +53,7 @@ describe("Today page", () => {
   it("leaves the line and shows the reason when the save fails", async () => {
     stubApi({
       "GET /api/outreach/today": () => ({ body: todayPage({ firsts: [firstLine()] }) }),
-      "POST /api/outreach/prospects/00001/sent": () => ({ status: 400, body: { error: "refused", message: "Today's 5 first messages are sent. The next sending day is 2026-11-24." } }),
+      "POST /api/outreach/prospects/00001/sent": () => ({ status: 400, body: { error: "refused", message: "Today's 5 first messages are sent. More can go tomorrow, or raise the daily number." } }),
     });
     renderSignedIn(<Outreach />);
     await userEvent.click(await screen.findByRole("button", { name: "Mark as sent" }));

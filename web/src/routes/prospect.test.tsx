@@ -46,13 +46,6 @@ describe("Prospect page", () => {
     expect(screen.getAllByRole("listitem").map((item) => item.textContent).filter((text) => /Note|Yes to|attached/.test(text ?? "")).map((text) => text!.split(/You|The agent/)[0])).toEqual(["Note: Met at a fair.", "Yes to ad 1.", "Ad 1 attached: The cup on its own colour."]);
   });
 
-  it("says when the message comes back on a day with no sending, and offers no mark", async () => {
-    stubApi({ [GET]: () => ({ body: prospectPage({ messageFrom: "2026-11-30" }) }) });
-    open();
-    expect(await screen.findByText(/The message of this brand is here on Mon(day)?,? 30 Nov/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Mark as sent" })).toBeNull();
-  });
-
   it("asks once before an opt-out, and the brand then offers no action", async () => {
     let asked = 0;
     stubApi({

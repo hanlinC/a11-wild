@@ -27,18 +27,11 @@ export function Outreach() {
     <>
       <Header />
       <p className="mb-6 text-body" role="status">
-        {today.sendingDay ? (
-          <>
-            <span className="font-medium">
-              {today.firstsSent} of {today.daily}
-            </span>{" "}
-            first messages sent today, {dayName(today.day)}.
-          </>
-        ) : (
-          <>
-            <span className="font-medium">No sending today</span>, {dayName(today.day)}. The next sending day is {dayName(today.nextSendingDay)}.
-          </>
-        )}
+        <span className="font-medium">
+          {today.firstsSent} of {today.daily}
+        </span>{" "}
+        first messages sent today, {dayName(today.day)}.
+        {today.sendingDay ? null : <> Not a planned sending day: the next one is {dayName(today.nextSendingDay)}. You can still send today.</>}
       </p>
       {today.templates ? null : (
         <Banner status="info">
@@ -57,12 +50,12 @@ export function Outreach() {
       </Section>
 
       <Section title="Follow-ups due" count={today.followUps.length}>
-        {today.followUps.length === 0 ? <Empty>{today.sendingDay ? "No follow-up is due today." : "Follow-ups wait for the next sending day."}</Empty> : <Lines lines={today.followUps}>{(line) => <Message line={line} done={done} />}</Lines>}
+        {today.followUps.length === 0 ? <Empty>No follow-up is due today.</Empty> : <Lines lines={today.followUps}>{(line) => <Message line={line} done={done} />}</Lines>}
       </Section>
 
       <Section title="New first messages" count={today.firsts.length}>
         {today.firsts.length === 0 ? (
-          <Empty>{!today.sendingDay ? "First messages wait for the next sending day." : today.firstsSent >= today.daily ? "Today's first messages are all sent." : "No brand is ready. A brand is ready after your yes to its ad."}</Empty>
+          <Empty>{today.firstsSent >= today.daily ? "Today's first messages are all sent." : "No brand is ready. A brand is ready after your yes to its ad."}</Empty>
         ) : (
           <Lines lines={today.firsts}>{(line) => <Message line={line} done={done} />}</Lines>
         )}

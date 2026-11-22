@@ -41,7 +41,7 @@ export async function adView(file: ProspectFile, ad: OutreachAd, pictures: AdLin
 
 /**
  * What the owner does today, in his order: answers that are owed, follow-ups that are due, new first messages, and ads that wait for his look.
- * On a day with no sending only the owed answers and the waiting ads are shown.
+ * The weekdays are the plan, and a follow-up is due on one. The lists are the same on every day: the owner sends when he chooses.
  */
 export async function todayPage(deps: { store: OutreachStore; sequence: OutreachSequence; pictures: AdLinks; now: () => Date }): Promise<TodayPage> {
   const { store, sequence, pictures } = deps;
@@ -70,7 +70,6 @@ export async function todayPage(deps: { store: OutreachStore; sequence: Outreach
     const reply = owedAnswer(file);
     if (reply && (stage === "replied" || stage === "in_talks")) owed.push(line(file, undefined, approvedAd(file), { reply: { ...(reply.text ? { text: reply.text } : {}), at: reply.at } }));
     if (adWaits(file) && stage !== "lost" && stage !== "parked") adsWaiting.push(line(file, undefined, newestAd(file)));
-    if (!sendingDay) continue;
     if (stage === "contacted") {
       const next = nextStep(file);
       if (next && next.due <= day) followUps.push(line(file, next.step, approvedAd(file)));
