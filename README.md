@@ -36,6 +36,6 @@ A private ad studio on AWS. An AI agent takes a brand and a product to three fin
 | EventBridge | Starts the clean-up once a day |
 | CloudWatch Logs | Keeps the functions' logs |
 | ECR | Holds the container image of the pixel tools |
-| IAM | Least-privilege roles; GitHub deploys through a short-lived role (OIDC), with no stored AWS key |
+| IAM and STS | Least-privilege roles; GitHub deploys through a short-lived role (OIDC), with no stored AWS key |
 | CloudFormation | Applies what CDK defines |
 
