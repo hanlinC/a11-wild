@@ -60,7 +60,7 @@ A private ad studio. An AI agent takes one brand and one product to three finish
 
 ## 7. Workflow
 
-1. Never push to `main`. Work on a branch: `feat/`, `fix/`, `docs/`, `chore/`, `ci/`.
+1. Never push to `main`. Work on a branch: `feat/`, `fix/`, `docs/`, `chore/`, `ci/`, or `avrea/` for a runner conversion that Avrea opens.
 2. Run `npm run check` before you push. It runs lint, type check, tests, the dashboard build, the CDK synth and the public-repository check.
 3. Open a pull request. Title: `type(scope): subject`, 72 characters or fewer. Put a "Security check" line in the body.
 4. A merge to `main` deploys to AWS. Merge your own pull request yourself, with no question to the owner, when all of these are true (the owner's standing rule, 22-11-2026): the checks pass on the newest commit; Devin Review of the newest commit is done; each finding is fixed, or answered with a reason; nothing the change needs is missing; and you are confident in it. Squash-merge, then tell the owner what you merged. If one of these is not true, or the change needs something from section 8, ask him first.
