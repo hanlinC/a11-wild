@@ -17,7 +17,7 @@ jobs:
   deploy:
     # Skipped until the owner sets the Region variable and the role secret (docs/deploy.md).
     if: vars.AWS_REGION != ''
-    runs-on: ubuntu-latest
+    runs-on: avrea-ubuntu-latest-2-vcpu
     timeout-minutes: 30
     permissions:
       contents: read
