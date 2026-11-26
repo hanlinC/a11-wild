@@ -26,6 +26,7 @@ Run these once, signed in to AWS with the owner's browser sign-in (`aws login`),
    - Variable `AWS_REGION`: the Region.
 
    The role grants nothing by itself: it trusts only the `main` branch of this repository, named by its owner id and repository id (`infra/bin/app.ts`). The role matches all four values: the owner's name and id, and the repository's name and id. A rename changes the name, a transfer changes the owner, and a repository made again gets a new id. After any of them, put the current four values in that file and deploy `A11WildGithubDeploy` again, or the job fails with "Not authorized to perform sts:AssumeRoleWithWebIdentity". It is a secret because it holds the account number, and the workflow log of a public repository is public. The workflow also masks the account number, the live address and the pool id in its log. Until the variable is set, the deploy job is skipped.
+7. **Let Avrea run the jobs.** `ci` and `deploy` run on the `avrea-ubuntu-latest-2-vcpu` runner. Install the Avrea GitHub app on this repository and give it runner access in the Avrea console. Add a payment method there too: when the free minutes run out and no payment method is on file, Avrea cancels new jobs, and the deploy does not run.
 
 ## Each deploy
 
